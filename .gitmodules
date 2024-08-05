@@ -1,0 +1,8 @@
+[submodule "xs-utils"]
+	path = xs-utils
+	url = https://github.com/Siudya/xs-utils
+	branch = main
+[submodule "rocket-chip"]
+	path = rocket-chip
+	url = https://github.com/Siudya/rocket-chip
+	branch = master
