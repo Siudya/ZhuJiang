@@ -29,6 +29,8 @@ class TfsIO(local: Boolean)(implicit p: Parameters) extends ZJBundle {
 
 class Ring(local: Boolean)(implicit p: Parameters) extends ZJModule {
   private val tfs = p(ZJParametersKey).tfsParams.isDefined
+  private val ringName = if(local) "LocalRing" else "CsnRing"
+  override val desiredName = ringName
   val io = if(!tfs) Some(IO(new RingIO(local))) else None
   val tfsio = if(tfs) Some(IO(new TfsIO(local))) else None
 

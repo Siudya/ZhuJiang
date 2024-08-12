@@ -48,7 +48,7 @@ class TrafficSimRx(implicit val p: Parameters) extends BlackBox with HasBlackBox
        |  assign nid = {${16 - niw}'h0, nodeId};
        |
        |  always @(posedge clock) begin
-       |    tfs_get_tx_flit(nid, chn, rx_valid, rx_ready, reset);
+       |    tfs_get_rx_ready(nid, chn, rx_valid, rx_ready, reset);
        |  end
        |endmodule""".stripMargin)
 }

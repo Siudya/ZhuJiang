@@ -3,7 +3,7 @@ package xijiang.router
 import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config.Parameters
-import xijiang.tfb.FlitMonitor
+import xijiang.tfb.{FlitMonitor, NodeRegister}
 import xijiang.{Node, NodeType}
 import zhujiang.chi._
 import zhujiang.{ZJBundle, ZJModule, ZJParametersKey}
@@ -53,6 +53,8 @@ class BaseRouter(val node: Node, ejects: Seq[String], injects: Seq[String])(impl
   private val respTap = if((injects ++ ejects).contains("RSP")) Some(Module(new ChannelTap(new RespFlit, "RSP", dispatchIds, c2c = c2c))) else None
   private val dataTap = if((injects ++ ejects).contains("DAT")) Some(Module(new ChannelTap(new DataFlit, "DAT", dispatchIds, c2c = c2c))) else None
   private val snoopTap = if((injects ++ ejects).contains("SNP")) Some(Module(new ChannelTap(new SnoopFlit, "SNP", dispatchIds, ejectSnoop, ejectSnoopBuf, c2c = c2c))) else None
+  private val tfbNodeRegister = if((injects ++ ejects).nonEmpty && hasTfb) Some(Module(new NodeRegister)) else None
+  tfbNodeRegister.foreach(_.io.nodeId := nid)
 
   private def connectRing[K <: Flit](tap: Option[ChannelTap[K]], tx: Valid[ChannelPayload[K]], rx: Valid[ChannelPayload[K]], ridx: Int): Unit = {
     if(tap.isDefined) {
@@ -97,13 +99,16 @@ class BaseRouter(val node: Node, ejects: Seq[String], injects: Seq[String])(impl
       mon.foreach(m => {
         m.suggestName(s"inject${chn.toLowerCase().capitalize}Monitor")
         m.io.clock := clock
-        m.io.valid := buf.io.enq.fire
+        m.io.valid := tap.get.io.inject.fire
         m.io.nodeId := nid
         m.io.inject := true.B
         m.io.flitType := ChannelEncodings.encodingsMap(chn).U
-        val flit = WireInit(buf.io.enq.bits.asTypeOf(tap.get.gen))
+        val flit = WireInit(tap.get.io.inject.bits.asTypeOf(tap.get.gen))
         if(!c2c) flit.src := nid
         m.io.flit := flit.asUInt
+        when(m.io.valid) {
+          assert(!m.io.fault, s"channel $chn inject wrong flit!")
+        }
       })
     }
   }
@@ -114,7 +119,7 @@ class BaseRouter(val node: Node, ejects: Seq[String], injects: Seq[String])(impl
 
   private def registerEjectTap[K <: Flit](chn: String, tap: Option[ChannelTap[K]]): Unit = {
     if(ejects.contains(chn)) {
-      val buf = Module(new Queue(UInt(flitBitsMap(chn).W), 1))
+      val buf = Module(new Queue(UInt(flitBitsMap(chn).W), 1, pipe = true))
       val mon = if(hasTfb) Some(Module(new FlitMonitor)) else None
       buf.suggestName(s"eject${chn.toLowerCase().capitalize}Buffer")
       ejectMap(chn) = buf.io.deq
@@ -122,11 +127,11 @@ class BaseRouter(val node: Node, ejects: Seq[String], injects: Seq[String])(impl
       mon.foreach(m => {
         m.suggestName(s"eject${chn.toLowerCase().capitalize}Monitor")
         m.io.clock := clock
-        m.io.valid := buf.io.deq.fire
+        m.io.valid := tap.get.io.eject.fire
         m.io.nodeId := nid
         m.io.inject := false.B
         m.io.flitType := ChannelEncodings.encodingsMap(chn).U
-        m.io.flit := buf.io.deq.bits
+        m.io.flit := tap.get.io.eject.bits
         when(m.io.valid) {
           assert(!m.io.fault, s"channel $chn ejects wrong flit!")
         }

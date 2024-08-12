@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config.Parameters
 import xijiang.{Node, NodeType}
-import zhujiang.ZJBundle
+import zhujiang.{ZJBundle, ZJParametersKey}
 import zhujiang.chi._
 
 class RnTx(implicit p: Parameters) extends ZJBundle {
@@ -37,10 +37,12 @@ class RequestRouter(node: Node)(implicit p: Parameters) extends BaseRouter(node,
   injectMap("DAT") <> icn.rx.data
 
   private val injectReqFlit = WireInit(icn.rx.req.bits.asTypeOf(new ReqFlit))
-  if(node.csnNode) {
-    injectReqFlit.TgtID := genNodeId(1.U(1.W), NodeType.HF.U(nodeTypeBits.W), injectReqFlit.tgtChipId)
-  } else {
-    injectReqFlit.TgtID := Mux(injectReqFlit.mmioReq, node.tgtHomeI.U(niw.W), node.tgtHomeF.U(niw.W))
+  if(p(ZJParametersKey).tfsParams.isEmpty) {
+    if(node.csnNode) {
+      injectReqFlit.TgtID := genNodeId(1.U(1.W), NodeType.HF.U(nodeTypeBits.W), injectReqFlit.tgtChipId)
+    } else {
+      injectReqFlit.TgtID := Mux(injectReqFlit.mmioReq, node.tgtHomeI.U(niw.W), node.tgtHomeF.U(niw.W))
+    }
   }
   injectMap("REQ").bits := injectReqFlit.asUInt
 

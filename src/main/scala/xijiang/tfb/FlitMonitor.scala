@@ -18,7 +18,7 @@ class FlitMonitorIO[T <: Flit](implicit p: Parameters) extends ZJBundle {
 
 class FlitMonitor()(implicit val p: Parameters) extends BlackBox with HasBlackBoxInline with HasZJParams {
   val io = IO(new FlitMonitorIO)
-  private val modName = s"${p(ZJParametersKey).modulePrefix}FlitMonitor"
+  private val modName = s"${p(ZJParametersKey).modulePrefix}TrafficBoardFlitMonitor"
   override val desiredName = modName
 
   setInline(s"$modName.sv",
@@ -32,9 +32,7 @@ class FlitMonitor()(implicit val p: Parameters) extends BlackBox with HasBlackBo
        |  input  [${maxFlitBits - 1}:0] \tflit,
        |  output \t\t\t\t\tfault
        |);
-       |  import "DPI-C" function void tfb_register_node (
-       |    input  shortint \t\tnode_id
-       |  );
+       |`ifndef SYNTHESIS
        |  import "DPI-C" function void tfb_flit_monitor (
        |    input  shortint \t\tnode_id,
        |    input  bit \t\t\t\t\tinject,
@@ -44,11 +42,11 @@ class FlitMonitor()(implicit val p: Parameters) extends BlackBox with HasBlackBo
        |  );
        |  wire [15:0] nid;
        |  assign nid = {${16 - niw}'h0, nodeId};
-       |
-       |  initial tfb_register_node(nid);
-       |
        |  always @(posedge clock) begin
        |    if(valid) tfb_flit_monitor(nid, inject, flitType, flit, fault);
        |  end
+       |`else
+       |  assign fault = 0;
+       |`endif
        |endmodule""".stripMargin)
 }

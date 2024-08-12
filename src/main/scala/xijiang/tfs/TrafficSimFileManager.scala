@@ -7,7 +7,8 @@ import zhujiang.ZJParametersKey
 import zhujiang.chi.ChannelEncodings
 
 case class TrafficSimParams(
-  rxReadyMaxDelay: Int = 10
+  rxReadyMaxDelay: Int = 10,
+  txValidMaxDelay: Int = 5
 )
 
 object TrafficSimFileManager {
@@ -37,6 +38,8 @@ object TrafficSimFileManager {
        |void tfs_set_seed(unsigned int seed);
        |
        |void tfs_init();
+       |
+       |void tfs_verbose();
        |
        |#ifdef __cplusplus
        |}
@@ -76,6 +79,7 @@ object TrafficSimFileManager {
        |#define SNP ${ChannelEncodings.SNP}
        |
        |#define RX_READY_MAX_DELAY ${params.tfsParams.get.rxReadyMaxDelay}
+       |#define TX_VALID_MAX_DELAY ${params.tfsParams.get.txValidMaxDelay}
        |
        |#define NODE_TYPE_OFF NODE_NID_BITS
        |#define NODE_NET_OFF (NODE_NID_BITS + NODE_TYPE_BITS)
@@ -86,23 +90,36 @@ object TrafficSimFileManager {
        |
        |#define TFS_ERR(...)                  \\
        |  {                                   \\
-       |    fprintf(stderr, "[TFB ERROR]: "); \\
+       |    TrafficSim::get_instance().info_lock.lock();                                   \\
+       |    fprintf(stderr, "[TFS ERROR] @ %lu: ", TrafficSim::get_instance().global_timer); \\
        |    fprintf(stderr, __VA_ARGS__);     \\
+       |    fflush(stderr);                   \\
+       |    TrafficSim::get_instance().info_lock.unlock();                                   \\
+       |  }
+       |#define TFS_INFO(...)                 \\
+       |  {                                   \\
+       |    TrafficSim::get_instance().info_lock.lock();                                   \\
+       |    fprintf(stdout, "[TFS INFO] @ %lu: ", TrafficSim::get_instance().global_timer); \\
+       |    fprintf(stdout, __VA_ARGS__);     \\
+       |    fflush(stdout);                   \\
+       |    TrafficSim::get_instance().info_lock.unlock();                                   \\
        |  }
        |
        |using namespace std;
        |
        |class NodeManager {
        |  public:
-       |  uint32_t ready_timers[4];
        |  uint16_t node_id;
        |  uint16_t pool_type = 0;
+       |  mt19937 random_gen;
        |  unordered_map<uint8_t, vector<uint16_t>> legal_tgt_pool;
-       |  NodeManager(uint16_t node_id);
-       |  void gen_tx_flit(uint8_t *flit, uint8_t chn);
-       |  bool gen_rx_ready(uint8_t chn);
+       |  unordered_map<uint8_t, array<uint8_t, FLIT_BUF_SIZE>> chn_tx_flit_map;
+       |  unordered_map<uint8_t, uint32_t> chn_rx_ready_timer_map;
+       |  unordered_map<uint8_t, uint32_t> chn_tx_valid_timer_map;
+       |  NodeManager(uint16_t nid);
        |  void step();
-       |  void fire(uint8_t chn);
+       |  void rx_fire(uint8_t chn);
+       |  void tx_fire(uint8_t chn);
        |};
        |
        |typedef vector<unordered_map<uint8_t, vector<uint16_t>>>
@@ -118,8 +135,8 @@ object TrafficSimFileManager {
        |  TrafficSim &operator=(const TrafficSim &) = delete;
        |  tgt_pool_t legal_tgt_pool;
        |  unordered_map<uint16_t, unique_ptr<NodeManager>> node_mng_pool;
-       |
-       |  mt19937 random_gen;
+       |  bool verbose = false;
+       |  mutex info_lock;
        |
        |  uint64_t global_timer = 0;
        |
@@ -141,7 +158,8 @@ object TrafficSimFileManager {
        |  return vec & clear;
        |}
        |
-       |NodeManager::NodeManager(uint16_t node_id) {
+       |NodeManager::NodeManager(uint16_t nid) {
+       |  node_id = nid;
        |  auto &tfs = TrafficSim::get_instance();
        |  bool csn = get_field(node_id, NODE_NET_OFF, NODE_NET_BITS) == 1;
        |  bool c2c = get_field(node_id, NODE_TYPE_OFF, NODE_TYPE_BITS) == C_TYPE;
@@ -152,7 +170,6 @@ object TrafficSimFileManager {
        |  } else {
        |    pool_type = 0;
        |  }
-       |  memset(ready_timers, 0, 4 * sizeof(uint32_t));
        |
        |  for(const auto &[k, v] : tfs.legal_tgt_pool[pool_type]) {
        |    legal_tgt_pool[k] = vector<uint16_t>();
@@ -160,51 +177,76 @@ object TrafficSimFileManager {
        |      if(tgt != node_id) legal_tgt_pool[k].push_back(tgt);
        |    }
        |  }
-       |}
+       |  chn_tx_flit_map[REQ] = array<uint8_t, FLIT_BUF_SIZE>();
+       |  chn_tx_flit_map[RSP] = array<uint8_t, FLIT_BUF_SIZE>();
+       |  chn_tx_flit_map[DAT] = array<uint8_t, FLIT_BUF_SIZE>();
+       |  chn_tx_flit_map[SNP] = array<uint8_t, FLIT_BUF_SIZE>();
+       |  for(auto &[chn, _]: chn_tx_flit_map) tx_fire(chn);
+       |  chn_rx_ready_timer_map[REQ] = 0;
+       |  chn_rx_ready_timer_map[RSP] = 0;
+       |  chn_rx_ready_timer_map[DAT] = 0;
+       |  chn_rx_ready_timer_map[SNP] = 0;
+       |  chn_tx_valid_timer_map[REQ] = 0;
+       |  chn_tx_valid_timer_map[RSP] = 0;
+       |  chn_tx_valid_timer_map[DAT] = 0;
+       |  chn_tx_valid_timer_map[SNP] = 0;
        |
-       |bool NodeManager::gen_rx_ready(uint8_t chn) {
-       |  auto &tfs = TrafficSim::get_instance();
-       |  if(chn > 4) {
-       |    TFS_ERR("illegal channel type %d! @ time %ld\\n", chn, tfs.global_timer);
-       |    return false;
-       |  } else {
-       |    return ready_timers[chn] == 0;
+       |  
+       |  printf("  node: 0x%x\\n", node_id);
+       |  for(const auto &[k, v]: legal_tgt_pool) {
+       |    if(k == REQ) {
+       |      printf("    REQ: ");
+       |    } else if(k == RSP) {
+       |      printf("    RSP: ");
+       |    } else if(k == DAT) {
+       |      printf("    DAT: ");
+       |    } else {
+       |      printf("    SNP: ");
+       |    }
+       |    for(const auto &d: v){
+       |      printf("0x%x ", d);
+       |    }
+       |    printf("\\n");
        |  }
        |}
        |
-       |void NodeManager::fire(uint8_t chn) {
-       |  auto &tfs = TrafficSim::get_instance();
+       |void NodeManager::rx_fire(uint8_t chn) {
        |  uniform_int_distribution<uint8_t> dist(0, RX_READY_MAX_DELAY);
        |  if(chn > 4) {
-       |    TFS_ERR("illegal channel type %d! @ time %ld\\n", chn, tfs.global_timer);
+       |    TFS_ERR("illegal channel type %d!\\n", chn);
        |  } else {
-       |    ready_timers[chn] = dist(tfs.random_gen);
+       |    chn_rx_ready_timer_map[chn] = dist(random_gen);
        |  }
        |}
        |
-       |void NodeManager::gen_tx_flit(uint8_t *flit, uint8_t chn) {
-       |  auto &tfs = TrafficSim::get_instance();
+       |void NodeManager::tx_fire(uint8_t chn) {
+       |  if(chn > 4) {
+       |    TFS_ERR("illegal channel type %d!\\n", chn);
+       |    return;
+       |  }
+       |  uint8_t *flit = chn_tx_flit_map[chn].data();
        |  uniform_int_distribution<uint8_t> dist_flit(0, 0xFF);
-       |  for(int i = 0; i < FLIT_BUF_SIZE; i++) flit[i] = dist_flit(tfs.random_gen);
-       |
+       |  for(int i = 0; i < FLIT_BUF_SIZE; i++) flit[i] = dist_flit(random_gen);
        |  uint8_t tgt_pool_size = legal_tgt_pool[chn].size();
        |  uniform_int_distribution<uint8_t> dist_tgt_pos(0, tgt_pool_size - 1);
-       |  uint8_t pos = dist_tgt_pos(tfs.random_gen);
+       |  uint8_t pos = dist_tgt_pos(random_gen);
        |  uint16_t tgt_id = legal_tgt_pool[chn].at(pos);
-       |
+       |  
        |  uint64_t *head_ptr = (uint64_t *)flit;
        |  head_ptr[0] = clear_field(head_ptr[0], TGT_ID_OFF, NODE_ID_BITS) | (tgt_id << TGT_ID_OFF);
+       |  uniform_int_distribution<uint8_t> dist_valid(0, TX_VALID_MAX_DELAY);
+       |  chn_tx_valid_timer_map[chn] = dist_valid(random_gen);
        |}
        |
        |void NodeManager::step() {
-       |  for(int i = 0; i < 4; i++) {
-       |    ready_timers[i] = ready_timers[i] == 0 ? ready_timers[i] : (ready_timers[i] - 1);
-       |  }
+       |  for(auto &[_, t]:chn_rx_ready_timer_map) t = (t == 0) ? t : t - 1;
+       |  for(auto &[_, t]:chn_tx_valid_timer_map) t = (t == 0) ? t : t - 1;
        |}
        |
        |void TrafficSim::init() {
        |  if(initialized) return;
        |  for(int i = 0; i < 3; i++) {
+       |    legal_tgt_pool.push_back(unordered_map<uint8_t, vector<uint16_t>>());
        |    legal_tgt_pool[i][REQ] = vector<uint16_t>();
        |    legal_tgt_pool[i][RSP] = vector<uint16_t>();
        |    legal_tgt_pool[i][DAT] = vector<uint16_t>();
@@ -272,7 +314,7 @@ object TrafficSimFileManager {
        |    legal_tgt_pool[1][RSP].push_back(csn_remote_home);
        |    legal_tgt_pool[1][DAT].push_back(csn_remote_home);
        |  }
-       |
+       |  printf("tfs node manager target:\\n");
        |  for(uint8_t i = 0; i < lrn_id_num; i++) node_mng_pool[lrn_id_arr[i]] = make_unique<NodeManager>(lrn_id_arr[i]);
        |  for(uint8_t i = 0; i < lhf_id_num; i++) node_mng_pool[lhf_id_arr[i]] = make_unique<NodeManager>(lhf_id_arr[i]);
        |  for(uint8_t i = 0; i < lhi_id_num; i++) node_mng_pool[lhi_id_arr[i]] = make_unique<NodeManager>(lhi_id_arr[i]);
@@ -290,7 +332,9 @@ object TrafficSimFileManager {
        |}
        |
        |void TrafficSim::set_seed(uint32_t seed) {
-       |  random_gen.seed(seed);
+       |  uniform_int_distribution<uint32_t> dist(0, 9999);
+       |  mt19937 random_gen(seed);
+       |  for(auto &[_, mng]: node_mng_pool) mng->random_gen.seed(dist(random_gen));
        |}
        |
        |void TrafficSim::step() {
@@ -303,22 +347,25 @@ object TrafficSimFileManager {
        |
        |extern "C" {
        |void tfs_get_tx_flit(short int node_id, char chn, svBitVecVal *flit, svBit *valid, svBit ready, svBit reset) {
-       |  const auto mng_ptr = TrafficSim::get_instance().node_mng_pool[node_id].get();
-       |  if(reset) {
+       |  auto &tfs = TrafficSim::get_instance();
+       |  const auto mng_ptr = tfs.node_mng_pool[node_id].get();
+       |  auto tx_flit_ptr = mng_ptr->chn_tx_flit_map[chn].data();
+       |  if(reset == 1) {
        |    *valid = 0;
        |  } else {
-       |    *valid = 1;
-       |    if(ready == 1) mng_ptr->gen_tx_flit((uint8_t *)flit, chn);
+       |    if(*valid == 1 && ready == 1) mng_ptr->tx_fire(chn);
+       |    *valid = (mng_ptr->chn_tx_valid_timer_map[chn] == 0) ? 1 : 0;
        |  }
+       |  memcpy(flit, tx_flit_ptr, FLIT_BUF_SIZE);
        |}
        |
        |void tfs_get_rx_ready(short int node_id, char chn, svBit valid, svBit *ready, svBit reset) {
        |  const auto mng_ptr = TrafficSim::get_instance().node_mng_pool[node_id].get();
-       |  if(reset) {
+       |  if(reset == 1) {
        |    *ready = 0;
        |  } else {
-       |    if(valid == 1 && *ready == 1) mng_ptr->fire(chn);
-       |    *ready = mng_ptr->gen_rx_ready(chn) ? 1 : 0;
+       |    if(valid == 1 && *ready == 1) mng_ptr->rx_fire(chn);
+       |    *ready = (mng_ptr->chn_rx_ready_timer_map[chn] == 0) ? 1 : 0;
        |  }
        |}
        |
@@ -333,6 +380,11 @@ object TrafficSimFileManager {
        |void tfs_init() {
        |  TrafficSim::get_instance().init();
        |}
+       |
+       |void tfs_verbose() {
+       |  TrafficSim::get_instance().verbose = true;
+       |  tfb_verbose();
+       |}
        |}""".stripMargin
   }
 
@@ -345,14 +397,14 @@ object TrafficSimFileManager {
        |set_languages("c11", "cxx17")
        |set_toolchains("clang")
        |
-       |add_requires("verilator")
+       |add_requires("argparse")
        |
        |target("VeriRing")
        |  set_toolchains("@verilator")
        |  add_rules("verilator.static")
        |  add_includedirs("env/tfb/include")
        |  add_values("verilator.flags", "--top-module", "TrafficSimTop", "--trace")
-       |  add_values("verilator.flags", "--no-timing", "--threads", "8", "--threads-dpi", "all")
+       |  add_values("verilator.flags", "--no-timing", "--threads", "4", "--threads-dpi", "all")
        |  add_values("verilator.flags", "+define+ASSERT_VERBOSE_COND_=1", "+define+STOP_COND_=1")
        |  add_files("rtl/*.sv")
        |
@@ -363,14 +415,153 @@ object TrafficSimFileManager {
        |  add_files("env/tfb/src/*.cpp")
        |  add_files("env/tfs/src/*.cpp")
        |  add_cxxflags("-march=native")
-       |  add_deps("VeriRing")""".stripMargin
+       |  add_deps("VeriRing")
+       |  add_packages("argparse")""".stripMargin
 
   def mainStr: String =
     s"""
-       |#include <iostream>
+       |#include "argparse/argparse.hpp"
+       |#include "traffic_sim.h"
+       |#include "VeriRing.h"
+       |#include <string>
+       |#include "verilated.h"
+       |#include "verilated_vcd_c.h"
+       |#include <cstdio>
+       |
        |using namespace std;
-       |int main() {
-       |  cout << "Hello World!" << endl;
+       |
+       |class SimMain {
+       |  private:
+       |  SimMain();
+       |  int reset_cycle = 100;
+       |  bool dump_wave = false;
+       |  uint64_t max_cycle = 0;
+       |  uint64_t global_timer = 0;
+       |  uint64_t print_interval = 0;
+       |  bool verbose = false;
+       |  string wave_file = "sim.vcd";
+       |  uint32_t seed = 1234;
+       |
+       |  public:
+       |  SimMain(const SimMain &) = delete;
+       |  SimMain &operator=(const SimMain &) = delete;
+       |  VeriRing* ring_ptr;
+       |  VerilatedVcdC* waveform_dumper;
+       |  argparse::ArgumentParser argparser;
+       |  ~SimMain();
+       |
+       |  static SimMain &get_instance() {
+       |    static SimMain instance;
+       |    return instance;
+       |  }
+       |  void step();
+       |  void reset();
+       |  void parse(int argc, char *argv[]);
+       |  bool time_out();
+       |};
+       |
+       |SimMain::~SimMain() {
+       |  ring_ptr->final();
+       |  if(dump_wave) {
+       |    waveform_dumper->close();
+       |    delete waveform_dumper;
+       |  }
+       |}
+       |
+       |void SimMain::reset() {
+       |  ring_ptr->reset = 1;
+       |  int i = reset_cycle;
+       |  while(i --> 0) step();
+       |  ring_ptr->reset = 0;
+       |}
+       |
+       |SimMain::SimMain() {
+       |  argparser.add_description("Traffic Sim options");
+       |  argparser.add_argument("-s", "--seed").help("Random seed for simulation").default_value(1043).scan<'i', int>();;
+       |  argparser.add_argument("-w", "--wave").help("Waveform path").default_value(string("sim.vcd"));
+       |  argparser.add_argument("-c", "--cycle").help("Simulation cycles").default_value(10000).scan<'i', int>();
+       |  argparser.add_argument("-r", "--reset").help("Reset cycles").default_value(100).scan<'i', int>();
+       |  argparser.add_argument("-d", "--dump-wave").help("Do dump wave").flag();
+       |  argparser.add_argument("-v", "--verbose").help("Do dump wave").flag();
+       |}
+       |
+       |void SimMain::parse(int argc, char *argv[]) {
+       |  try {
+       |    argparser.parse_args(argc, argv);
+       |  } catch(const std::exception &err) {
+       |    std::cerr << err.what() << std::endl;
+       |    std::cerr << argparser;
+       |    std::exit(1);
+       |  }
+       |  wave_file = argparser.get<string>("--wave");
+       |  dump_wave = argparser.get<bool>("--dump-wave");
+       |  seed = argparser.get<int>("--seed");
+       |  max_cycle = argparser.get<int>("--cycle");
+       |  reset_cycle = argparser.get<int>("--reset");
+       |  print_interval = max_cycle / 100;
+       |  verbose = argparser.get<bool>("--verbose");
+       |
+       |  printf("Options: Status\\n");
+       |  printf("seed: %d\\n", seed);
+       |  printf("wave_file: %s\\n", wave_file.c_str());
+       |  printf("max_cycle: %ld\\n", max_cycle);
+       |  printf("reset_cycle: %d\\n", reset_cycle);
+       |  printf("dump_wave: %d\\n", dump_wave);
+       |  printf("verbose: %d\\n", verbose);
+       |  fflush(stdout);
+       |
+       |  ring_ptr = new VeriRing();
+       |  if(dump_wave){
+       |    Verilated::traceEverOn(true);
+       |    waveform_dumper = new VerilatedVcdC();
+       |    ring_ptr->trace(waveform_dumper, 0);
+       |    waveform_dumper->open(wave_file.c_str());
+       |  }
+       |  ring_ptr->reset = 1;
+       |  ring_ptr->clock = 0;
+       |  ring_ptr->eval();
+       |  tfs_init();
+       |  tfs_set_seed(seed);
+       |  if(verbose) tfs_verbose();
+       |
+       |  reset();
+       |}
+       |
+       |void print_progress() {
+       |  static int progress = 0;
+       |  printf("\\rTrafficSim [");
+       |  int i = progress;
+       |  while(i --> 0) printf("=");
+       |  printf(">");
+       |  i = 100 - progress;
+       |  while(i --> 0) printf(" ");
+       |  printf("] %d%%", progress);
+       |  progress++;
+       |  fflush(stdout);
+       |}
+       |
+       |void SimMain::step() {
+       |  ring_ptr->clock = 1;
+       |  ring_ptr->eval();
+       |  tfs_step();
+       |  global_timer++;
+       |  if(dump_wave) waveform_dumper->dump(2 * global_timer);
+       |  ring_ptr->clock = 0;
+       |  ring_ptr->eval();
+       |  if(dump_wave) waveform_dumper->dump(2 * global_timer + 1);
+       |  if(global_timer % print_interval == 0 && !verbose) print_progress();
+       |}
+       |
+       |bool SimMain::time_out() {
+       |  return global_timer > max_cycle;
+       |}
+       |
+       |int main(int argc, char *argv[]) {
+       |  SimMain &sim_main = SimMain::get_instance();
+       |  sim_main.parse(argc, argv);
+       |  while(!sim_main.time_out()) sim_main.step();
+       |  printf("\\nSim End\\n");
+       |  return 0;
        |}
        |""".stripMargin
 }
