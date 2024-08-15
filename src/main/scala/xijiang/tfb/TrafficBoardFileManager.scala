@@ -264,8 +264,11 @@ object TrafficBoardFileManager {
        |  for(auto &[k0, v0]: scoreboard) {
        |    for(auto &[k1, v1]: v0) {
        |      for(auto &d: v1) {
-       |        d->timer = d->timer++;
-       |        if(d->timer > TIME_OUT) TFB_ERR("node 0x%x chn %d inject time %lx time out!\\n", k0, k1, d->inject_time);
+       |        d->timer++;
+       |        if(d->timer > TIME_OUT) {
+       |          TFB_ERR("node 0x%x chn %d inject time %lx time out!\\n", k0, k1, d->inject_time);
+       |          time_out = true;
+       |        }
        |      }
        |    }
        |  }
