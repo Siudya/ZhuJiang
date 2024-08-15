@@ -226,7 +226,8 @@ object TrafficSimFileManager {
        |  }
        |  uint8_t *flit = chn_tx_flit_map[chn].data();
        |  uniform_int_distribution<uint8_t> dist_flit(0, 0xFF);
-       |  for(int i = 0; i < FLIT_BUF_SIZE; i++) flit[i] = dist_flit(random_gen);
+       |  for(int i = 0; i < FLIT_BUF_SIZE - 1; i++) flit[i] = dist_flit(random_gen);
+       |  flit[FLIT_BUF_SIZE - 1] = 0;
        |  uint8_t tgt_pool_size = legal_tgt_pool[chn].size();
        |  uniform_int_distribution<uint8_t> dist_tgt_pos(0, tgt_pool_size - 1);
        |  uint8_t pos = dist_tgt_pos(random_gen);
