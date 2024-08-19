@@ -3,6 +3,7 @@ package xijiang.router
 import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config.Parameters
+import xijiang.router.base.BaseRouter
 import xijiang.{Node, NodeType}
 import zhujiang.ZJBundle
 

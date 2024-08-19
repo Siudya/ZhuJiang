@@ -110,7 +110,7 @@ class Ring(local: Boolean)(implicit p: Parameters) extends ZJModule {
     }
   })
 
-  private val functionalRouters = routersAndNodes.filter(_._2.nodeType != NodeType.P).map(_._1.asInstanceOf[BaseRouter])
+  private val functionalRouters = routersAndNodes.filter(_._2.nodeType != NodeType.P).map(_._1)
   for(i <- functionalRouters.indices) {
     for(j <- (i + 1) until functionalRouters.size) {
       if(local) {

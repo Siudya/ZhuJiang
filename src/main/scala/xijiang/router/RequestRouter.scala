@@ -6,6 +6,7 @@ import org.chipsalliance.cde.config.Parameters
 import xijiang.{Node, NodeType}
 import zhujiang.{ZJBundle, ZJParametersKey}
 import zhujiang.chi._
+import xijiang.router.base.BaseRouter
 
 class RnTx(implicit p: Parameters) extends ZJBundle {
   val resp = Decoupled(UInt(respFlitBits.W))

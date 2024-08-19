@@ -3,6 +3,7 @@ package xijiang
 import chisel3._
 import org.chipsalliance.cde.config.Parameters
 import xijiang.router._
+import xijiang.router.base.BaseRouter
 
 object NodeType {
   val R: Int = 0

@@ -5,6 +5,7 @@ import chisel3.util._
 import org.chipsalliance.cde.config.Parameters
 import xijiang.{Node, NodeType}
 import zhujiang.ZJBundle
+import xijiang.router.base.BaseRouter
 
 class CnTx(implicit p: Parameters) extends ZJBundle {
   val req = Decoupled(UInt(reqFlitBits.W))
