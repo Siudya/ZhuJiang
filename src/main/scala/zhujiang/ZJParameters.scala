@@ -33,7 +33,6 @@ case class ZJParameters(
 ) {
   val requestAddrBits = 48
   val snoopAddrBits = requestAddrBits - 3
-  val mmioOff = requestAddrBits - chipAddrBits - 1
 
   val nodeTypeBits = 2
   val nodeNetBits = 1
@@ -107,7 +106,6 @@ trait HasZJParams {
   val snoopFlitBits = p(ZJParametersKey).snoopFlitBits
   val dataFlitBits = p(ZJParametersKey).dataFlitBits
   val maxFlitBits = p(ZJParametersKey).maxFlitBits
-  val mmioOff = p(ZJParametersKey).mmioOff
   val nodeNidBits = p(ZJParametersKey).nodeNidBits
   val nodeTypeBits = p(ZJParametersKey).nodeTypeBits
   val nodeNetBits = p(ZJParametersKey).nodeNetBits

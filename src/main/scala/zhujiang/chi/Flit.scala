@@ -64,8 +64,8 @@ class ReqFlit(implicit p: Parameters) extends Flit {
   def DataTarget = ReturnNID
 
   require(this.getWidth == reqFlitBits, s"Illegal request FLIT width ${this.getWidth}, expected $reqFlitBits!")
-  def tgtChipId: UInt = Addr(raw - 1, mmioOff + 1)
-  def mmioReq: Bool = Addr(mmioOff)
+  def tgtChipId: UInt = Addr(raw - 2, raw - chipAddrBits - 1)
+  def mmioReq: Bool = Addr(raw - 1)
 }
 
 class RespFlit(implicit p: Parameters) extends Flit {
