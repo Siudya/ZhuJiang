@@ -136,7 +136,7 @@ class DataFlit(implicit p: Parameters) extends Flit {
   val Resp = UInt(3.W)
   val RespErr = UInt(2.W)
   val Opcode = UInt(4.W)
-  val HomdNID = UInt(niw.W)
+  val HomeNID = UInt(niw.W)
   val TxnID = UInt(12.W)
   val SrcID = UInt(niw.W)
   val TgtID = UInt(niw.W)
