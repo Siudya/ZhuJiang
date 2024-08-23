@@ -43,13 +43,13 @@ class RnSlave(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) exten
       reqBuf.txreq.valid  := io.chi.txreq.valid & reqSelId1 === i.U & canReceive1
       reqBuf.txreq.bits   := io.chi.txreq.bits
       // txrsp
-      reqBuf.txrsp.valid  := io.chi.txrsp.valid & io.chi.txrsp.bits.txnID === i.U
+      reqBuf.txrsp.valid  := io.chi.txrsp.valid & io.chi.txrsp.bits.TxnID === i.U
       reqBuf.txrsp.bits   := io.chi.txrsp.bits
       // txdat
-      reqBuf.txdat.valid  := io.chi.txdat.valid & io.chi.txrsp.bits.txnID === i.U
+      reqBuf.txdat.valid  := io.chi.txdat.valid & io.chi.txrsp.bits.TxnID === i.U
       reqBuf.txdat.bits   := io.chi.txdat.bits
-      reqBuf.txdat.bits.data    := DontCare
-      reqBuf.txdat.bits.dataID  := DontCare
+      reqBuf.txdat.bits.Data    := DontCare
+      reqBuf.txdat.bits.DataID  := DontCare
   }
 
   // Set io.chi.tx_xxx.ready value
@@ -73,11 +73,11 @@ class RnSlave(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) exten
   fastArbDec2Dec(reqBufs.map(_.io.dbSigs.dataTDB), io.dbSigs.dataTDB)
   idSelDec2DecVec(io.dbSigs.dataFDB, reqBufs.map(_.io.dbSigs.dataFDB), level = 2)
 
-  io.dbSigs.dataTDB.bits.data   := io.chi.txdat.bits.data
-  io.dbSigs.dataTDB.bits.dataID := io.chi.txdat.bits.dataID
+  io.dbSigs.dataTDB.bits.data   := io.chi.txdat.bits.Data
+  io.dbSigs.dataTDB.bits.dataID := io.chi.txdat.bits.DataID
 
-  io.chi.rxdat.bits.data        := io.dbSigs.dataFDB.bits.data
-  io.chi.rxdat.bits.dataID      := io.dbSigs.dataFDB.bits.dataID
+  io.chi.rxdat.bits.Data        := io.dbSigs.dataFDB.bits.data
+  io.chi.rxdat.bits.DataID      := io.dbSigs.dataFDB.bits.dataID
 
   /*
    * Connect Slice Ctrl Signals

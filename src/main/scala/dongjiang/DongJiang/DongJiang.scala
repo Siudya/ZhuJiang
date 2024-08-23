@@ -1,5 +1,6 @@
 package DONGJIANG
 
+import zhujiang.chi._
 import DONGJIANG.CHI._
 import DONGJIANG.RNSLAVE._
 import DONGJIANG.RNMASTER._
@@ -12,9 +13,10 @@ import xs.utils.perf.{DebugOptions, DebugOptionsKey}
 import Utils.GenerateVerilog
 import Utils.IDConnector._
 import Utils.FastArb._
+import zhujiang.HasZJParams
 
-abstract class DJModule(implicit val p: Parameters) extends Module with HasDJParam
-abstract class DJBundle(implicit val p: Parameters) extends Bundle with HasDJParam
+abstract class DJModule(implicit val p: Parameters) extends Module with HasDJParam with HasZJParams
+abstract class DJBundle(implicit val p: Parameters) extends Bundle with HasDJParam with HasZJParams
 
 
 class DongJiang()(implicit p: Parameters) extends DJModule {
@@ -227,9 +229,9 @@ class DongJiang()(implicit p: Parameters) extends DJModule {
 
 // ------------------------------------------ IO declaration ----------------------------------------------//
     val io = IO(new Bundle {
-        val rnSlvChi            = Vec(nrRnSlv, Flipped(CHIBundleDecoupled(chiParams)))
-        val rnMasChi            = Vec(nrRnMas, CHIBundleDecoupled(chiParams))
-        val snMasChi            = Vec(nrSnSlv, CHIBundleDecoupled(chiParams))
+        val rnSlvChi            = Vec(nrRnSlv, Flipped(new CHIBundleDecoupled))
+        val rnMasChi            = Vec(nrRnMas, new CHIBundleDecoupled)
+        val snMasChi            = Vec(nrSnSlv, new CHIBundleDecoupled)
     })
 
     io <> DontCare

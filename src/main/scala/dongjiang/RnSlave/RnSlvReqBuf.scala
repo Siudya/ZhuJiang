@@ -90,7 +90,7 @@ class RnSlvReqBuf(rnSlvId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
     fsmReg.s_udpMSHR  := true.B
     // wait
     fsmReg.w_mpResp   := true.B
-    fsmReg.w_compAck  := io.chi.txreq.bits.expCompAck
+    fsmReg.w_compAck  := io.chi.txreq.bits.ExpCompAck
   }.elsewhen(io.req2Node.fire) {
     // send
     fsmReg.s_snp      := true.B
@@ -120,7 +120,7 @@ class RnSlvReqBuf(rnSlvId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
     // wait
     fsmReg.w_mpResp   := Mux(io.resp2Node.fire, false.B, fsmReg.w_mpResp)
     fsmReg.w_dbData   := Mux(io.resp2Node.fire & io.resp2Node.bits.isRxDat, true.B, Mux(getAllData, false.B, fsmReg.w_dbData))
-    fsmReg.w_compAck  := Mux(io.chi.txrsp.fire & io.chi.txrsp.bits.opcode === CHIOp.RSP.CompAck, false.B, fsmReg.w_compAck)
+    fsmReg.w_compAck  := Mux(io.chi.txrsp.fire & io.chi.txrsp.bits.Opcode === CHIOp.RSP.CompAck, false.B, fsmReg.w_compAck)
 
     /*
      * Deal CHI TxReq (Write)
@@ -155,11 +155,11 @@ class RnSlvReqBuf(rnSlvId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
   /*
    * Receive chiTxReq(Read / Dataless / Atomic / CMO)
    */
-  reqFTxReq.addr      := io.chi.txreq.bits.addr
-  reqFTxReq.opcode    := io.chi.txreq.bits.opcode
-  reqFTxReq.txnId     := io.chi.txreq.bits.txnID
-  reqFTxReq.srcId     := io.chi.txreq.bits.srcID
-  reqIsWrite          := CHIOp.REQ.isReadX(io.chi.txreq.bits.opcode)
+  reqFTxReq.addr      := io.chi.txreq.bits.Addr
+  reqFTxReq.opcode    := io.chi.txreq.bits.Opcode
+  reqFTxReq.txnId     := io.chi.txreq.bits.TxnID
+  reqFTxReq.srcId     := io.chi.txreq.bits.SrcID
+  reqIsWrite          := CHIOp.REQ.isReadX(io.chi.txreq.bits.Opcode)
 
   /*
    * Save req2Node or reqFTxReq
@@ -175,9 +175,9 @@ class RnSlvReqBuf(rnSlvId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
     val rsp = io.chi.txrsp
     val dat = io.chi.txdat
 
-    snpRespReg        := Mux(rsp.fire, rsp.bits.resp, dat.bits.resp)
+    snpRespReg        := Mux(rsp.fire, rsp.bits.Resp, dat.bits.Resp)
     snpRespHasDataReg := dat.fire
-    snpFwdStateReg    := Mux(rsp.fire, rsp.bits.fwdState, dat.bits.fwdState)
+    snpFwdStateReg    := Mux(rsp.fire, rsp.bits.FwdState, dat.bits.FwdState)
   }
 
   /*
@@ -191,15 +191,15 @@ class RnSlvReqBuf(rnSlvId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
    */
   io.chi.rxsnp.valid          := fsmReg.s_snp & !fsmReg.w_dbid
   io.chi.rxsnp.bits           := DontCare
-  io.chi.rxsnp.bits.tgtIDOpt.get := reqReg.tgtId
-  io.chi.rxsnp.bits.srcID     := rnSlvId.U
-  io.chi.rxsnp.bits.txnID     := reqBufId.U
-  io.chi.rxsnp.bits.fwdNID    := reqReg.srcId
-  io.chi.rxsnp.bits.fwdTxnID  := reqReg.txnId
-  io.chi.rxsnp.bits.addr      := reqReg.addr(addressBits - 1, addressBits - io.chi.rxsnp.bits.addr.getWidth)
-  io.chi.rxsnp.bits.opcode    := reqReg.opcode
-  io.chi.rxsnp.bits.retToSrc  := reqReg.retToSrc
-  io.chi.rxsnp.bits.doNotGoToSD := reqReg.doNotGoToSD
+  io.chi.rxsnp.bits.TgtID     := reqReg.tgtId
+  io.chi.rxsnp.bits.SrcID     := rnSlvId.U
+  io.chi.rxsnp.bits.TxnID     := reqBufId.U
+  io.chi.rxsnp.bits.FwdNID    := reqReg.srcId
+  io.chi.rxsnp.bits.FwdTxnID  := reqReg.txnId
+  io.chi.rxsnp.bits.Addr      := reqReg.addr(addressBits - 1, addressBits - io.chi.rxsnp.bits.Addr.getWidth)
+  io.chi.rxsnp.bits.Opcode    := reqReg.opcode
+  io.chi.rxsnp.bits.RetToSrc  := reqReg.retToSrc
+  io.chi.rxsnp.bits.DoNotGoToSD := reqReg.doNotGoToSD
 
   /*
    * Send RxRsp
@@ -208,13 +208,13 @@ class RnSlvReqBuf(rnSlvId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
   val dbdidRespVal          = fsmReg.s_dbidResp & !fsmReg.w_dbid
   io.chi.rxrsp.valid        := compVal | dbdidRespVal
   io.chi.rxrsp.bits         := DontCare
-  io.chi.rxrsp.bits.opcode  := Mux(compVal, mpRespReg.opcode, CHIOp.RSP.CompDBIDResp)
-  io.chi.rxrsp.bits.tgtID   := reqReg.srcId
-  io.chi.rxrsp.bits.srcID   := rnSlvId.U
-  io.chi.rxrsp.bits.txnID   := reqReg.txnId
-  io.chi.rxrsp.bits.dbID    := reqBufId.U
-  io.chi.rxrsp.bits.resp    := Mux(compVal, mpRespReg.resp, 0.U)
-  io.chi.rxrsp.bits.pCrdType := 0.U // This system dont support Transaction Retry
+  io.chi.rxrsp.bits.Opcode  := Mux(compVal, mpRespReg.opcode, CHIOp.RSP.CompDBIDResp)
+  io.chi.rxrsp.bits.TgtID   := reqReg.srcId
+  io.chi.rxrsp.bits.SrcID   := rnSlvId.U
+  io.chi.rxrsp.bits.TxnID   := reqReg.txnId
+  io.chi.rxrsp.bits.DBID    := reqBufId.U
+  io.chi.rxrsp.bits.Resp    := Mux(compVal, mpRespReg.resp, 0.U)
+  io.chi.rxrsp.bits.PCrdType := 0.U // This system dont support Transaction Retry
 
 
   /*
@@ -222,15 +222,15 @@ class RnSlvReqBuf(rnSlvId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
    */
   io.chi.rxdat.valid        := fsmReg.s_resp & fsmReg.w_dbData & io.dbSigs.dataFDB.valid & !fsmReg.w_mpResp
   io.chi.rxdat.bits         := DontCare
-  io.chi.rxdat.bits.opcode  := mpRespReg.opcode
-  io.chi.rxdat.bits.tgtID   := reqReg.srcId
-  io.chi.rxdat.bits.srcID   := rnSlvId.U
-  io.chi.rxdat.bits.txnID   := reqBufId.U
-  io.chi.rxdat.bits.dbID    := reqReg.txnId
-  io.chi.rxdat.bits.homeNID := rnSlvId.U
-  io.chi.rxdat.bits.resp    := mpRespReg.resp
-  io.chi.rxdat.bits.dataID  := DontCare
-  io.chi.rxdat.bits.data    := DontCare
+  io.chi.rxdat.bits.Opcode  := mpRespReg.opcode
+  io.chi.rxdat.bits.TgtID   := reqReg.srcId
+  io.chi.rxdat.bits.SrcID   := rnSlvId.U
+  io.chi.rxdat.bits.TxnID   := reqBufId.U
+  io.chi.rxdat.bits.DBID    := reqReg.txnId
+  io.chi.rxdat.bits.HomeNID := rnSlvId.U
+  io.chi.rxdat.bits.Resp    := mpRespReg.resp
+  io.chi.rxdat.bits.DataID  := DontCare
+  io.chi.rxdat.bits.Data    := DontCare
 
 
 // ---------------------------  Receive resp2Node / Send req2Slice and resp2Slice  --------------------------------//
@@ -366,7 +366,7 @@ class RnSlvReqBuf(rnSlvId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
   assert(Mux(io.dbSigs.dataFDB.valid, fsmReg.s_resp & fsmReg.w_dbData, true.B), "When dbDataValid, ReqBuf should set s_resp and w_dbData")
   assert(Mux(io.dbSigs.dataFDB.valid, !fsmReg.w_mpResp, true.B), "When dataFDBVal, ReqBuf should has been receive mpResp")
 
-  assert(Mux(fsmReg.w_snpResp & io.chi.txrsp.fire, !io.chi.txrsp.bits.resp(2), true.B))
+  assert(Mux(fsmReg.w_snpResp & io.chi.txrsp.fire, !io.chi.txrsp.bits.Resp(2), true.B))
 
   val cntReg = RegInit(0.U(64.W))
   cntReg := Mux(io.free, 0.U, cntReg + 1.U)

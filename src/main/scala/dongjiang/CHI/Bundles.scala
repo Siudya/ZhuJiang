@@ -3,8 +3,9 @@ package DONGJIANG.CHI
 import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config._
-import freechips.rocketchip.tilelink._
 import scala.collection.immutable.ListMap
+import zhujiang._
+import zhujiang.chi._
 
 trait HasChiOpcode { this: Bundle =>
     def opcodeBits: Int = 6
@@ -162,14 +163,14 @@ class CHIBundleUpstream(params: CHIBundleParameters, aggregateIO: Boolean = fals
     // @formatter:on
 }
 
-class CHIBundleDecoupled(params: CHIBundleParameters) extends Bundle {
-    val txreq = Decoupled(new CHIBundleREQ(params))
-    val txdat = Decoupled(new CHIBundleDAT(params))
-    val txrsp = Decoupled(new CHIBundleRSP(params))
+class CHIBundleDecoupled(implicit p: Parameters) extends ZJBundle {
+    val txreq = Decoupled(new ReqFlit)
+    val txdat = Decoupled(new DataFlit)
+    val txrsp = Decoupled(new RespFlit)
 
-    val rxrsp = Flipped(Decoupled(new CHIBundleRSP(params)))
-    val rxdat = Flipped(Decoupled(new CHIBundleDAT(params)))
-    val rxsnp = Flipped(Decoupled(new CHIBundleSNP(params)))
+    val rxrsp = Flipped(Decoupled(new RespFlit))
+    val rxdat = Flipped(Decoupled(new DataFlit))
+    val rxsnp = Flipped(Decoupled(new SnoopFlit))
 }
 
 object CHIBundleDownstream {
@@ -178,10 +179,6 @@ object CHIBundleDownstream {
 
 object CHIBundleUpstream {
     def apply(params: CHIBundleParameters, aggregateIO: Boolean = false): CHIBundleUpstream = new CHIBundleUpstream(params, aggregateIO)
-}
-
-object CHIBundleDecoupled {
-    def apply(params: CHIBundleParameters): CHIBundleDecoupled = new CHIBundleDecoupled(params)
 }
 
 class CHILinkCtrlIO extends Bundle {

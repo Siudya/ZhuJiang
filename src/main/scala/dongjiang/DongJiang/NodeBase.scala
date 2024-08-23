@@ -28,7 +28,7 @@ abstract class NodeBase(isSlv:Boolean, hasFree: Boolean = false, hasReq2Slice: B
   val io = IO(new Bundle {
     val freeOpt       = if(hasFree) Some(Output(Bool())) else None
     // CHI
-    val chiOpt        = if(isSlv) Some(Flipped(CHIBundleDecoupled(chiParams))) else Some(CHIBundleDecoupled(chiParams))
+    val chiOpt        = if(isSlv) Some(Flipped(new CHIBundleDecoupled)) else Some(new CHIBundleDecoupled)
     // slice ctrl signals
     val req2SliceOpt  = if(hasReq2Slice) Some(Decoupled(new Req2SliceBundle())) else None
     val resp2NodeOpt  = if(hasReq2Slice) Some(Flipped(Decoupled(new Resp2NodeBundle()))) else None

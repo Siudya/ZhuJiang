@@ -38,13 +38,13 @@ class SnMaster(snMasId: Int, param: InterfaceParam)(implicit p: Parameters) exte
     case(reqBuf, i) =>
       reqBuf.rxsnp        <> DontCare
       // rxrsp
-      reqBuf.rxrsp.valid  := io.chi.rxrsp.valid & io.chi.rxrsp.bits.txnID === i.U
+      reqBuf.rxrsp.valid  := io.chi.rxrsp.valid & io.chi.rxrsp.bits.TxnID === i.U
       reqBuf.rxrsp.bits   := io.chi.rxrsp.bits
       // rxdat
-      reqBuf.rxdat.valid  := io.chi.rxdat.valid & io.chi.rxdat.bits.txnID === i.U
+      reqBuf.rxdat.valid  := io.chi.rxdat.valid & io.chi.rxdat.bits.TxnID === i.U
       reqBuf.rxdat.bits   := io.chi.rxdat.bits
-      reqBuf.rxdat.bits.data    := DontCare
-      reqBuf.rxdat.bits.dataID  := DontCare
+      reqBuf.rxdat.bits.Data    := DontCare
+      reqBuf.rxdat.bits.DataID  := DontCare
   }
 
   // Set io.chi.rx_xxx.ready value
@@ -69,11 +69,11 @@ class SnMaster(snMasId: Int, param: InterfaceParam)(implicit p: Parameters) exte
   fastArbDec2Dec(reqBufs.map(_.io.dbSigs.dataTDB), io.dbSigs.dataTDB)
   idSelDec2DecVec(io.dbSigs.dataFDB, reqBufs.map(_.io.dbSigs.dataFDB), level = 2)
 
-  io.dbSigs.dataTDB.bits.data   := io.chi.rxdat.bits.data
-  io.dbSigs.dataTDB.bits.dataID := io.chi.rxdat.bits.dataID
+  io.dbSigs.dataTDB.bits.data   := io.chi.rxdat.bits.Data
+  io.dbSigs.dataTDB.bits.dataID := io.chi.rxdat.bits.DataID
 
-  io.chi.txdat.bits.data      := io.dbSigs.dataFDB.bits.data
-  io.chi.txdat.bits.dataID    := io.dbSigs.dataFDB.bits.dataID
+  io.chi.txdat.bits.Data      := io.dbSigs.dataFDB.bits.data
+  io.chi.txdat.bits.DataID    := io.dbSigs.dataFDB.bits.dataID
 
   /*
    * Connect Slice Ctrl Signals

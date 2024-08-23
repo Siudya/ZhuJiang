@@ -9,9 +9,6 @@ import Utils.FastArb._
 import Utils.IDConnector.idSelDec2DecVec
 
 class RnMaster(rnMasId: Int, param: InterfaceParam)(implicit p: Parameters) extends NodeBase(isSlv = false, hasReq2Slice = true, hasDBRCReq = true) {
-// --------------------- IO declaration ------------------------//
-  val chi = IO(CHIBundleDecoupled(chiParams))
-
 // --------------------- Modules declaration ------------------------//
   def createReqBuf(id: Int) = { val reqBuf = Module(new RnMasReqBuf(rnMasId, id, param)); reqBuf }
   val reqBufs               = (0 until param.nrReqBuf).map(i => createReqBuf(i))
@@ -46,13 +43,13 @@ class RnMaster(rnMasId: Int, param: InterfaceParam)(implicit p: Parameters) exte
       reqBuf.rxsnp.valid  := io.chi.rxsnp.valid & reqSelId0 === i.U & canReceive0
       reqBuf.rxsnp.bits   := io.chi.rxsnp.bits
       // rxrsp
-      reqBuf.rxrsp.valid  := io.chi.rxrsp.valid & io.chi.rxrsp.bits.txnID === i.U
+      reqBuf.rxrsp.valid  := io.chi.rxrsp.valid & io.chi.rxrsp.bits.TxnID === i.U
       reqBuf.rxrsp.bits   := io.chi.rxrsp.bits
       // rxdat
-      reqBuf.rxdat.valid  := io.chi.rxdat.valid & io.chi.rxdat.bits.txnID === i.U
+      reqBuf.rxdat.valid  := io.chi.rxdat.valid & io.chi.rxdat.bits.TxnID === i.U
       reqBuf.rxdat.bits   := io.chi.rxdat.bits
-      reqBuf.rxdat.bits.data    := DontCare
-      reqBuf.rxdat.bits.dataID  := DontCare
+      reqBuf.rxdat.bits.Data    := DontCare
+      reqBuf.rxdat.bits.DataID  := DontCare
   }
 
   // Set io.chi.rx_xxx.ready value
@@ -77,11 +74,11 @@ class RnMaster(rnMasId: Int, param: InterfaceParam)(implicit p: Parameters) exte
   fastArbDec2Dec(reqBufs.map(_.io.dbSigs.dataTDB), io.dbSigs.dataTDB)
   idSelDec2DecVec(io.dbSigs.dataFDB, reqBufs.map(_.io.dbSigs.dataFDB), level = 2)
 
-  io.dbSigs.dataTDB.bits.data   := io.chi.rxdat.bits.data
-  io.dbSigs.dataTDB.bits.dataID := io.chi.rxdat.bits.dataID
+  io.dbSigs.dataTDB.bits.data   := io.chi.rxdat.bits.Data
+  io.dbSigs.dataTDB.bits.dataID := io.chi.rxdat.bits.DataID
 
-  io.chi.txdat.bits.data      := io.dbSigs.dataFDB.bits.data
-  io.chi.txdat.bits.dataID    := io.dbSigs.dataFDB.bits.dataID
+  io.chi.txdat.bits.Data      := io.dbSigs.dataFDB.bits.data
+  io.chi.txdat.bits.DataID    := io.dbSigs.dataFDB.bits.dataID
 
   /*
    * Connect Slice Ctrl Signals
@@ -100,7 +97,7 @@ class RnMaster(rnMasId: Int, param: InterfaceParam)(implicit p: Parameters) exte
 
 // --------------------- Assertion ------------------------------- //
   if(param.addressIdBits.getOrElse(0) > 0) {
-    assert(Mux(io.chi.rxsnp.valid, io.chi.rxsnp.bits.addr(addressBits - 3 - 1, addressBits - 3 - param.addressIdBits.get) === param.addressId.get.U, true.B))
+    assert(Mux(io.chi.rxsnp.valid, io.chi.rxsnp.bits.Addr(addressBits - 3 - 1, addressBits - 3 - param.addressIdBits.get) === param.addressId.get.U, true.B))
     assert(Mux(io.req2Node.valid, io.req2Node.bits.addr(addressBits - 1, addressBits - param.addressIdBits.get) === param.addressId.get.U, true.B))
   }
 

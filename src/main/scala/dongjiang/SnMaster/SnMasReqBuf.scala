@@ -133,7 +133,7 @@ class SnMasReqBuf(snMasId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
    */
   // Receive RxRsp
   when(io.chi.rxrsp.fire & fsmReg.w_snResp) {
-    reqRespDBIDReg    := io.chi.rxrsp.bits.dbID
+    reqRespDBIDReg    := io.chi.rxrsp.bits.DBID
   }
   // Receive RxDat
   getRxDatNumReg      := Mux(release, 0.U, getRxDatNumReg + io.chi.rxdat.fire.asUInt)
@@ -148,14 +148,14 @@ class SnMasReqBuf(snMasId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
    */
   io.chi.txreq.valid        := fsmReg.s_req & !fsmReg.w_dbid
   io.chi.txreq.bits         := DontCare
-  io.chi.txreq.bits.tgtID   := 0.U
-  io.chi.txreq.bits.srcID   := snMasId.U
-  io.chi.txreq.bits.txnID   := reqBufId.U
-  io.chi.txreq.bits.opcode  := reqReg.opcode
-  io.chi.txreq.bits.size    := log2Ceil(djparam.blockBytes).U
-  io.chi.txreq.bits.addr    := reqReg.addr
-  io.chi.txreq.bits.memAttr := MemAttr(false.B, true.B, false.B, false.B)
-  io.chi.txreq.bits.expCompAck := false.B
+  io.chi.txreq.bits.TgtID   := 0.U
+  io.chi.txreq.bits.SrcID   := snMasId.U
+  io.chi.txreq.bits.TxnID   := reqBufId.U
+  io.chi.txreq.bits.Opcode  := reqReg.opcode
+  io.chi.txreq.bits.Size    := log2Ceil(djparam.blockBytes).U
+  io.chi.txreq.bits.Addr    := reqReg.addr
+  io.chi.txreq.bits.MemAttr := MemAttr(false.B, true.B, false.B, false.B)
+  io.chi.txreq.bits.ExpCompAck := false.B
 
 
   /*
@@ -163,11 +163,11 @@ class SnMasReqBuf(snMasId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
    */
   io.chi.txdat.valid        := fsmReg.s_data & fsmReg.w_dbData & io.dbSigs.dataFDB.valid
   io.chi.txdat.bits         := DontCare
-  io.chi.txdat.bits.opcode  := CHIOp.DAT.NonCopyBackWrData
-  io.chi.txdat.bits.tgtID   := 0.U
-  io.chi.txdat.bits.srcID   := snMasId.U
-  io.chi.txdat.bits.txnID   := reqRespDBIDReg
-  io.chi.txdat.bits.respErr := RespErr.NormalOkay // TODO: Complete data error indicate
+  io.chi.txdat.bits.Opcode  := CHIOp.DAT.NonCopyBackWrData
+  io.chi.txdat.bits.TgtID   := 0.U
+  io.chi.txdat.bits.SrcID   := snMasId.U
+  io.chi.txdat.bits.TxnID   := reqRespDBIDReg
+  io.chi.txdat.bits.RespErr := RespErr.NormalOkay // TODO: Complete data error indicate
   // Count
   sendTxDatNumReg           := Mux(release, 0.U, sendTxDatNumReg + io.chi.txdat.fire)
   reqSendAllData            := sendTxDatNumReg === nrBeat.U       | (sendTxDatNumReg === (nrBeat - 1).U & io.chi.txdat.fire)
