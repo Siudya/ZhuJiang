@@ -63,6 +63,7 @@ case class ZJParameters(
     var hfId = 0
     var hiId = 0
     var cId = 0
+    var sId = 0
     val nodes = for((np, idx) <- nodeParams.zipWithIndex) yield {
       val n = Node(np.name, np.nodeType, csn, nodeTypeBits, nodeNetBits, nodeNidBits, nodeParams.size, idx % 2 == 1)
       n.nodeType match {
@@ -71,6 +72,7 @@ case class ZJParameters(
         case NodeType.HI => n.nid = hiId; hiId = hiId + 1
         case NodeType.C => n.nid = cId; cId = cId + 1
         case NodeType.P => n.nid = rId; rId = rId + 1
+        case NodeType.S => n.nid = sId; sId = sId + 1
       }
       n
     }
