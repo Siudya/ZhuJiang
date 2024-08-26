@@ -231,7 +231,7 @@ class DongJiang()(implicit p: Parameters) extends DJModule {
     val io = IO(new Bundle {
         val rnSlvChi            = Vec(nrRnSlv, Flipped(new CHIBundleDecoupled))
         val rnMasChi            = Vec(nrRnMas, new CHIBundleDecoupled)
-        val snMasChi            = Vec(nrSnSlv, new CHIBundleDecoupled)
+        val snMasChi            = Vec(nrSnMas, new CHIBundleDecoupled)
     })
 
     io <> DontCare
@@ -243,7 +243,7 @@ class DongJiang()(implicit p: Parameters) extends DJModule {
 
     val rnSlaves    = (0 until nrRnSlv).map(i => createRnSlv(i))
     val rnMasters   = (0 until nrRnMas).map(i => createRnMas(i))
-    val snMasters   = (0 until nrSnSlv).map(i => createSnMas(i))
+    val snMasters   = (0 until nrSnMas).map(i => createSnMas(i))
 
     val rnNodes     = rnSlaves ++ rnMasters
 

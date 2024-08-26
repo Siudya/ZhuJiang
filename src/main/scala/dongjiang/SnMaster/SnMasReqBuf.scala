@@ -154,7 +154,7 @@ class SnMasReqBuf(snMasId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
   io.chi.txreq.bits.Opcode  := reqReg.opcode
   io.chi.txreq.bits.Size    := log2Ceil(djparam.blockBytes).U
   io.chi.txreq.bits.Addr    := reqReg.addr
-  io.chi.txreq.bits.MemAttr := MemAttr(false.B, true.B, false.B, false.B)
+  io.chi.txreq.bits.MemAttr := MemAttr(false.B, true.B, false.B, false.B).asUInt
   io.chi.txreq.bits.ExpCompAck := false.B
 
 
