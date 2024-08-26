@@ -53,7 +53,7 @@ class SnMasReqBuf(snMasId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
   val sendTxDatNumReg   = RegInit(0.U(log2Ceil(nrBeat * 2 + 1).W))
   val reqSendAllData    = WireInit(false.B) // Send all Data to HN when need to send WriteData
   // req resp to slice req
-  val reqRespDBIDReg    = RegInit(0.U(chiParams.dbidBits.W))
+  val reqRespDBIDReg    = RegInit(0.U(djparam.dbidBits.W))
 
 
 // ---------------------------  ReqBuf State release/alloc/set logic --------------------------------//

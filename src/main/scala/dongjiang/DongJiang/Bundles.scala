@@ -54,8 +54,8 @@ class MSHRIndexBundle(implicit p: Parameters) extends DJBundle with HasMSHRSet w
 // ---------------------------------------------------------------- Req To Slice Bundle ----------------------------------------------------------------------------- //
 trait HasReqBaseMesBundle extends DJBundle { this: Bundle =>
     // CHI Id(Use in RnSlave)
-    val srcID       = UInt(chiParams.nodeIdBits.W)
-    val txnID       = UInt(chiParams.nodeIdBits.W)
+    val srcID       = UInt(djparam.nodeIdBits.W)
+    val txnID       = UInt(djparam.nodeIdBits.W)
     // Snp Mes(Use in RnMaster)
     val isSnp       = Bool()
     val doNotGoToSD = Bool()
@@ -79,8 +79,8 @@ class Req2SliceBundle(implicit p: Parameters) extends DJBundle with HasReq2Slice
 
 trait HasResp2NodeBundle extends DJBundle with HasCHIChannel { this: Bundle =>
     // CHI Id
-    val srcID       = UInt(chiParams.nodeIdBits.W)
-    val txnID       = UInt(chiParams.nodeIdBits.W)
+    val srcID       = UInt(djparam.nodeIdBits.W)
+    val txnID       = UInt(djparam.nodeIdBits.W)
     // CHI Mes
     val opcode      = UInt(6.W)
     // Indicate Snoopee final state
@@ -99,9 +99,9 @@ class Resp2NodeBundle(implicit p: Parameters) extends DJBundle with HasResp2Node
 // ---------------------------------------------------------------- Req To Node Bundle ----------------------------------------------------------------------------- //
 trait HasReq2NodeBundle extends DJBundle with HasAddr { this: Bundle =>
     // CHI Id
-    val tgtId       = UInt(chiParams.nodeIdBits.W)
-    val srcId       = UInt(chiParams.nodeIdBits.W)
-    val txnId       = UInt(chiParams.nodeIdBits.W)
+    val tgtId       = UInt(djparam.nodeIdBits.W)
+    val srcId       = UInt(djparam.nodeIdBits.W)
+    val txnId       = UInt(djparam.nodeIdBits.W)
     // Snp Mes (Use in RnSlave)
     val retToSrc    = Bool()
     val doNotGoToSD = Bool()
@@ -110,7 +110,7 @@ trait HasReq2NodeBundle extends DJBundle with HasAddr { this: Bundle =>
     // CHI Mes (Use in RnMaster)
     val resp        = UInt(ChiResp.width.W) // Use in write back
     val expCompAck  = Bool()
-    val tgtID       = UInt(chiParams.nodeIdBits.W)
+    val tgtID       = UInt(djparam.nodeIdBits.W)
 }
 
 class Req2NodeBundleWitoutXbarId(implicit p: Parameters) extends DJBundle with HasReq2NodeBundle

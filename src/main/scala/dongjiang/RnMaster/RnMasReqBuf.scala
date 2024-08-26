@@ -43,12 +43,12 @@ class RnMasReqBuf(rnMasId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
     val addr        = UInt(addressBits.W)
     val opcode      = UInt(6.W)
     val resp        = UInt(ChiResp.width.W) // for write back
-    val txnId       = UInt(chiParams.txnidBits.W)
-    val srcId       = UInt(chiParams.nodeIdBits.W)
-    val tgtId       = UInt(chiParams.nodeIdBits.W)
+    val txnId       = UInt(djparam.txnidBits.W)
+    val srcId       = UInt(djparam.nodeIdBits.W)
+    val tgtId       = UInt(djparam.nodeIdBits.W)
     // Snp Mes
-    val fwdNId      = UInt(chiParams.nodeIdBits.W)
-    val fwdTxnId    = UInt(chiParams.txnidBits.W)
+    val fwdNId      = UInt(djparam.nodeIdBits.W)
+    val fwdTxnId    = UInt(djparam.txnidBits.W)
     val retToSrc    = Bool()
     val doNotGoToSD = Bool()
   }))
@@ -70,8 +70,8 @@ class RnMasReqBuf(rnMasId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
   // req resp to slice req
   val reqRespReg        = RegInit(0.U(ChiResp.width.W))
   val reqRespHasDataReg = RegInit(false.B)
-  val reqRespDBIDReg    = RegInit(0.U(chiParams.dbidBits.W))
-  val reqRespHomeNIdOrSrcIdReg = RegInit(0.U(chiParams.nodeIdBits.W)) // CompData HomeNID or Comp SrcID
+  val reqRespDBIDReg    = RegInit(0.U(djparam.dbidBits.W))
+  val reqRespHomeNIdOrSrcIdReg = RegInit(0.U(djparam.nodeIdBits.W)) // CompData HomeNID or Comp SrcID
   // slice resp reg
   val mpRespReg         = RegInit(0.U.asTypeOf(new Resp2NodeBundle()))
 

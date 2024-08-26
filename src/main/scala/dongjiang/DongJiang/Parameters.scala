@@ -81,6 +81,9 @@ case class DJParam(
                                                             // InterfaceParam( name = "RnSalve_CSN",    isRn = true,   isSlave = true,  preferTgtIdMap = Some(Seq(0)) ),
                                                             // InterfaceParam( name = "RnMaster_CSN",   isRn = true,   isSlave = false, addressId = Some(1), addressIdBits = Some(1) )
                     ),
+                    nodeIdBits: Int = 12,
+                    txnidBits: Int = 12,
+                    dbidBits: Int = 16,
                     // ------------------------- Node Mes -------------------- //
                     nodeMes: Seq[NodeParam] = Seq(  // NodeParam( name = "RN_CSN",     nodeId = 0, isRN = true ),
                                                     // NodeParam( name = "HN_CSN",     nodeId = 1, isHN = true, addressId = Some(1), addressIdBits = Some(1) ),
@@ -219,18 +222,9 @@ trait HasDJParam {
     val TIMEOUT_RC      = 6000  // ReadCtl
     val TIMEOUT_TXD     = 1000  // SnChiTxDat
 
-    // chiParams
-    val chiParams = CHIBundleParameters(
-        nodeIdBits = 7,
-        addressBits = addressBits,
-        dataBits = beatBits,
-        dataCheck = false,
-        snpHasTgtId = true
-    )
-
-    // some requirements
-    require(reqBufIdBits <= chiParams.txnidBits)
-    require(dbIdBits <= chiParams.dbidBits)
+    // some requirements for CHI width
+    require(reqBufIdBits <= 12)
+    require(dbIdBits <= 16)
 
     def parseAddress(x: UInt, modBankBits: Int = 1, setBits: Int = 1, tagBits: Int = 1): (UInt, UInt, UInt, UInt, UInt) = {
         val offset  = x

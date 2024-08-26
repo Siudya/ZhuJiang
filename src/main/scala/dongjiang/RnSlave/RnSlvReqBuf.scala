@@ -33,10 +33,10 @@ class RnSlvReqBuf(rnSlvId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
   val reqReg            = RegInit(0.U.asTypeOf(new DJBundle with HasFromIDBits {
     val addr            = UInt(addressBits.W)
     val opcode          = UInt(6.W)
-    val txnId           = UInt(chiParams.txnidBits.W)
-    val srcId           = UInt(chiParams.nodeIdBits.W)
+    val txnId           = UInt(djparam.txnidBits.W)
+    val srcId           = UInt(djparam.nodeIdBits.W)
     // Snp Mes
-    val tgtId           = UInt(chiParams.nodeIdBits.W)
+    val tgtId           = UInt(djparam.nodeIdBits.W)
     val retToSrc        = Bool()
     val doNotGoToSD     = Bool()
   }))
