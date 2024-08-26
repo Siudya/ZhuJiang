@@ -143,6 +143,7 @@ object TrafficBoardFileManager {
        |  vector<uint16_t> lrn;
        |  vector<uint16_t> lhf;
        |  vector<uint16_t> lhi;
+       |  vector<uint16_t> lsn;
        |  // csn nodes
        |  vector<uint16_t> crn;
        |  vector<uint16_t> chf;
@@ -174,11 +175,13 @@ object TrafficBoardFileManager {
        |  scoreboard[node_id][RSP] = list<unique_ptr<TrafficBoardEntry>>();
        |  scoreboard[node_id][DAT] = list<unique_ptr<TrafficBoardEntry>>();
        |  scoreboard[node_id][SNP] = list<unique_ptr<TrafficBoardEntry>>();
+       |  scoreboard[node_id][ERQ] = list<unique_ptr<TrafficBoardEntry>>();
        |  locks[node_id] = unordered_map<uint8_t, unique_ptr<mutex>>();
        |  locks[node_id][REQ] = make_unique<mutex>();
        |  locks[node_id][RSP] = make_unique<mutex>();
        |  locks[node_id][DAT] = make_unique<mutex>();
        |  locks[node_id][SNP] = make_unique<mutex>();
+       |  locks[node_id][ERQ] = make_unique<mutex>();
        |
        |  if(0 == net) {
        |    if(type == R_TYPE)
@@ -187,6 +190,8 @@ object TrafficBoardFileManager {
        |      lhf.push_back(node_id);
        |    else if(type == HI_TYPE)
        |      lhi.push_back(node_id);
+       |    else if(type == S_TYPE)
+       |      lsn.push_back(node_id);
        |    else {
        |      TFB_ERR("cannot register C2C 0x%x on local ring\\n", node_id);
        |    }
@@ -198,7 +203,7 @@ object TrafficBoardFileManager {
        |    else if(type == C_TYPE)
        |      c2c.push_back(node_id);
        |    else {
-       |      TFB_ERR("cannot register HNI 0x%x on csn ring\\n", node_id);
+       |      TFB_ERR("cannot register HNI or SN 0x%x on csn ring\\n", node_id);
        |    }
        |  }
        |}
@@ -312,6 +317,8 @@ object TrafficBoardFileManager {
        |    return tfb.lhf.size();
        |  else if(type == 0x02)
        |    return tfb.lhi.size();
+       |  else if(type == 0x04)
+       |    return tfb.lsn.size();
        |  else if(type == 0x10)
        |    return tfb.crn.size();
        |  else if(type == 0x11)
@@ -332,6 +339,8 @@ object TrafficBoardFileManager {
        |    vec_ptr = &(tfb.lhf);
        |  else if(type == 0x02)
        |    vec_ptr = &(tfb.lhi);
+       |  else if(type == 0x04)
+       |    vec_ptr = &(tfb.lsn);
        |  else if(type == 0x10)
        |    vec_ptr = &(tfb.crn);
        |  else if(type == 0x11)
@@ -342,11 +351,7 @@ object TrafficBoardFileManager {
        |    TFB_ERR("wrong node type 0x%x\\n", type);
        |    return 1;
        |  }
-       |  int i = 0;
-       |  for(const auto &id : *vec_ptr) {
-       |    nodes_array_ptr[i] = id;
-       |    i++;
-       |  }
+       |  for(int i = 0; i < vec_ptr->size(); i++) nodes_array_ptr[i] = (*vec_ptr).at(i);
        |  return 0;
        |}
        |
