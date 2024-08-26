@@ -15,16 +15,8 @@ class ZhujiangTopConfig extends Config((site, here, up) => {
       NodeParam(nodeType = NodeType.R),
       NodeParam(nodeType = NodeType.R),
       NodeParam(nodeType = NodeType.HF),
-      NodeParam(nodeType = NodeType.P),
-      NodeParam(nodeType = NodeType.R),
-      NodeParam(nodeType = NodeType.R),
-      NodeParam(nodeType = NodeType.HF),
       NodeParam(nodeType = NodeType.HI),
-    ),
-    csnNodeParams = Seq(
-      NodeParam(nodeType = NodeType.R),
-      NodeParam(nodeType = NodeType.HF),
-      NodeParam(nodeType = NodeType.C),
+      NodeParam(nodeType = NodeType.S),
       NodeParam(nodeType = NodeType.P),
     )
   )

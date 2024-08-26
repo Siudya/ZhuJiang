@@ -13,11 +13,13 @@ class RingIO(local: Boolean)(implicit p: Parameters) extends ZJBundle {
   private val hfNum = ring.count(_.nodeType == NodeType.HF)
   private val hiNum = ring.count(_.nodeType == NodeType.HI)
   private val c2cNum = ring.count(_.nodeType == NodeType.C)
+  private val snNum = ring.count(_.nodeType == NodeType.S)
   val rn = Vec(rnNum, new RnIcn)
-  val hnf = Vec(hfNum, new HnIcn)
-  val hni = Vec(hiNum, new HnIcn)
+  val hnf = Vec(hfNum, new HnIcn(local))
+  val hni = Vec(hiNum, new HnIcn(local))
   val c2c = Vec(c2cNum, new C2cLinkPort)
   val chip = Input(UInt(chipAddrBits.W))
+  val sn = Vec(snNum, new SnIcn)
 }
 
 class TfsIO(local: Boolean)(implicit p: Parameters) extends ZJBundle {
@@ -51,6 +53,7 @@ class Ring(local: Boolean)(implicit p: Parameters) extends ZJModule {
   private val hnfs = routersAndNodes.filter(_._2.nodeType == NodeType.HF)
   private val hnis = routersAndNodes.filter(_._2.nodeType == NodeType.HI)
   private val c2cs = routersAndNodes.filter(_._2.nodeType == NodeType.C)
+  private val sns = routersAndNodes.filter(_._2.nodeType == NodeType.S)
 
   rns.zipWithIndex.foreach({ case ((r, _), idx) =>
     val rn = r.asInstanceOf[RequestRouter]
@@ -68,7 +71,7 @@ class Ring(local: Boolean)(implicit p: Parameters) extends ZJModule {
   hnfs.zipWithIndex.foreach({ case ((r, _), idx) =>
     val hnf = r.asInstanceOf[HomeRouter]
     if(tfs) {
-      val m = Module(new HnTrafficGen)
+      val m = Module(new HnTrafficGen(local))
       m.io.rx <> hnf.icn.tx
       hnf.icn.rx <> m.io.tx
       m.io.nodeId := hnf.router.nodeId
@@ -81,7 +84,7 @@ class Ring(local: Boolean)(implicit p: Parameters) extends ZJModule {
   hnis.zipWithIndex.foreach({ case ((r, _), idx) =>
     val hni = r.asInstanceOf[HomeRouter]
     if(tfs) {
-      val m = Module(new HnTrafficGen)
+      val m = Module(new HnTrafficGen(local))
       m.io.rx <> hni.icn.tx
       hni.icn.rx <> m.io.tx
       m.io.nodeId := hni.router.nodeId
@@ -107,6 +110,19 @@ class Ring(local: Boolean)(implicit p: Parameters) extends ZJModule {
       cn.router.chip := c2cPacker.io.ring.chip
       c2cPacker.suggestName("c2cPackLayer")
       io.get.c2c(idx) <> c2cPacker.io.c2c
+    }
+  })
+
+  sns.zipWithIndex.foreach({ case ((r, _), idx) =>
+    val sn = r.asInstanceOf[SubordinateRouter]
+    if(tfs) {
+      val m = Module(new SnTrafficGen)
+      m.io.rx <> sn.icn.tx
+      sn.icn.rx <> m.io.tx
+      m.io.nodeId := sn.router.nodeId
+      m.suggestName(s"snTxGen_$idx")
+    } else {
+      io.get.sn(idx) <> sn.icn
     }
   })
 

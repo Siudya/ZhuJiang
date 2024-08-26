@@ -1,16 +1,19 @@
 package xijiang
 
 import chisel3._
+import chisel3.util._
 import org.chipsalliance.cde.config.Parameters
 import xijiang.router._
 import xijiang.router.base.BaseRouter
 
 object NodeType {
-  val R: Int = 0
+  val R: Int = 0 // TODO: R -> RF / RI
   val HF: Int = 1
   val HI: Int = 2
   val C: Int = 3
-  val P: Int = 4
+  val S: Int = 4 // TODO: Add extra req channel for sn
+  val P: Int = 5
+  def width: Int = log2Ceil(P)
 }
 
 case class NodeParam(
@@ -22,7 +25,7 @@ case class Node(
   suffix: String = "",
   nodeType: Int = NodeType.R,
   csnNode: Boolean = false,
-  nodeTypeBits: Int = 2,
+  nodeTypeBits: Int = NodeType.width,
   nodeNetBits: Int = 1,
   nodeNidBits: Int = 4,
   ringSize: Int = 3,
@@ -87,6 +90,7 @@ case class Node(
       case NodeType.HF => (Module(new HomeRouter(this)(p)), "hnf")
       case NodeType.HI => (Module(new HomeRouter(this)(p)), "hni")
       case NodeType.C => (Module(new ChipToChipRouter(this)(p)), "c2c")
+      case NodeType.S => (Module(new SubordinateRouter(this)(p)), "sn")
       case _ => (Module(new PipelineRouter(this)(p)), "pip")
     }
     res.suggestName(s"$csnStr$nodeStr$suffix")

@@ -7,42 +7,34 @@ import xijiang.router.base.BaseRouter
 import xijiang.{Node, NodeType}
 import zhujiang.ZJBundle
 
-class HnTx(implicit p: Parameters) extends ZJBundle {
+class SnTx(implicit p: Parameters) extends ZJBundle {
   val req = Decoupled(UInt(reqFlitBits.W))
-  val resp = Decoupled(UInt(respFlitBits.W))
   val data = Decoupled(UInt(dataFlitBits.W))
 }
 
-class HnRx(local: Boolean)(implicit p: Parameters) extends ZJBundle {
-  val ereq = if(local) Some(Flipped(Decoupled(UInt(reqFlitBits.W)))) else None
+class SnRx(implicit p: Parameters) extends ZJBundle {
   val resp = Flipped(Decoupled(UInt(respFlitBits.W)))
   val data = Flipped(Decoupled(UInt(dataFlitBits.W)))
-  val snoop = Flipped(Decoupled(UInt(snoopFlitBits.W)))
 }
 
-class HnIcn(local: Boolean)(implicit p: Parameters) extends ZJBundle {
-  val tx = new HnTx
-  val rx = new HnRx(local)
+class SnIcn(implicit p: Parameters) extends ZJBundle {
+  val tx = new SnTx
+  val rx = new SnRx
 }
 
-class HomeRouter(node: Node)(implicit p: Parameters) extends BaseRouter(node,
-  Seq("REQ", "RSP", "DAT"), Seq("RSP", "DAT", "SNP", "ERQ")) {
-  private val local = !node.csnNode
-  val icn = IO(new HnIcn(local))
+class SubordinateRouter(node: Node)(implicit p: Parameters) extends BaseRouter(node,
+  Seq("ERQ", "DAT"), Seq("RSP", "DAT")) {
+  val icn = IO(new SnIcn)
 
   injectMap("RSP") <> icn.rx.resp
   injectMap("DAT") <> icn.rx.data
-  injectMap("SNP") <> icn.rx.snoop
-  if(local) injectMap("ERQ") <> icn.rx.ereq.get
-  icn.tx.req <> ejectMap("REQ")
-  icn.tx.resp <> ejectMap("RSP")
+  icn.tx.req <> ejectMap("ERQ")
   icn.tx.data <> ejectMap("DAT")
 
   if(!node.csnNode) {
-    val nStr = if(node.nodeType == NodeType.HF) "hnf" else "hni"
     print(
       s"""
-         |HomeNode ${nStr}_${node.nid} {
+         |SubordinateNode sn_${node.nid} {
          |  node_id: 0x${node.nodeId.litValue.toInt.toHexString}
          |  lefts: ${node.leftNodes.map(e => "0x" + e.toHexString).reduce((a: String, b: String) => s"$a, $b")}
          |  rights: ${node.rightNodes.map(e => "0x" + e.toHexString).reduce((a: String, b: String) => s"$a, $b")}
