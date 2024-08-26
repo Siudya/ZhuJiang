@@ -41,19 +41,37 @@ class Zhujiang(implicit p: Parameters) extends ZJModule {
   localRing.io.get.hnf(0).tx.resp.ready := dongjiang.io.rnSlvChi(0).txrsp.ready
 
   // hn rx valid
-  localRing.io.get.hnf(0).rx.snoop.valid  := dongjiang.io.rnSlvChi(0).rxsnp.valid
+  localRing.io.get.hnf(0).rx.snoop.valid := dongjiang.io.rnSlvChi(0).rxsnp.valid
   localRing.io.get.hnf(0).rx.data.valid := dongjiang.io.rnSlvChi(0).rxdat.valid
   localRing.io.get.hnf(0).rx.resp.valid := dongjiang.io.rnSlvChi(0).rxrsp.valid
-  // hn rx valid
+  // hn rx bits
   localRing.io.get.hnf(0).rx.snoop.bits := dongjiang.io.rnSlvChi(0).rxsnp.bits.asUInt
   localRing.io.get.hnf(0).rx.data.bits := dongjiang.io.rnSlvChi(0).rxdat.bits.asUInt
   localRing.io.get.hnf(0).rx.resp.bits := dongjiang.io.rnSlvChi(0).rxrsp.bits.asUInt
-  // hn rx valid
+  // hn rx ready
   dongjiang.io.rnSlvChi(0).rxsnp.ready := localRing.io.get.hnf(0).rx.snoop.ready
   dongjiang.io.rnSlvChi(0).rxdat.ready := localRing.io.get.hnf(0).rx.data.ready
   dongjiang.io.rnSlvChi(0).rxrsp.ready := localRing.io.get.hnf(0).rx.resp.ready
 
+  // sn rx valid
+  localRing.io.get.sn(0).rx.req.valid := dongjiang.io.snMasChi(0).txreq.valid
+  localRing.io.get.sn(0).rx.data.valid := dongjiang.io.snMasChi(0).txdat.valid
+  // sn rx bits
+  localRing.io.get.sn(0).rx.req.bits := dongjiang.io.snMasChi(0).txreq.bits.asUInt
+  localRing.io.get.sn(0).rx.data.bits := dongjiang.io.snMasChi(0).txdat.bits.asUInt
+  // sn rx ready
+  dongjiang.io.snMasChi(0).txreq.ready := localRing.io.get.sn(0).rx.req.ready
+  dongjiang.io.snMasChi(0).txdat.ready := localRing.io.get.sn(0).rx.data.ready
 
+  // sn tx valid
+  dongjiang.io.snMasChi(0).rxdat.valid := localRing.io.get.sn(0).tx.data.valid
+  dongjiang.io.snMasChi(0).rxrsp.valid := localRing.io.get.sn(0).tx.resp.valid
+  // sn tx bits
+  dongjiang.io.snMasChi(0).rxdat.bits := localRing.io.get.sn(0).tx.data.bits.asTypeOf(new DataFlit)
+  dongjiang.io.snMasChi(0).rxrsp.bits := localRing.io.get.sn(0).tx.resp.bits.asTypeOf(new RespFlit)
+  // sn tx ready
+  localRing.io.get.sn(0).tx.data.ready := dongjiang.io.snMasChi(0).rxdat.ready
+  localRing.io.get.sn(0).tx.resp.ready := dongjiang.io.snMasChi(0).rxrsp.ready
 
 
 
