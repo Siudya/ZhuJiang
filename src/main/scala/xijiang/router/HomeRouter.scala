@@ -13,24 +13,27 @@ class HnTx(implicit p: Parameters) extends ZJBundle {
   val data = Decoupled(UInt(dataFlitBits.W))
 }
 
-class HnRx(implicit p: Parameters) extends ZJBundle {
+class HnRx(local: Boolean)(implicit p: Parameters) extends ZJBundle {
+  val ereq = if(local) Some(Flipped(Decoupled(UInt(reqFlitBits.W)))) else None
   val resp = Flipped(Decoupled(UInt(respFlitBits.W)))
   val data = Flipped(Decoupled(UInt(dataFlitBits.W)))
   val snoop = Flipped(Decoupled(UInt(snoopFlitBits.W)))
 }
 
-class HnIcn(implicit p: Parameters) extends ZJBundle {
+class HnIcn(local: Boolean)(implicit p: Parameters) extends ZJBundle {
   val tx = new HnTx
-  val rx = new HnRx
+  val rx = new HnRx(local)
 }
 
 class HomeRouter(node: Node)(implicit p: Parameters) extends BaseRouter(node,
-  Seq("REQ", "RSP", "DAT"), Seq("RSP", "DAT", "SNP")) {
-  val icn = IO(new HnIcn)
+  Seq("REQ", "RSP", "DAT"), Seq("RSP", "DAT", "SNP", "ERQ")) {
+  private val local = !node.csnNode
+  val icn = IO(new HnIcn(local))
 
   injectMap("RSP") <> icn.rx.resp
   injectMap("DAT") <> icn.rx.data
   injectMap("SNP") <> icn.rx.snoop
+  if(local) injectMap("ERQ") <> icn.rx.ereq.get
   icn.tx.req <> ejectMap("REQ")
   icn.tx.resp <> ejectMap("RSP")
   icn.tx.data <> ejectMap("DAT")

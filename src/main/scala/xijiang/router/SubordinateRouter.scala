@@ -23,12 +23,12 @@ class SnIcn(implicit p: Parameters) extends ZJBundle {
 }
 
 class SubordinateRouter(node: Node)(implicit p: Parameters) extends BaseRouter(node,
-  Seq("REQ", "DAT"), Seq("RSP", "DAT")) {
+  Seq("ERQ", "DAT"), Seq("RSP", "DAT")) {
   val icn = IO(new SnIcn)
 
   injectMap("RSP") <> icn.rx.resp
   injectMap("DAT") <> icn.rx.data
-  icn.tx.req <> ejectMap("REQ")
+  icn.tx.req <> ejectMap("ERQ")
   icn.tx.data <> ejectMap("DAT")
 
   if(!node.csnNode) {

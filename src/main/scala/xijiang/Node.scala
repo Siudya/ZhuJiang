@@ -10,8 +10,8 @@ object NodeType {
   val R: Int = 0 // TODO: R -> RF / RI
   val HF: Int = 1
   val HI: Int = 2
-  val S: Int = 3 // TODO: Add extra req channel for sn
-  val C: Int = 4
+  val C: Int = 3
+  val S: Int = 4 // TODO: Add extra req channel for sn
   val P: Int = 5
   def width: Int = log2Ceil(P)
 }

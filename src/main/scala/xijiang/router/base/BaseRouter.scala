@@ -15,22 +15,24 @@ class ChannelPayload[T <: Flit](gen: T)(implicit p: Parameters) extends ZJBundle
   val liveCnt = UInt(maxRingSize.W)
 }
 
-class RingSide(implicit p: Parameters) extends ZJBundle {
+class RingSide(local: Boolean)(implicit p: Parameters) extends ZJBundle {
   val req = Valid(new ChannelPayload(new ReqFlit))
   val resp = Valid(new ChannelPayload(new RespFlit))
   val data = Valid(new ChannelPayload(new DataFlit))
   val snoop = Valid(new ChannelPayload(new SnoopFlit))
+  val ereq = if(local) Some(Valid(new ChannelPayload(new ReqFlit))) else None
 }
 
-class RouterRingIO(implicit p: Parameters) extends ZJBundle {
-  val tx = Output(new RingSide)
-  val rx = Input(new RingSide)
+class RouterRingIO(csn: Boolean)(implicit p: Parameters) extends ZJBundle {
+  val tx = Output(new RingSide(csn))
+  val rx = Input(new RingSide(csn))
 }
 
 class BaseRouter(val node: Node, ejects: Seq[String], injects: Seq[String])(implicit p: Parameters) extends ZJModule {
   val ringNum = if(node.csnNode) 1 else 2
+  private val local = !node.csnNode
   val router = IO(new Bundle {
-    val rings = Vec(ringNum, new RouterRingIO)
+    val rings = Vec(ringNum, new RouterRingIO(local))
     val chip = Input(UInt(p(ZJParametersKey).chipAddrBits.W))
     val nodeId = Output(UInt(niw.W))
   })
@@ -53,6 +55,7 @@ class BaseRouter(val node: Node, ejects: Seq[String], injects: Seq[String])(impl
   private val respTap = if((injects ++ ejects).contains("RSP")) Some(Module(new ChannelTap(new RespFlit, "RSP", dispatchIds, c2c = c2c))) else None
   private val dataTap = if((injects ++ ejects).contains("DAT")) Some(Module(new ChannelTap(new DataFlit, "DAT", dispatchIds, c2c = c2c))) else None
   private val snoopTap = if((injects ++ ejects).contains("SNP")) Some(Module(new ChannelTap(new SnoopFlit, "SNP", dispatchIds, ejectSnoop, ejectSnoopBuf, c2c = c2c))) else None
+  private val ereqTap = if((injects ++ ejects).contains("ERQ") && local) Some(Module(new ChannelTap(new ReqFlit, "ERQ", dispatchIds, ejectReq, ejectReqBuf, c2c = c2c))) else None
   private val tfbNodeRegister = if((injects ++ ejects).nonEmpty && hasTfb) Some(Module(new NodeRegister)) else None
   tfbNodeRegister.foreach(_.io.nodeId := nid)
 
@@ -77,6 +80,7 @@ class BaseRouter(val node: Node, ejects: Seq[String], injects: Seq[String])(impl
     connectRing(respTap, router.rings(ridx).tx.resp, router.rings(ridx).rx.resp, ridx)
     connectRing(dataTap, router.rings(ridx).tx.data, router.rings(ridx).rx.data, ridx)
     connectRing(snoopTap, router.rings(ridx).tx.snoop, router.rings(ridx).rx.snoop, ridx)
+    if(local) connectRing(ereqTap, router.rings(ridx).tx.ereq.get, router.rings(ridx).rx.ereq.get, ridx)
   }
 
   val injectMap = mutable.Map[String, DecoupledIO[Data]]()
@@ -86,7 +90,8 @@ class BaseRouter(val node: Node, ejects: Seq[String], injects: Seq[String])(impl
     "REQ" -> reqFlitBits,
     "RSP" -> respFlitBits,
     "DAT" -> dataFlitBits,
-    "SNP" -> snoopFlitBits
+    "SNP" -> snoopFlitBits,
+    "ERQ" -> reqFlitBits
   )
 
   private def registerInjectTap[K <: Flit](chn: String, tap: Option[ChannelTap[K]]): Unit = {
@@ -116,6 +121,7 @@ class BaseRouter(val node: Node, ejects: Seq[String], injects: Seq[String])(impl
   registerInjectTap("RSP", respTap)
   registerInjectTap("DAT", dataTap)
   registerInjectTap("SNP", snoopTap)
+  if(local) registerInjectTap("ERQ", ereqTap)
 
   private def registerEjectTap[K <: Flit](chn: String, tap: Option[ChannelTap[K]]): Unit = {
     if(ejects.contains(chn)) {
@@ -142,4 +148,5 @@ class BaseRouter(val node: Node, ejects: Seq[String], injects: Seq[String])(impl
   registerEjectTap("RSP", respTap)
   registerEjectTap("DAT", dataTap)
   registerEjectTap("SNP", snoopTap)
+  if(local) registerEjectTap("ERQ", ereqTap)
 }

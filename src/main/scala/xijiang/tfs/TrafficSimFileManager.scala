@@ -72,11 +72,13 @@ object TrafficSimFileManager {
        |#define HF_TYPE ${NodeType.HF}
        |#define HI_TYPE ${NodeType.HI}
        |#define C_TYPE ${NodeType.C}
+       |#define S_TYPE ${NodeType.S}
        |
        |#define REQ ${ChannelEncodings.REQ}
        |#define RSP ${ChannelEncodings.RSP}
        |#define DAT ${ChannelEncodings.DAT}
        |#define SNP ${ChannelEncodings.SNP}
+       |#define ERQ ${ChannelEncodings.ERQ}
        |
        |#define RX_READY_MAX_DELAY ${params.tfsParams.get.rxReadyMaxDelay}
        |#define TX_VALID_MAX_DELAY ${params.tfsParams.get.txValidMaxDelay}

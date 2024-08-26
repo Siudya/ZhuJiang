@@ -15,8 +15,8 @@ class RingIO(local: Boolean)(implicit p: Parameters) extends ZJBundle {
   private val c2cNum = ring.count(_.nodeType == NodeType.C)
   private val snNum = ring.count(_.nodeType == NodeType.S)
   val rn = Vec(rnNum, new RnIcn)
-  val hnf = Vec(hfNum, new HnIcn)
-  val hni = Vec(hiNum, new HnIcn)
+  val hnf = Vec(hfNum, new HnIcn(local))
+  val hni = Vec(hiNum, new HnIcn(local))
   val c2c = Vec(c2cNum, new C2cLinkPort)
   val chip = Input(UInt(chipAddrBits.W))
   val sn = Vec(snNum, new SnIcn)
@@ -71,7 +71,7 @@ class Ring(local: Boolean)(implicit p: Parameters) extends ZJModule {
   hnfs.zipWithIndex.foreach({ case ((r, _), idx) =>
     val hnf = r.asInstanceOf[HomeRouter]
     if(tfs) {
-      val m = Module(new HnTrafficGen)
+      val m = Module(new HnTrafficGen(local))
       m.io.rx <> hnf.icn.tx
       hnf.icn.rx <> m.io.tx
       m.io.nodeId := hnf.router.nodeId
@@ -84,7 +84,7 @@ class Ring(local: Boolean)(implicit p: Parameters) extends ZJModule {
   hnis.zipWithIndex.foreach({ case ((r, _), idx) =>
     val hni = r.asInstanceOf[HomeRouter]
     if(tfs) {
-      val m = Module(new HnTrafficGen)
+      val m = Module(new HnTrafficGen(local))
       m.io.rx <> hni.icn.tx
       hni.icn.rx <> m.io.tx
       m.io.nodeId := hni.router.nodeId
@@ -115,12 +115,12 @@ class Ring(local: Boolean)(implicit p: Parameters) extends ZJModule {
 
   sns.zipWithIndex.foreach({ case ((r, _), idx) =>
     val sn = r.asInstanceOf[SubordinateRouter]
-    if (tfs) {
+    if(tfs) {
       val m = Module(new SnTrafficGen)
       m.io.rx <> sn.icn.tx
       sn.icn.rx <> m.io.tx
       m.io.nodeId := sn.router.nodeId
-      m.suggestName(s"snfTxGen_$idx")
+      m.suggestName(s"snTxGen_$idx")
     } else {
       io.get.sn(idx) <> sn.icn
     }

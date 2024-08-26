@@ -153,12 +153,14 @@ object ChannelEncodings {
   def RSP: Int = 1
   def DAT: Int = 2
   def SNP: Int = 3
+  def ERQ: Int = 4
 
   val encodingsMap = Map[String, Int](
     "REQ" -> REQ,
     "RSP" -> RSP,
     "DAT" -> DAT,
-    "SNP" -> SNP
+    "SNP" -> SNP,
+    "ERQ" -> SNP
   )
 }
 
