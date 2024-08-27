@@ -13,6 +13,7 @@ import xs.utils.perf.{DebugOptions, DebugOptionsKey}
 import Utils.GenerateVerilog
 import Utils.IDConnector._
 import Utils.FastArb._
+import xijiang.router.{HnIcn, RnIcn, SnIcn}
 import zhujiang.HasZJParams
 
 abstract class DJModule(implicit val p: Parameters) extends Module with HasDJParam with HasZJParams
@@ -229,9 +230,9 @@ class DongJiang()(implicit p: Parameters) extends DJModule {
 
 // ------------------------------------------ IO declaration ----------------------------------------------//
     val io = IO(new Bundle {
-        val rnSlvChi            = Vec(nrRnSlv, Flipped(new CHIBundleDecoupled))
-        val rnMasChi            = Vec(nrRnMas, new CHIBundleDecoupled)
-        val snMasChi            = Vec(nrSnMas, new CHIBundleDecoupled)
+        val fromHnIcn       = Vec(nrRnSlv, Flipped(new HnIcn))
+        val toRnIcn         = Vec(nrRnMas, Flipped(new RnIcn))
+        val toSnIcn         = Vec(nrSnMas, Flipped(new SnIcn))
     })
 
     io <> DontCare
@@ -262,14 +263,55 @@ class DongJiang()(implicit p: Parameters) extends DJModule {
 
 
 // ---------------------------------------------- Connection ---------------------------------------------------//
+
+    def connectBundle[T1 <: UInt, T2 <: Bundle](in: DecoupledIO[T1], out: DecoupledIO[T2]): Unit = {
+        out.valid   := in.valid
+        out.bits    := in.bits.asTypeOf(out.bits)
+        in.ready    := out.ready
+        require(in.bits.getWidth == out.bits.getWidth)
+    }
+
+    def connectUInt[T1 <: Bundle, T2 <: UInt](in: DecoupledIO[T1], out: DecoupledIO[T2]): Unit = {
+        out.valid := in.valid
+        out.bits := in.bits.asTypeOf(out.bits)
+        in.ready := out.ready
+        require(in.bits.getWidth == out.bits.getWidth)
+    }
+
+
     /*
      * Connect IO CHI
      */
-    rnSlaves.map(_.io.chi).zip(io.rnSlvChi).foreach { case(a, b) => a <> b }
+    rnSlaves.map(_.io.chi).zip(io.fromHnIcn).foreach {
+        case(a, b) =>
+            connectBundle(b.tx.req, a.txreq)
+            connectBundle(b.tx.resp, a.txrsp)
+            connectBundle(b.tx.data, a.txdat)
 
-    rnMasters.map(_.io.chi).zip(io.rnMasChi).foreach { case (a, b) => a <> b }
+            connectUInt(a.rxsnp, b.rx.snoop)
+            connectUInt(a.rxrsp, b.rx.resp)
+            connectUInt(a.rxdat, b.rx.data)
+    }
 
-    snMasters.map(_.io.chi).zip(io.snMasChi).foreach { case (a, b) => a <> b }
+    rnMasters.map(_.io.chi).zip(io.toRnIcn).foreach {
+        case (a, b) =>
+            connectUInt(a.txreq, b.rx.req)
+            connectUInt(a.txrsp, b.rx.resp)
+            connectUInt(a.txdat, b.rx.data)
+
+            connectBundle(b.tx.snoop, a.rxsnp)
+            connectBundle(b.tx.resp, a.rxrsp)
+            connectBundle(b.tx.data, a.rxdat)
+    }
+
+    snMasters.map(_.io.chi).zip(io.toSnIcn).foreach {
+        case (a, b) =>
+            connectUInt(a.txreq, b.rx.req)
+            connectUInt(a.txdat, b.rx.data)
+
+            connectBundle(b.tx.resp, a.rxrsp)
+            connectBundle(b.tx.data, a.rxdat)
+    }
 
 //    /*
 //     * Connect RNs <-> Xbar
