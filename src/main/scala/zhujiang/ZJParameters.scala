@@ -86,6 +86,7 @@ case class ZJParameters(
 
 trait HasZJParams {
   implicit val p: Parameters
+  val zjparam = p(ZJParametersKey)
   val M = p(ZJParametersKey).M
   val PB = p(ZJParametersKey).PB
   val E = p(ZJParametersKey).E
