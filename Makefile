@@ -10,8 +10,8 @@ comp:
 	mill -i zhujiang.compile
 	mill -i zhujiang.test.compile
 
-RTL_AGRS = --full-stacktrace --target systemverilog --split-verilog
-RTL_DIR = build/rtl
+RTL_AGRS = --full-stacktrace --target systemverilog # --split-verilog
+RTL_DIR = build # /rtl
 
 build-dir:
 	@mkdir -p $(RTL_DIR)

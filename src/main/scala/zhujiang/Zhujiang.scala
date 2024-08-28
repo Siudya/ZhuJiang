@@ -13,6 +13,19 @@ import zhujiang.nhl2._
 class Zhujiang(implicit p: Parameters) extends ZJModule {
   require(p(ZJParametersKey).tfsParams.isEmpty)
 
+  print(
+    s"""
+       |ZhuJiang Message: {
+       |  Support Protocol: CHI-G
+       |  nodeIdBits: ${niw}
+       |  requestAddrBits: ${raw}
+       |  dataBits: ${dw}
+       |  dataCheckBits: ${dcw}
+       |  txnIdBits: 12
+       |  dbIdBits: 16
+       |}
+       |""".stripMargin)
+
   /*
    * NHL2 CHI Bundle Param
    */
