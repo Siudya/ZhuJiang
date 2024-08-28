@@ -55,7 +55,7 @@ class RnMaster(rnMasId: Int, param: InterfaceParam)(implicit p: Parameters) exte
   // Set io.chi.rx_xxx.ready value
   io.chi.rxsnp.ready  := canReceive0
   io.chi.rxrsp.ready  := true.B
-  io.chi.rxdat.ready  := true.B
+  io.chi.rxdat.ready  := io.dbSigs.dataTDB.ready
 
 
   /*

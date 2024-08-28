@@ -198,9 +198,6 @@ class RnMasReqBuf(rnMasId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
     reqRespHomeNIdOrSrcIdReg := io.chi.rxdat.bits.HomeNID
   }
   getRxDatNumReg      := Mux(release, 0.U, getRxDatNumReg + io.chi.rxdat.fire.asUInt)
-  // Set Ready value
-  io.chi.rxrsp.ready  := true.B
-  io.chi.rxdat.ready  := true.B
 
 
 // ---------------------------  Send CHI Req or Resp(TxReq, TxRsp and TxDat) Logic --------------------------------//
@@ -225,7 +222,7 @@ class RnMasReqBuf(rnMasId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
   io.chi.txrsp.bits         := DontCare
   io.chi.txrsp.bits.Opcode  := Mux(fsmReg.s_compAck, CHIOp.RSP.CompAck,         mpRespReg.opcode)
   io.chi.txrsp.bits.TgtID   := Mux(fsmReg.s_compAck, reqRespHomeNIdOrSrcIdReg,  reqReg.srcId)
-  io.chi.txrsp.bits.SrcID   := nrRnSlv.U
+  io.chi.txrsp.bits.SrcID   := djparam.hnSrcId.U
   io.chi.txrsp.bits.TxnID   := Mux(fsmReg.s_compAck, reqRespDBIDReg,            reqReg.txnId)
   io.chi.txrsp.bits.RespErr := Mux(fsmReg.s_compAck, DontCare,                  RespErr.NormalOkay) // TODO: Complete data error indicate
   io.chi.txrsp.bits.Resp    := Mux(fsmReg.s_compAck, DontCare,                  mpRespReg.resp)
@@ -274,10 +271,10 @@ class RnMasReqBuf(rnMasId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
   io.req2Slice.bits.srcID       := reqReg.srcId
   io.req2Slice.bits.txnID       := reqReg.txnId
   // IdMap
-  io.req2Slice.bits.to.idL0     := IdL0.SLICE
+  io.req2Slice.bits.to.idL0     := IdL0.SLICE.U
   io.req2Slice.bits.to.idL1     := parseAddress(reqReg.addr)._2 // Remap in Xbar
   io.req2Slice.bits.to.idL2     := DontCare
-  io.req2Slice.bits.from.idL0   := RNSLV
+  io.req2Slice.bits.from.idL0   := INTF.U
   io.req2Slice.bits.from.idL1   := rnMasId.U
   io.req2Slice.bits.from.idL2   := reqBufId.U
   // Use in RnMaster
@@ -298,7 +295,7 @@ class RnMasReqBuf(rnMasId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
   io.resp2Slice.bits.fwdState   := DontCare
   // IdMap
   io.resp2Slice.bits.to         := Mux(fsmReg.s_snpUdpMSHR, mpRespReg.from, reqReg.from)
-  io.req2Slice.bits.from.idL0   := RNSLV
+  io.req2Slice.bits.from.idL0   := INTF.U
   io.req2Slice.bits.from.idL1   := rnMasId.U
   io.req2Slice.bits.from.idL2   := reqBufId.U
 
@@ -315,7 +312,7 @@ class RnMasReqBuf(rnMasId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
   io.dbSigs.dbRCReq.bits.isRead     := true.B
   io.dbSigs.dbRCReq.bits.isClean    := true.B
   io.dbSigs.dbRCReq.bits.to         := Mux(fsmReg.s_reqUdpMSHR, reqReg.from, mpRespReg.from)
-  io.dbSigs.dbRCReq.bits.from.idL0  := RNSLV
+  io.dbSigs.dbRCReq.bits.from.idL0  := INTF.U
   io.dbSigs.dbRCReq.bits.from.idL1  := rnMasId.U
   io.dbSigs.dbRCReq.bits.from.idL2  := reqBufId.U
   io.dbSigs.dbRCReq.bits.mshrSet    := parseMSHRAddress(reqReg.addr)._2
@@ -329,7 +326,7 @@ class RnMasReqBuf(rnMasId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
   io.dbSigs.dataTDB.bits.data       := DontCare
   io.dbSigs.dataTDB.bits.dataID     := DontCare
   io.dbSigs.dataTDB.bits.dbid       := dbidReg
-  io.dbSigs.dataTDB.bits.to.idL0    := IdL0.SLICE
+  io.dbSigs.dataTDB.bits.to.idL0    := IdL0.SLICE.U
   io.dbSigs.dataTDB.bits.to.idL1    := dbidBankIdReg
   io.dbSigs.dataTDB.bits.to.idL2    := DontCare
 
@@ -339,10 +336,10 @@ class RnMasReqBuf(rnMasId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
    */
   io.dbSigs.wReq.valid           := fsmReg.s_getDBID
   // IdMap
-  io.dbSigs.wReq.bits.to.idL0    := IdL0.SLICE
+  io.dbSigs.wReq.bits.to.idL0    := IdL0.SLICE.U
   io.dbSigs.wReq.bits.to.idL1    := parseAddress(reqReg.addr)._2 // Remap in Xbar
   io.dbSigs.wReq.bits.to.idL2    := DontCare
-  io.dbSigs.wReq.bits.from.idL0  := RNSLV
+  io.dbSigs.wReq.bits.from.idL0  := INTF.U
   io.dbSigs.wReq.bits.from.idL1  := rnMasId.U
   io.dbSigs.wReq.bits.from.idL2  := reqBufId.U
 

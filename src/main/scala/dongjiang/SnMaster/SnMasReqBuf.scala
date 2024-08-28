@@ -137,9 +137,6 @@ class SnMasReqBuf(snMasId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
   }
   // Receive RxDat
   getRxDatNumReg      := Mux(release, 0.U, getRxDatNumReg + io.chi.rxdat.fire.asUInt)
-  // Set Ready value
-  io.chi.rxrsp.ready  := true.B
-  io.chi.rxdat.ready  := true.B
 
 
 // ---------------------------  Send CHI Req or Resp(TxReq and TxDat) Logic --------------------------------//
@@ -188,7 +185,7 @@ class SnMasReqBuf(snMasId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
   io.resp2Slice.bits.fwdState   := DontCare
   // IdMap
   io.resp2Slice.bits.to         := reqReg.from
-  io.resp2Slice.bits.from.idL0  := SNMAS
+  io.resp2Slice.bits.from.idL0  := INTF.U
   io.resp2Slice.bits.from.idL1  := snMasId.U
   io.resp2Slice.bits.from.idL2  := reqBufId.U
 
@@ -202,7 +199,7 @@ class SnMasReqBuf(snMasId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
   io.dbSigs.dbRCReq.bits.isRead    := true.B
   io.dbSigs.dbRCReq.bits.isClean   := true.B
   io.dbSigs.dbRCReq.bits.to        := reqReg.from
-  io.dbSigs.dbRCReq.bits.from.idL0 := SNMAS
+  io.dbSigs.dbRCReq.bits.from.idL0 := INTF.U
   io.dbSigs.dbRCReq.bits.from.idL1 := snMasId.U
   io.dbSigs.dbRCReq.bits.from.idL2 := reqBufId.U
   io.dbSigs.dbRCReq.bits.mshrSet   := parseMSHRAddress(reqReg.addr)._2
@@ -216,7 +213,7 @@ class SnMasReqBuf(snMasId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
   io.dbSigs.dataTDB.bits.data       := DontCare
   io.dbSigs.dataTDB.bits.dataID     := DontCare
   io.dbSigs.dataTDB.bits.dbid       := dbidReg
-  io.dbSigs.dataTDB.bits.to.idL0    := IdL0.SLICE
+  io.dbSigs.dataTDB.bits.to.idL0    := IdL0.SLICE.U
   io.dbSigs.dataTDB.bits.to.idL1    := dbidBankIdReg
   io.dbSigs.dataTDB.bits.to.idL2    := DontCare
 
@@ -225,10 +222,10 @@ class SnMasReqBuf(snMasId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
    */
   io.dbSigs.wReq.valid           := fsmReg.s_getDBID
   // IdMap
-  io.dbSigs.wReq.bits.to.idL0    := IdL0.SLICE
+  io.dbSigs.wReq.bits.to.idL0    := IdL0.SLICE.U
   io.dbSigs.wReq.bits.to.idL1    := parseAddress(reqReg.addr)._2 // Remap in Xbar
   io.dbSigs.wReq.bits.to.idL2    := DontCare
-  io.dbSigs.wReq.bits.from.idL0  := SNMAS
+  io.dbSigs.wReq.bits.from.idL0  := INTF.U
   io.dbSigs.wReq.bits.from.idL1  := snMasId.U
   io.dbSigs.wReq.bits.from.idL2  := reqBufId.U
 

@@ -11,26 +11,34 @@ import scala.math.{max, min}
 // ---------------------------------------------------------------- Xbar Id Bundle ----------------------------------------------------------------------------- //
 
 object IdL0 {
+    val width      = 1
+    val SLICE      = 0
+    val INTF       = 1
+}
+
+object IdL1 {
     val width      = 2
-    val SLICE      = "b00".U
-    val RNSLV      = "b01".U
-    val RNMAS      = "b10".U
-    val SNMAS      = "b11".U
+    val LOCALSLV   = 0
+    val LOCALMAS   = 1
+    val CSNSLV     = 2
+    val CSNMAS     = 3
 }
 
 class IDBundle(implicit p: Parameters) extends DJBundle {
     val idL0 = UInt(IdL0.width.W)
-    val idL1 = UInt(max(bankBits, rnslvIdBits).W)
-    val idL2 = UInt(max(max(reqBufIdBits, mshrWayBits), nodeIdBits).W)
+    val idL1 = UInt(max(bankBits, nrIntfBits).W)
+    val idL2 = UInt(max(reqBufIdBits, mshrWayBits).W)
 
     def mshrWay  = idL2
     def reqBufId = idL2
-    def nodeId   = idL2
 
-    def isSLICE  = idL0 === IdL0.SLICE
-    def isRNSLV  = idL0 === IdL0.RNSLV
-    def isRNMAS  = idL0 === IdL0.RNMAS
-    def isSNMAS  = idL0 === IdL0.SNMAS
+    def isSLICE  = idL0 === IdL0.SLICE.U
+    def isINTF   = idL0 === IdL0.INTF.U
+
+    def LOCALSLV = idL1 === IdL1.LOCALSLV.U
+    def LOCALMAS = idL1 === IdL1.LOCALMAS.U
+    def CSNSLV   = idL1 === IdL1.CSNSLV.U
+    def CSNMAS   = idL1 === IdL1.CSNMAS.U
 }
 
 trait HasFromIDBits extends DJBundle { this: Bundle => val from = new IDBundle() }
@@ -191,7 +199,7 @@ class DirRespBaseBundle(nrWays: Int, nrMetas: Int, replWayBits: Int)(implicit p:
 
 class DirRespBundle(implicit p: Parameters) extends DJBundle {
     val s   = new DirRespBaseBundle(djparam.selfWays, 1, sReplWayBits) // self
-    val sf  = new DirRespBaseBundle(djparam.sfDirWays, nrRnSlv, sfReplWayBits) // snoop filter
+    val sf  = new DirRespBaseBundle(djparam.sfDirWays, nrRnfNode, sfReplWayBits) // snoop filter
 }
 
 class DirWriteBaseBundle(nrWays: Int, nrMetas: Int, replWayBits: Int)(implicit p: Parameters) extends DJBundle with HasAddr {
@@ -202,7 +210,7 @@ class DirWriteBaseBundle(nrWays: Int, nrMetas: Int, replWayBits: Int)(implicit p
 
 class DirWriteBundle(implicit p: Parameters) extends DJBundle {
     val s   = Decoupled(new DirWriteBaseBundle(djparam.selfWays, 1, sReplWayBits)) // self
-    val sf  = Decoupled(new DirWriteBaseBundle(djparam.sfDirWays, nrRnSlv, sfReplWayBits)) // snoop filter
+    val sf  = Decoupled(new DirWriteBaseBundle(djparam.sfDirWays, nrRnfNode, sfReplWayBits)) // snoop filter
 }
 
 

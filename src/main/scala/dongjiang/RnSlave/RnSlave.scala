@@ -55,7 +55,7 @@ class RnSlave(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) exten
   // Set io.chi.tx_xxx.ready value
   io.chi.txreq.ready  := canReceive1
   io.chi.txrsp.ready  := true.B
-  io.chi.txdat.ready  := true.B
+  io.chi.txdat.ready  := io.dbSigs.dataTDB.ready
 
 
   /*

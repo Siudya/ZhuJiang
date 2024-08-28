@@ -90,8 +90,7 @@ class Zhujiang(implicit p: Parameters) extends ZJModule {
 
   dongjiang.io <> DontCare
 
-  dongjiang.io.fromHnIcn.zip(localRing.io.get.hnf).foreach { case(a, b) => a <> b }
+  dongjiang.io.toLocal <> localRing.io.get.hnf(0)
 
-  dongjiang.io.toSnIcn.zip(localRing.io.get.sn).foreach { case(a, b) => a <> b }
 
 }

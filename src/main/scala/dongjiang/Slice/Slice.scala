@@ -75,7 +75,7 @@ class Slice()(implicit p: Parameters) extends DJModule {
   mainPipe.io.resp2Node   <> mpRespQueue.io.enq
 
 
-  when(mpReqQueue.io.deq.bits.to.isSNMAS) {
+  when(mpReqQueue.io.deq.bits.to.LOCALMAS) {
     mpReq2SnNode.valid      := mpReqQueue.io.deq.valid
     mpReqQueue.io.deq.ready := mpReq2SnNode.ready
   }.otherwise {

@@ -17,7 +17,7 @@ class MSHREntry()(implicit p: Parameters) extends DJBundle {
   val bank            = UInt(bankBits.W)
   val waitSnpResp     = Bool()
   val waitRDResp      = Bool()
-  val snpWaitNodeId   = Vec(nrRnSlv, Bool())
+  val snpWaitNodeId   = Vec(nrRnfNode, Bool())
   val reqMes          = new ReqBaseMesBundle()
   val respMes         = new Bundle {
     val snpRespVal    = Bool()

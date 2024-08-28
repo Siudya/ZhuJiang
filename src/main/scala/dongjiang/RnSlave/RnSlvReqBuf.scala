@@ -251,10 +251,10 @@ class RnSlvReqBuf(rnSlvId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
   io.req2Slice.bits.srcID       := reqReg.srcId
   io.req2Slice.bits.txnID       := reqReg.txnId
   // IdMap
-  io.req2Slice.bits.to.idL0     := IdL0.SLICE
+  io.req2Slice.bits.to.idL0     := IdL0.SLICE.U
   io.req2Slice.bits.to.idL1     := parseAddress(reqReg.addr)._2 // Remap in Xbar
   io.req2Slice.bits.to.idL2     := DontCare
-  io.req2Slice.bits.from.idL0   := RNSLV
+  io.req2Slice.bits.from.idL0   := INTF.U
   io.req2Slice.bits.from.idL1   := rnSlvId.U
   io.req2Slice.bits.from.idL2   := reqBufId.U
   // Use in RnMaster
@@ -277,7 +277,7 @@ class RnSlvReqBuf(rnSlvId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
   io.resp2Slice.bits.fwdState.valid := CHIOp.SNP.isSnpXFwd(reqReg.opcode)
   io.resp2Slice.bits.fwdState.bits  := snpFwdStateReg
   // IdMap
-  io.resp2Slice.bits.from.idL0  := RNSLV
+  io.resp2Slice.bits.from.idL0  := INTF.U
   io.resp2Slice.bits.from.idL1  := rnSlvId.U
   io.resp2Slice.bits.from.idL2  := reqBufId.U
   io.resp2Slice.bits.to         := Mux(fsmReg.s_udpMSHR, mpRespReg.from, reqReg.from)
@@ -291,7 +291,7 @@ class RnSlvReqBuf(rnSlvId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
   io.dbSigs.dataTDB.bits.data       := DontCare
   io.dbSigs.dataTDB.bits.dataID     := DontCare
   io.dbSigs.dataTDB.bits.dbid       := dbidReg
-  io.dbSigs.dataTDB.bits.to.idL0    := IdL0.SLICE
+  io.dbSigs.dataTDB.bits.to.idL0    := IdL0.SLICE.U
   io.dbSigs.dataTDB.bits.to.idL1    := dbidBankIdReg
   io.dbSigs.dataTDB.bits.to.idL2    := DontCare
 
@@ -301,10 +301,10 @@ class RnSlvReqBuf(rnSlvId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
    */
   io.dbSigs.wReq.valid            := fsmReg.s_getDBID
   // IdMap
-  io.dbSigs.wReq.bits.to.idL0     := IdL0.SLICE
+  io.dbSigs.wReq.bits.to.idL0     := IdL0.SLICE.U
   io.dbSigs.wReq.bits.to.idL1     := parseAddress(reqReg.addr)._2 // Remap in Xbar
   io.dbSigs.wReq.bits.to.idL2     := DontCare
-  io.dbSigs.wReq.bits.from.idL0   := RNSLV
+  io.dbSigs.wReq.bits.from.idL0   := INTF.U
   io.dbSigs.wReq.bits.from.idL1   := rnSlvId.U
   io.dbSigs.wReq.bits.from.idL2   := reqBufId.U
 

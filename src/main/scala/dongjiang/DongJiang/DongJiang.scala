@@ -230,34 +230,29 @@ class DongJiang()(implicit p: Parameters) extends DJModule {
 
 // ------------------------------------------ IO declaration ----------------------------------------------//
     val io = IO(new Bundle {
-        val fromHnIcn       = Vec(nrRnSlv, Flipped(new HnIcn))
-        val toRnIcn         = Vec(nrRnMas, Flipped(new RnIcn))
-        val toSnIcn         = Vec(nrSnMas, Flipped(new SnIcn))
+        val toLocal        = Flipped(new HnIcn(local = true))
+        val toCSNOpt       = if (hasCSNIntf) Some(new Bundle {
+            val hn         = Flipped(new HnIcn(local = false))
+            val rn         = Flipped(new RnIcn)
+        }) else None
     })
 
-    io <> DontCare
-
 // ------------------------------------------ Modules declaration ----------------------------------------------//
-    def createRnSlv(id: Int) = { val rnSlv = Module(new RnSlave(id, rnSlvParamSeq(id))); rnSlv }
-    def createRnMas(id: Int) = { val rnMas = Module(new RnMaster(id, rnMasParamSeq(id))); rnMas }
-    def createSnMas(id: Int) = { val snMas = Module(new SnMaster(id, snMasParamSeq(id))); snMas }
 
-    val rnSlaves    = (0 until nrRnSlv).map(i => createRnSlv(i))
-    val rnMasters   = (0 until nrRnMas).map(i => createRnMas(i))
-    val snMasters   = (0 until nrSnMas).map(i => createSnMas(i))
-
-    val rnNodes     = rnSlaves ++ rnMasters
+    val localRnSlave    = Module(new RnSlave(IdL1.LOCALSLV, djparam.localRnSlaveIntf))
+    val localSnMaster   = Module(new SnMaster(IdL1.LOCALMAS, djparam.localSnMasterIntf))
+    val csnRnSlaveOpt   = if (hasCSNIntf) Some(Module(new RnSlave(IdL1.CSNSLV, djparam.csnRnSlaveIntf.get))) else None
+    val csnRnMasterOpt  = if (hasCSNIntf) Some(Module(new RnMaster(IdL1.CSNMAS, djparam.csnRnMasterIntf.get))) else None
 
 //    val xbar        = Module(new RN2SliceXbar())
     val slices      = Seq.fill(djparam.nrBank) { Module(new Slice()) }
 
     // TODO:
-    rnSlaves.foreach(_.io <> DontCare)
-    rnMasters.foreach(_.io <> DontCare)
-    snMasters.foreach(_.io <> DontCare)
-    slices.foreach(_.io <> DontCare)
+    localRnSlave.io <> DontCare
+    localSnMaster.io <> DontCare
 //    xbar.io <> DontCare
 
+    slices.foreach(_.io <> DontCare)
     slices.foreach(_.io.valid := true.B)
 //    xbar.io.bankVal.foreach(_ := true.B)
 
@@ -280,37 +275,42 @@ class DongJiang()(implicit p: Parameters) extends DJModule {
 
 
     /*
-     * Connect IO CHI
+     * Connect LOCAL RING CHI IO
      */
-    rnSlaves.map(_.io.chi).zip(io.fromHnIcn).foreach {
-        case(a, b) =>
-            connectBundle(b.tx.req, a.txreq)
-            connectBundle(b.tx.resp, a.txrsp)
-            connectBundle(b.tx.data, a.txdat)
+    connectBundle(io.toLocal.tx.req, localRnSlave.io.chi.txreq)
 
-            connectUInt(a.rxsnp, b.rx.snoop)
-            connectUInt(a.rxrsp, b.rx.resp)
-            connectUInt(a.rxdat, b.rx.data)
-    }
+    val rspQ = Module(new Queue(new RespFlit(), entries = 2))
+    val datQ = Module(new Queue(new DataFlit(), entries = 2))
+    connectBundle(io.toLocal.tx.resp, rspQ.io.enq)
+    connectBundle(io.toLocal.tx.data, datQ.io.enq)
+    when(fromSnNode(rspQ.io.deq.bits.SrcID)) { rspQ.io.deq <> localSnMaster.io.chi.rxrsp }.otherwise { rspQ.io.deq <> localRnSlave.io.chi.txrsp }
+    when(fromSnNode(datQ.io.deq.bits.SrcID)) { datQ.io.deq <> localSnMaster.io.chi.rxdat }.otherwise { datQ.io.deq <> localRnSlave.io.chi.txdat }
 
-    rnMasters.map(_.io.chi).zip(io.toRnIcn).foreach {
-        case (a, b) =>
-            connectUInt(a.txreq, b.rx.req)
-            connectUInt(a.txrsp, b.rx.resp)
-            connectUInt(a.txdat, b.rx.data)
+    connectUInt(localSnMaster.io.chi.txreq, io.toLocal.rx.ereq.get)
+    connectUInt(localRnSlave.io.chi.rxsnp, io.toLocal.rx.snoop)
 
-            connectBundle(b.tx.snoop, a.rxsnp)
-            connectBundle(b.tx.resp, a.rxrsp)
-            connectBundle(b.tx.data, a.rxdat)
-    }
+    connectUInt(fastArbDec(Seq(localSnMaster.io.chi.txrsp, localRnSlave.io.chi.rxrsp)), io.toLocal.rx.resp)
+    connectUInt(fastArbDec(Seq(localSnMaster.io.chi.txdat, localRnSlave.io.chi.rxdat)), io.toLocal.rx.data)
 
-    snMasters.map(_.io.chi).zip(io.toSnIcn).foreach {
-        case (a, b) =>
-            connectUInt(a.txreq, b.rx.req)
-            connectUInt(a.txdat, b.rx.data)
+    /*
+     * Connect CSN CHI IO
+     */
+    if(hasCSNIntf) {
+        connectBundle(io.toCSNOpt.get.hn.tx.req, csnRnSlaveOpt.get.io.chi.txreq)
+        connectBundle(io.toCSNOpt.get.hn.tx.resp, csnRnSlaveOpt.get.io.chi.txrsp)
+        connectBundle(io.toCSNOpt.get.hn.tx.data, csnRnSlaveOpt.get.io.chi.txdat)
 
-            connectBundle(b.tx.resp, a.rxrsp)
-            connectBundle(b.tx.data, a.rxdat)
+        connectUInt(csnRnSlaveOpt.get.io.chi.rxsnp, io.toCSNOpt.get.hn.rx.snoop)
+        connectUInt(csnRnSlaveOpt.get.io.chi.rxrsp, io.toCSNOpt.get.hn.rx.resp)
+        connectUInt(csnRnSlaveOpt.get.io.chi.rxdat, io.toCSNOpt.get.hn.rx.data)
+
+        connectUInt(csnRnMasterOpt.get.io.chi.txreq, io.toCSNOpt.get.rn.rx.req)
+        connectUInt(csnRnMasterOpt.get.io.chi.txrsp, io.toCSNOpt.get.rn.rx.resp)
+        connectUInt(csnRnMasterOpt.get.io.chi.txdat, io.toCSNOpt.get.rn.rx.data)
+
+        connectBundle(io.toCSNOpt.get.rn.tx.snoop, csnRnMasterOpt.get.io.chi.rxsnp)
+        connectBundle(io.toCSNOpt.get.rn.tx.resp, csnRnMasterOpt.get.io.chi.rxrsp)
+        connectBundle(io.toCSNOpt.get.rn.tx.data, csnRnMasterOpt.get.io.chi.rxdat)
     }
 
 //    /*
