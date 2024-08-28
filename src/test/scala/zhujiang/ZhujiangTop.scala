@@ -37,6 +37,11 @@ object ZhujiangTopParser {
           hasHelp = true
           parse(config, tail)
 
+        case "--prefix" :: confString :: tail =>
+          parse(config.alter((site, here, up) => {
+            case ZJParametersKey => up(ZJParametersKey).copy(modulePrefix = confString)
+          }), tail)
+
         case option :: tail =>
           firrtlOpts :+= option
           parse(config, tail)

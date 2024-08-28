@@ -1,4 +1,5 @@
 
+
 idea:
 	mill -i mill.idea.GenIdea/idea
 
@@ -12,6 +13,10 @@ comp:
 
 RTL_AGRS = --full-stacktrace --target systemverilog --split-verilog
 RTL_DIR = build/rtl
+
+ifdef PREFIX
+RTL_AGRS += --prefix $(PREFIX)
+endif
 
 build-dir:
 	@mkdir -p $(RTL_DIR)
