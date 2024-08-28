@@ -50,7 +50,7 @@ class BaseRouter(val node: Node, ejects: Seq[String], injects: Seq[String])(impl
   private val ejectSnoop = ejects.contains("SNP")
   private val ejectSnoopBuf = if(ejectSnoop) p(ZJParametersKey).snoopEjectBufDepth else 0
 
-  private val dispatchIds = if(node.csnNode) Seq(Seq(0)) else Seq(node.leftNodes, node.rightNodes)
+  private val dispatchIds = if(node.csnNode) Seq(Seq(0)) else Seq(node.rightNodes, node.leftNodes)
   private val reqTap = if((injects ++ ejects).contains("REQ")) Some(Module(new ChannelTap(new ReqFlit, "REQ", dispatchIds, ejectReq, ejectReqBuf, c2c = c2c))) else None
   private val respTap = if((injects ++ ejects).contains("RSP")) Some(Module(new ChannelTap(new RespFlit, "RSP", dispatchIds, c2c = c2c))) else None
   private val dataTap = if((injects ++ ejects).contains("DAT")) Some(Module(new ChannelTap(new DataFlit, "DAT", dispatchIds, c2c = c2c))) else None
