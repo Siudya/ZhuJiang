@@ -18,9 +18,9 @@ class SnTrafficGen(implicit p: Parameters) extends ZJModule {
   private val reqRxGen = Module(new TrafficSimRx)
   private val dataRxGen = Module(new TrafficSimRx)
 
-  TrafficSimTx.connTfsTx(respTxGen, io.tx.resp, io.nodeId, ChannelEncodings.RSP.U, clock, reset)
+  TrafficSimTx.connTfsTx(respTxGen, io.tx.req, io.nodeId, ChannelEncodings.ERQ.U, clock, reset)
   TrafficSimTx.connTfsTx(dataTxGen, io.tx.data, io.nodeId, ChannelEncodings.DAT.U, clock, reset)
 
   TrafficSimRx.connTfsRx(dataRxGen, io.rx.data, io.nodeId, ChannelEncodings.DAT.U, clock, reset)
-  TrafficSimRx.connTfsRx(reqRxGen, io.rx.req, io.nodeId, ChannelEncodings.ERQ.U, clock, reset)
+  TrafficSimRx.connTfsRx(reqRxGen, io.rx.resp, io.nodeId, ChannelEncodings.RSP.U, clock, reset)
 }
