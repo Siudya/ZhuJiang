@@ -8,12 +8,12 @@ import xijiang.{Node, NodeType}
 import zhujiang.ZJBundle
 
 class SnTx(implicit p: Parameters) extends ZJBundle {
-  val req = Decoupled(UInt(reqFlitBits.W))
+  val resp = Decoupled(UInt(respFlitBits.W))
   val data = Decoupled(UInt(dataFlitBits.W))
 }
 
 class SnRx(implicit p: Parameters) extends ZJBundle {
-  val resp = Flipped(Decoupled(UInt(respFlitBits.W)))
+  val req = Flipped(Decoupled(UInt(reqFlitBits.W)))
   val data = Flipped(Decoupled(UInt(dataFlitBits.W)))
 }
 
@@ -23,13 +23,13 @@ class SnIcn(implicit p: Parameters) extends ZJBundle {
 }
 
 class SubordinateRouter(node: Node)(implicit p: Parameters) extends BaseRouter(node,
-  Seq("ERQ", "DAT"), Seq("RSP", "DAT")) {
+  Seq("RSP", "DAT"), Seq("ERQ", "DAT")) {
   val icn = IO(new SnIcn)
 
-  injectMap("RSP") <> icn.rx.resp
-  injectMap("DAT") <> icn.rx.data
-  icn.tx.req <> ejectMap("ERQ")
+  icn.tx.resp <> ejectMap("RSP")
   icn.tx.data <> ejectMap("DAT")
+  injectMap("ERQ") <> icn.rx.req
+  injectMap("DAT") <> icn.rx.data
 
   if(!node.csnNode) {
     print(
