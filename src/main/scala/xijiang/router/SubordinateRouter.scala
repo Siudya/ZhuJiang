@@ -35,7 +35,7 @@ class SubordinateRouter(node: Node)(implicit p: Parameters) extends BaseRouter(n
     print(
       s"""
          |SubordinateNode sn_${node.nid} {
-         |  node_id: 0x${node.nodeId.litValue.toInt.toHexString}
+         |  node_id: 0x${node.nodeId.toHexString}
          |  lefts: ${node.leftNodes.map(e => "0x" + e.toHexString).reduce((a: String, b: String) => s"$a, $b")}
          |  rights: ${node.rightNodes.map(e => "0x" + e.toHexString).reduce((a: String, b: String) => s"$a, $b")}
          |}

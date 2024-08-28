@@ -43,7 +43,7 @@ class HomeRouter(node: Node)(implicit p: Parameters) extends BaseRouter(node,
     print(
       s"""
          |HomeNode ${nStr}_${node.nid} {
-         |  node_id: 0x${node.nodeId.litValue.toInt.toHexString}
+         |  node_id: 0x${node.nodeId.toHexString}
          |  lefts: ${node.leftNodes.map(e => "0x" + e.toHexString).reduce((a: String, b: String) => s"$a, $b")}
          |  rights: ${node.rightNodes.map(e => "0x" + e.toHexString).reduce((a: String, b: String) => s"$a, $b")}
          |}

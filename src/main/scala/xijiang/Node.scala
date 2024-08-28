@@ -14,6 +14,8 @@ object NodeType {
   val S: Int = 4 // TODO: Add extra req channel for sn
   val P: Int = 5
   def width: Int = log2Ceil(P)
+  def min: Int = R
+  def max: Int = P
 }
 
 case class NodeParam(
@@ -25,7 +27,6 @@ case class Node(
   suffix: String = "",
   nodeType: Int = NodeType.R,
   csnNode: Boolean = false,
-  nodeTypeBits: Int = NodeType.width,
   nodeNetBits: Int = 1,
   nodeNidBits: Int = 4,
   ringSize: Int = 3,
@@ -36,10 +37,10 @@ case class Node(
   var right: Node = null
 
   val net = if(csnNode) 1 else 0
-  private val netOff = nodeTypeBits + nodeNidBits
+  private val netOff = NodeType.width + nodeNidBits
   private val typeOff = nodeNidBits
-  private val nodeIdBits = nodeTypeBits + nodeNetBits + nodeNidBits
-  lazy val nodeId = ((net << netOff) | ((nodeType % 4) << typeOff) | nid).U(nodeIdBits.W)
+  require(NodeType.min <= nodeType && nodeType <= NodeType.max)
+  lazy val nodeId = (net << netOff) | (nodeType << typeOff) | nid
 
   lazy val (leftNodes, rightNodes) = getLeftAndRight
   private def getLeftAndRight: (Seq[Int], Seq[Int]) = {
@@ -52,7 +53,7 @@ case class Node(
     val leftNodesId = for(i <- 0 until leftNum) yield {
       leftNow = leftNow.left
       require(leftNow != null)
-      leftNow.nodeId.litValue.toInt
+      leftNow.nodeId
     }
 
     val rightNum = otherNodesNum - leftNum
@@ -60,7 +61,7 @@ case class Node(
     val rightlNodesId = for(i <- 0 until rightNum) yield {
       rightNow = rightNow.right
       require(rightNow != null)
-      rightNow.nodeId.litValue.toInt
+      rightNow.nodeId
     }
     (leftNodesId, rightlNodesId)
   }
@@ -69,7 +70,7 @@ case class Node(
   lazy val tgtHomeI = getPreferHome(false)
   private def getPreferHome(full: Boolean): Int = {
     def cond(id: Int): Boolean = {
-      val nt = (id >> typeOff) & ((1 << nodeTypeBits) - 1)
+      val nt = (id >> typeOff) & ((1 << NodeType.width) - 1)
       if(full) nt == NodeType.HF else nt == NodeType.HI
     }
 
