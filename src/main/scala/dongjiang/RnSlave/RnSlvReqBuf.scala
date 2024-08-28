@@ -159,7 +159,7 @@ class RnSlvReqBuf(rnSlvId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
   reqFTxReq.opcode    := io.chi.txreq.bits.Opcode
   reqFTxReq.txnId     := io.chi.txreq.bits.TxnID
   reqFTxReq.srcId     := io.chi.txreq.bits.SrcID
-  reqIsWrite          := CHIOp.REQ.isReadX(io.chi.txreq.bits.Opcode)
+  reqIsWrite          := CHIOp.REQ.isWriteX(io.chi.txreq.bits.Opcode)
 
   /*
    * Save req2Node or reqFTxReq
