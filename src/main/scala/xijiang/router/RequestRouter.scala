@@ -51,9 +51,9 @@ class RequestRouter(node: Node)(implicit p: Parameters) extends BaseRouter(node,
     print(
       s"""
          |RequestNode rn_${node.nid} {
-         |  node_id: 0x${node.nodeId.litValue.toInt.toHexString}
-         |  prefer_home_full: ${node.tgtHomeF & ((1 << nodeNidBits) - 1)}
-         |  prefer_home_io: ${node.tgtHomeI & ((1 << nodeNidBits) - 1)}
+         |  node_id: 0x${node.nodeId.toHexString}
+         |  prefer_home_full: 0x${node.tgtHomeF.toHexString}
+         |  prefer_home_io: 0x${node.tgtHomeI.toHexString}
          |  lefts: ${node.leftNodes.map(e => "0x" + e.toHexString).reduce((a: String, b: String) => s"$a, $b")}
          |  rights: ${node.rightNodes.map(e => "0x" + e.toHexString).reduce((a: String, b: String) => s"$a, $b")}
          |}

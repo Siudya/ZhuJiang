@@ -42,7 +42,7 @@ class BaseRouter(val node: Node, ejects: Seq[String], injects: Seq[String])(impl
   private val nid = if(node.csnNode) {
     genNodeId(1.U(1.W), (node.nodeType % 4).U(nodeTypeBits.W), router.chip)
   } else {
-    node.nodeId
+    node.nodeId.U(niw.W)
   }
   router.nodeId := nid
   private val ejectReq = ejects.contains("REQ")
