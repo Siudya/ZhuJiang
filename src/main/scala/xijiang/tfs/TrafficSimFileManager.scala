@@ -7,7 +7,7 @@ import zhujiang.ZJParametersKey
 import zhujiang.chi.ChannelEncodings
 
 case class TrafficSimParams(
-  rxReadyMaxDelay: Int = 10,
+  rxReadyMaxDelay: Int = 5,
   txValidMaxDelay: Int = 5
 )
 
@@ -89,6 +89,8 @@ object TrafficSimFileManager {
        |#define NODE_ID_BITS (NODE_NID_BITS + NODE_TYPE_BITS + NODE_NET_BITS)
        |#define TGT_ID_OFF 4
        |#define SRC_ID_OFF (TGT_ID_OFF + NODE_ID_BITS)
+       |#define TXN_ID_BITS 12
+       |#define TXN_ID_OFF (4 + NODE_ID_BITS + NODE_ID_BITS)
        |
        |#define TFS_ERR(...)                  \\
        |  {                                   \\
@@ -113,6 +115,7 @@ object TrafficSimFileManager {
        |  public:
        |  uint16_t node_id;
        |  uint16_t pool_type = 0;
+       |  uint16_t txn_id = 0;
        |  mt19937 random_gen;
        |  unordered_map<uint8_t, vector<uint16_t>> legal_tgt_pool;
        |  unordered_map<uint8_t, array<uint8_t, FLIT_BUF_SIZE>> chn_tx_flit_map;
@@ -162,6 +165,7 @@ object TrafficSimFileManager {
        |
        |NodeManager::NodeManager(uint16_t nid) {
        |  node_id = nid;
+       |  txn_id = 0;
        |  auto &tfs = TrafficSim::get_instance();
        |  bool csn = get_field(node_id, NODE_NET_OFF, NODE_NET_BITS) == 1;
        |  bool c2c = get_field(node_id, NODE_TYPE_OFF, NODE_TYPE_BITS) == C_TYPE;
@@ -183,17 +187,21 @@ object TrafficSimFileManager {
        |  chn_tx_flit_map[RSP] = array<uint8_t, FLIT_BUF_SIZE>();
        |  chn_tx_flit_map[DAT] = array<uint8_t, FLIT_BUF_SIZE>();
        |  chn_tx_flit_map[SNP] = array<uint8_t, FLIT_BUF_SIZE>();
+       |  if(!csn) chn_tx_flit_map[ERQ] = array<uint8_t, FLIT_BUF_SIZE>();
        |  for(auto &[chn, _]: chn_tx_flit_map) tx_fire(chn);
        |  chn_rx_ready_timer_map[REQ] = 0;
        |  chn_rx_ready_timer_map[RSP] = 0;
        |  chn_rx_ready_timer_map[DAT] = 0;
        |  chn_rx_ready_timer_map[SNP] = 0;
+       |  if(!csn) chn_rx_ready_timer_map[ERQ] = 0;
+       |
        |  chn_tx_valid_timer_map[REQ] = 0;
        |  chn_tx_valid_timer_map[RSP] = 0;
        |  chn_tx_valid_timer_map[DAT] = 0;
        |  chn_tx_valid_timer_map[SNP] = 0;
+       |  if(!csn) chn_tx_valid_timer_map[ERQ] = 0;
        |
-       |  
+       |
        |  printf("  node: 0x%x\\n", node_id);
        |  for(const auto &[k, v]: legal_tgt_pool) {
        |    if(k == REQ) {
@@ -202,8 +210,10 @@ object TrafficSimFileManager {
        |      printf("    RSP: ");
        |    } else if(k == DAT) {
        |      printf("    DAT: ");
-       |    } else {
+       |    } else if(k == SNP) {
        |      printf("    SNP: ");
+       |    } else {
+       |      printf("    ERQ: ");
        |    }
        |    for(const auto &d: v){
        |      printf("0x%x ", d);
@@ -214,7 +224,7 @@ object TrafficSimFileManager {
        |
        |void NodeManager::rx_fire(uint8_t chn) {
        |  uniform_int_distribution<uint8_t> dist(0, RX_READY_MAX_DELAY);
-       |  if(chn > 4) {
+       |  if(chn > 5) {
        |    TFS_ERR("illegal channel type %d!\\n", chn);
        |  } else {
        |    chn_rx_ready_timer_map[chn] = dist(random_gen);
@@ -222,7 +232,7 @@ object TrafficSimFileManager {
        |}
        |
        |void NodeManager::tx_fire(uint8_t chn) {
-       |  if(chn > 4) {
+       |  if(chn > 5) {
        |    TFS_ERR("illegal channel type %d!\\n", chn);
        |    return;
        |  }
@@ -230,15 +240,17 @@ object TrafficSimFileManager {
        |  uniform_int_distribution<uint8_t> dist_flit(0, 0xFF);
        |  for(int i = 0; i < FLIT_BUF_SIZE - 1; i++) flit[i] = dist_flit(random_gen);
        |  flit[FLIT_BUF_SIZE - 1] = 0;
-       |  uint8_t tgt_pool_size = legal_tgt_pool[chn].size();
+       |  uint8_t tgt_pool_size = legal_tgt_pool.at(chn).size();
        |  uniform_int_distribution<uint8_t> dist_tgt_pos(0, tgt_pool_size - 1);
        |  uint8_t pos = dist_tgt_pos(random_gen);
-       |  uint16_t tgt_id = legal_tgt_pool[chn].at(pos);
-       |  
+       |  uint16_t tgt_id = legal_tgt_pool.at(chn).at(pos);
+       |
        |  uint64_t *head_ptr = (uint64_t *)flit;
        |  head_ptr[0] = clear_field(head_ptr[0], TGT_ID_OFF, NODE_ID_BITS) | (tgt_id << TGT_ID_OFF);
+       |  head_ptr[0] = clear_field(head_ptr[0], TXN_ID_OFF, TXN_ID_BITS) | (txn_id << TXN_ID_OFF);
        |  uniform_int_distribution<uint8_t> dist_valid(0, TX_VALID_MAX_DELAY);
        |  chn_tx_valid_timer_map[chn] = dist_valid(random_gen);
+       |  txn_id = (txn_id + 1) % (1 << TXN_ID_BITS);
        |}
        |
        |void NodeManager::step() {
@@ -254,11 +266,13 @@ object TrafficSimFileManager {
        |    legal_tgt_pool[i][RSP] = vector<uint16_t>();
        |    legal_tgt_pool[i][DAT] = vector<uint16_t>();
        |    legal_tgt_pool[i][SNP] = vector<uint16_t>();
+       |    if(i == 0) legal_tgt_pool[i][ERQ] = vector<uint16_t>();
        |  }
        |
        |  uint8_t lrn_id_num = tfb_get_nodes_size(0x00);
        |  uint8_t lhf_id_num = tfb_get_nodes_size(0x01);
        |  uint8_t lhi_id_num = tfb_get_nodes_size(0x02);
+       |  uint8_t lsn_id_num = tfb_get_nodes_size(0x04);
        |  uint8_t crn_id_num = tfb_get_nodes_size(0x10);
        |  uint8_t chf_id_num = tfb_get_nodes_size(0x11);
        |  uint8_t c2c_id_num = tfb_get_nodes_size(0x13);
@@ -266,6 +280,7 @@ object TrafficSimFileManager {
        |  uint16_t *lrn_id_arr = new uint16_t[lrn_id_num];
        |  uint16_t *lhf_id_arr = new uint16_t[lhf_id_num];
        |  uint16_t *lhi_id_arr = new uint16_t[lhi_id_num];
+       |  uint16_t *lsn_id_arr = new uint16_t[lsn_id_num];
        |  uint16_t *crn_id_arr = new uint16_t[crn_id_num];
        |  uint16_t *chf_id_arr = new uint16_t[chf_id_num];
        |  uint16_t *c2c_id_arr = new uint16_t[c2c_id_num];
@@ -273,6 +288,7 @@ object TrafficSimFileManager {
        |  tfb_get_nodes(0x00, lrn_id_arr);
        |  tfb_get_nodes(0x01, lhf_id_arr);
        |  tfb_get_nodes(0x02, lhi_id_arr);
+       |  tfb_get_nodes(0x04, lsn_id_arr);
        |  tfb_get_nodes(0x10, crn_id_arr);
        |  tfb_get_nodes(0x11, chf_id_arr);
        |  tfb_get_nodes(0x13, c2c_id_arr);
@@ -291,6 +307,10 @@ object TrafficSimFileManager {
        |    legal_tgt_pool[0][REQ].push_back(lhi_id_arr[i]);
        |    legal_tgt_pool[0][RSP].push_back(lhi_id_arr[i]);
        |    legal_tgt_pool[0][DAT].push_back(lhi_id_arr[i]);
+       |  }
+       |  for(uint8_t i = 0; i < lsn_id_num; i++) {
+       |    legal_tgt_pool[0][ERQ].push_back(lsn_id_arr[i]);
+       |    legal_tgt_pool[0][DAT].push_back(lsn_id_arr[i]);
        |  }
        |  for(uint8_t i = 0; i < crn_id_num; i++) {
        |    legal_tgt_pool[2][RSP].push_back(crn_id_arr[i]);
@@ -321,6 +341,7 @@ object TrafficSimFileManager {
        |  for(uint8_t i = 0; i < lrn_id_num; i++) node_mng_pool[lrn_id_arr[i]] = make_unique<NodeManager>(lrn_id_arr[i]);
        |  for(uint8_t i = 0; i < lhf_id_num; i++) node_mng_pool[lhf_id_arr[i]] = make_unique<NodeManager>(lhf_id_arr[i]);
        |  for(uint8_t i = 0; i < lhi_id_num; i++) node_mng_pool[lhi_id_arr[i]] = make_unique<NodeManager>(lhi_id_arr[i]);
+       |  for(uint8_t i = 0; i < lsn_id_num; i++) node_mng_pool[lsn_id_arr[i]] = make_unique<NodeManager>(lsn_id_arr[i]);
        |  for(uint8_t i = 0; i < crn_id_num; i++) node_mng_pool[crn_id_arr[i]] = make_unique<NodeManager>(crn_id_arr[i]);
        |  for(uint8_t i = 0; i < chf_id_num; i++) node_mng_pool[chf_id_arr[i]] = make_unique<NodeManager>(chf_id_arr[i]);
        |  for(uint8_t i = 0; i < c2c_id_num; i++) node_mng_pool[c2c_id_arr[i]] = make_unique<NodeManager>(c2c_id_arr[i]);
@@ -328,6 +349,7 @@ object TrafficSimFileManager {
        |  delete[] lrn_id_arr;
        |  delete[] lhf_id_arr;
        |  delete[] lhi_id_arr;
+       |  delete[] lsn_id_arr;
        |  delete[] crn_id_arr;
        |  delete[] chf_id_arr;
        |  delete[] c2c_id_arr;
@@ -356,8 +378,8 @@ object TrafficSimFileManager {
        |  if(reset == 1) {
        |    *valid = 0;
        |  } else {
-       |    if(*valid == 1 && ready == 1) mng_ptr->tx_fire(chn);
        |    *valid = (mng_ptr->chn_tx_valid_timer_map[chn] == 0) ? 1 : 0;
+       |    if(*valid == 1 && ready == 1) mng_ptr->tx_fire(chn);
        |  }
        |  memcpy(flit, tx_flit_ptr, FLIT_BUF_SIZE);
        |}
@@ -367,8 +389,8 @@ object TrafficSimFileManager {
        |  if(reset == 1) {
        |    *ready = 0;
        |  } else {
-       |    if(valid == 1 && *ready == 1) mng_ptr->rx_fire(chn);
        |    *ready = (mng_ptr->chn_rx_ready_timer_map[chn] == 0) ? 1 : 0;
+       |    if(valid == 1 && *ready == 1) mng_ptr->rx_fire(chn);
        |  }
        |}
        |

@@ -160,7 +160,7 @@ object ChannelEncodings {
     "RSP" -> RSP,
     "DAT" -> DAT,
     "SNP" -> SNP,
-    "ERQ" -> SNP
+    "ERQ" -> ERQ
   )
 }
 

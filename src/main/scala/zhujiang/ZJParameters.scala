@@ -23,13 +23,14 @@ case class ZJParameters(
   Y: Int = 0,
   DC: Boolean = false,
   P: Boolean = false,
-  snoopEjectBufDepth: Int = 4,
-  reqEjectBufDepth: Int = 4,
+  snoopEjectBufDepth: Int = 8,
+  reqEjectBufDepth: Int = 8,
   localNodeParams: Seq[NodeParam] = Seq(),
   csnNodeParams: Seq[NodeParam] = Seq(),
   c2cParams: C2cParams = C2cParams(),
   tfbParams: Option[TrafficBoardParams] = Some(TrafficBoardParams()),
-  tfsParams: Option[TrafficSimParams] = None
+  tfsParams: Option[TrafficSimParams] = None,
+  injectRsvdTimerShift: Int = 8
 ) {
   val requestAddrBits = 48
   val snoopAddrBits = requestAddrBits - 3
@@ -54,8 +55,8 @@ case class ZJParameters(
   val maxFlitBits = Seq(reqFlitBits, respFlitBits, snoopFlitBits, dataFlitBits).max
   require(nodeIdBits >= 7 && nodeIdBits <= 11)
 
-  val localRing: Seq[Node] = if(localNodeParams.nonEmpty) getRing(localNodeParams, false) else Seq()
-  val csnRing: Seq[Node] = if(csnNodeParams.nonEmpty) getRing(csnNodeParams, true) else Seq()
+  lazy val localRing: Seq[Node] = if(localNodeParams.nonEmpty) getRing(localNodeParams, false) else Seq()
+  lazy val csnRing: Seq[Node] = if(csnNodeParams.nonEmpty) getRing(csnNodeParams, true) else Seq()
 
   private def getRing(nodeParams: Seq[NodeParam], csn: Boolean): Seq[Node] = {
     require(nodeParams.size >= 3)
@@ -72,8 +73,8 @@ case class ZJParameters(
         case NodeType.HF => n.nid = hfId; hfId = hfId + 1
         case NodeType.HI => n.nid = hiId; hiId = hiId + 1
         case NodeType.C => n.nid = cId; cId = cId + 1
-        case NodeType.P => n.nid = pId; pId = pId + 1
         case NodeType.S => n.nid = sId; sId = sId + 1
+        case NodeType.P => n.nid = pId; pId = pId + 1
       }
       n
     }
@@ -101,9 +102,6 @@ trait HasZJParams {
   val dw = p(ZJParametersKey).dataBits
   val bew = p(ZJParametersKey).beBits
   val chipAddrBits = p(ZJParametersKey).chipAddrBits
-  val localRingSize = p(ZJParametersKey).localRing.size
-  val csnRingSize = p(ZJParametersKey).csnRing.size
-  val maxRingSize = localRingSize.max(csnRingSize)
   val reqFlitBits = p(ZJParametersKey).reqFlitBits
   val respFlitBits = p(ZJParametersKey).respFlitBits
   val snoopFlitBits = p(ZJParametersKey).snoopFlitBits

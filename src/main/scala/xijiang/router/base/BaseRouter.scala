@@ -10,17 +10,17 @@ import zhujiang.{ZJBundle, ZJModule, ZJParametersKey}
 
 import scala.collection.mutable
 
-class ChannelPayload[T <: Flit](gen: T)(implicit p: Parameters) extends ZJBundle {
-  val flit = UInt(gen.getWidth.W)
-  val liveCnt = UInt(maxRingSize.W)
+class ChannelBundle[T <: Flit](gen: T)(implicit p: Parameters) extends ZJBundle {
+  val flit = Valid(UInt(gen.getWidth.W))
+  val rsvd = Valid(UInt(niw.W))
 }
 
 class RingSide(local: Boolean)(implicit p: Parameters) extends ZJBundle {
-  val req = Valid(new ChannelPayload(new ReqFlit))
-  val resp = Valid(new ChannelPayload(new RespFlit))
-  val data = Valid(new ChannelPayload(new DataFlit))
-  val snoop = Valid(new ChannelPayload(new SnoopFlit))
-  val ereq = if(local) Some(Valid(new ChannelPayload(new ReqFlit))) else None
+  val req = new ChannelBundle(new ReqFlit)
+  val resp = new ChannelBundle(new RespFlit)
+  val data = new ChannelBundle(new DataFlit)
+  val snoop = new ChannelBundle(new SnoopFlit)
+  val ereq = if(local) Some(new ChannelBundle(new ReqFlit)) else None
 }
 
 class RouterRingIO(csn: Boolean)(implicit p: Parameters) extends ZJBundle {
@@ -38,40 +38,41 @@ class BaseRouter(val node: Node, ejects: Seq[String], injects: Seq[String])(impl
   })
 
   private val c2c = node.csnNode && node.nodeType == NodeType.C
-  private val liveCntInit = if(node.csnNode) (csnRingSize - 1).U else (localRingSize - 1).U
   private val nid = if(node.csnNode) {
     genNodeId(1.U(1.W), (node.nodeType % 4).U(nodeTypeBits.W), router.chip)
   } else {
     node.nodeId.U(niw.W)
   }
   router.nodeId := nid
-  private val ejectReq = ejects.contains("REQ")
-  private val ejectReqBuf = if(ejectReq) p(ZJParametersKey).reqEjectBufDepth else 0
-  private val ejectSnoop = ejects.contains("SNP")
-  private val ejectSnoopBuf = if(ejectSnoop) p(ZJParametersKey).snoopEjectBufDepth else 0
+  private val ejectReqBuf = p(ZJParametersKey).reqEjectBufDepth
+  private val ejectSnoopBuf = p(ZJParametersKey).snoopEjectBufDepth
 
-  private val dispatchIds = if(node.csnNode) Seq(Seq(0)) else Seq(node.rightNodes, node.leftNodes)
-  private val reqTap = if((injects ++ ejects).contains("REQ")) Some(Module(new ChannelTap(new ReqFlit, "REQ", dispatchIds, ejectReq, ejectReqBuf, c2c = c2c))) else None
-  private val respTap = if((injects ++ ejects).contains("RSP")) Some(Module(new ChannelTap(new RespFlit, "RSP", dispatchIds, c2c = c2c))) else None
-  private val dataTap = if((injects ++ ejects).contains("DAT")) Some(Module(new ChannelTap(new DataFlit, "DAT", dispatchIds, c2c = c2c))) else None
-  private val snoopTap = if((injects ++ ejects).contains("SNP")) Some(Module(new ChannelTap(new SnoopFlit, "SNP", dispatchIds, ejectSnoop, ejectSnoopBuf, c2c = c2c))) else None
-  private val ereqTap = if((injects ++ ejects).contains("ERQ") && local) Some(Module(new ChannelTap(new ReqFlit, "ERQ", dispatchIds, ejectReq, ejectReqBuf, c2c = c2c))) else None
+  private val reqTap = if((injects ++ ejects).contains("REQ")) Some(Module(new ChannelTap(new ReqFlit, "REQ", ringNum, ejectReqBuf, c2c = c2c))) else None
+  private val respTap = if((injects ++ ejects).contains("RSP")) Some(Module(new ChannelTap(new RespFlit, "RSP", ringNum, 0, c2c))) else None
+  private val dataTap = if((injects ++ ejects).contains("DAT")) Some(Module(new ChannelTap(new DataFlit, "DAT", ringNum, 0, c2c))) else None
+  private val snoopTap = if((injects ++ ejects).contains("SNP")) Some(Module(new ChannelTap(new SnoopFlit, "SNP", ringNum, ejectSnoopBuf, c2c = c2c))) else None
+  private val ereqTap = if((injects ++ ejects).contains("ERQ") && local) Some(Module(new ChannelTap(new ReqFlit, "REQ", ringNum, ejectReqBuf, c2c = c2c))) else None
   private val tfbNodeRegister = if((injects ++ ejects).nonEmpty && hasTfb) Some(Module(new NodeRegister)) else None
   tfbNodeRegister.foreach(_.io.nodeId := nid)
 
-  private def connectRing[K <: Flit](tap: Option[ChannelTap[K]], tx: Valid[ChannelPayload[K]], rx: Valid[ChannelPayload[K]], ridx: Int): Unit = {
+  private def connectRing[K <: Flit](tap: Option[ChannelTap[K]], tx: ChannelBundle[K], rx: ChannelBundle[K], ridx: Int): Unit = {
     if(tap.isDefined) {
       tap.get.io.nid := nid
-      tap.get.io.liveCntInit := liveCntInit
       tap.get.io.rx(ridx) := rx
       tx := tap.get.io.tx(ridx)
       tap.get.io.eject.ready := false.B
       tap.get.io.inject.valid := false.B
       tap.get.io.inject.bits := DontCare
+      if(node.csnNode) {
+        tap.get.io.injectTapSelOH.head := true.B
+      } else {
+        val tgt = Flit.getTgt(tap.get.io.inject.bits)(p)
+        tap.get.io.injectTapSelOH(0) := node.rightNodes.map(_.U === tgt).reduce(_ || _)
+        tap.get.io.injectTapSelOH(1) := node.leftNodes.map(_.U === tgt).reduce(_ || _)
+      }
     } else {
-      tx.valid := RegNext(rx.valid, false.B)
-      tx.bits.flit := RegEnable(rx.bits.flit, rx.valid)
-      tx.bits.liveCnt := RegEnable(Mux(rx.bits.liveCnt.orR, rx.bits.liveCnt - 1.U, 0.U), rx.valid)
+      tx.flit := Pipe(rx.flit)
+      tx.rsvd := Pipe(rx.rsvd)
     }
   }
 

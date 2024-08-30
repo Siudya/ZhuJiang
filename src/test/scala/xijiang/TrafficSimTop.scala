@@ -17,11 +17,12 @@ class TfsTopConfig extends Config((site, here, up) => {
       NodeParam(nodeType = NodeType.R),
       NodeParam(nodeType = NodeType.R),
       NodeParam(nodeType = NodeType.HF),
-      NodeParam(nodeType = NodeType.P),
+      NodeParam(nodeType = NodeType.S),
       NodeParam(nodeType = NodeType.R),
       NodeParam(nodeType = NodeType.R),
       NodeParam(nodeType = NodeType.HF),
       NodeParam(nodeType = NodeType.HI),
+      NodeParam(nodeType = NodeType.S),
     ),
     csnNodeParams = Seq(
       NodeParam(nodeType = NodeType.R),

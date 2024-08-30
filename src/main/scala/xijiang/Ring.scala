@@ -35,6 +35,8 @@ class Ring(local: Boolean)(implicit p: Parameters) extends ZJModule {
   override val desiredName = ringName
   val io = if(!tfs) Some(IO(new RingIO(local))) else None
   val tfsio = if(tfs) Some(IO(new TfsIO(local))) else None
+  io.foreach(dontTouch(_))
+  tfsio.foreach(dontTouch(_))
 
   private val ring = if(local) p(ZJParametersKey).localRing else p(ZJParametersKey).csnRing
   private val routersAndNodes = ring.map(n => (n.genRouter(p), n))
