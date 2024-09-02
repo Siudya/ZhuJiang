@@ -15,7 +15,7 @@ class DirectoryWrapper()(implicit p: Parameters) extends DJModule {
 val io = IO(new Bundle {
   val sliceId     = Input(UInt(bankBits.W))
   val dirRead     = Flipped(Decoupled(new DirReadBundle()))
-  val dirResp     = Decoupled(new DirRespBundle())
+  val dirResp     = Valid(new DirRespBundle())
   val dirWrite    = Flipped(new DirWriteBundle())
 })
 

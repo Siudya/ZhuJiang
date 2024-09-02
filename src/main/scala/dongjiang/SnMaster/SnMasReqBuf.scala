@@ -37,7 +37,7 @@ class SnMasReqBuf(snMasId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
   val freeReg       = RegInit(true.B)
   val fsmReg        = RegInit(0.U.asTypeOf(new RBFSMState))
   // req reg
-  val reqReg        = RegInit(0.U.asTypeOf(new DJBundle with HasFromIDBits {
+  val reqReg        = RegInit(0.U.asTypeOf(new DJBundle with HasFromIDBits with HasMSHRWay {
     val addr        = UInt(addressBits.W)
     val opcode      = UInt(6.W)
   }))
@@ -126,6 +126,12 @@ class SnMasReqBuf(snMasId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
    */
   reqReg              := Mux(io.req2Node.fire, req2Node, reqReg)
 
+  /*
+   * Save MshrWay
+   */
+  when(io.req2Node.fire)        { reqReg.mshrWay := io.req2Node.bits.mshrWay; reqReg.useEvict := io.req2Node.bits.useEvict  }
+  .elsewhen(io.resp2Slice.fire) { reqReg.mshrWay := io.resp2Slice.bits.mshrWay; reqReg.useEvict := io.resp2Slice.bits.useEvict  }
+
 
 // ---------------------------  Receive CHI Resp(RxRsp and RxDat) Logic --------------------------------//
   /*
@@ -182,6 +188,8 @@ class SnMasReqBuf(snMasId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
   io.resp2Slice.bits.hasData    := true.B
   io.resp2Slice.bits.dbid       := dbidReg
   io.resp2Slice.bits.mshrSet    := parseMSHRAddress(reqReg.addr)._1
+  io.resp2Slice.bits.mshrWay    := reqReg.mshrWay
+  io.resp2Slice.bits.useEvict   := reqReg.useEvict
   io.resp2Slice.bits.fwdState   := DontCare
   // IdMap
   io.resp2Slice.bits.to         := reqReg.from

@@ -13,81 +13,61 @@ class Slice()(implicit p: Parameters) extends DJModule {
     val valid           = Input(Bool())
     val sliceId         = Input(UInt(bankBits.W))
     // slice ctrl signals: RnNode <> Slice
-    val rnReq2Slice     = Flipped(Decoupled(new Req2SliceBundle()))
-    val resp2RnNode     = Decoupled(new Resp2NodeBundle())
-    val req2RnNode      = Decoupled(new Req2NodeBundle())
-    val rnResp2Slice    = Flipped(Decoupled(new Resp2SliceBundle()))
-    // slice ctrl signals: SnNode <> Slice
-    val req2SnNode      = Decoupled(new Req2NodeBundle())
-    val snResp2Slice    = Flipped(Decoupled(new Resp2SliceBundle()))
+    val req2Slice       = Flipped(Decoupled(new Req2SliceBundle()))
+    val resp2Node       = Decoupled(new Resp2NodeBundle())
+    val req2Node        = Decoupled(new Req2NodeBundle())
+    val resp2Slice      = Flipped(Decoupled(new Resp2SliceBundle()))
     // slice DataBuffer signals: RnNode <> Slice
-    val rnDBSigs        = Flipped(new DBBundle(hasDBRCReq = true))
-    val snDBSigs        = Flipped(new DBBundle(hasDBRCReq = true))
+    val nodeDBSigs      = Flipped(new DBBundle(hasDBRCReq = true))
   })
 
 // --------------------- Modules declaration ------------------------//
   val dataBuffer    = Module(new DataBuffer())
-  val dataStorage   = Module(new DataStorageWrapper())
   val directory     = Module(new DirectoryWrapper())
-  val mainPipe      = Module(new MainPipe())
+  val reqPipe       = Module(new ReqPipe())
+  val respPipe      = Module(new RespPipe())
   val mshrCtl       = Module(new MSHRCtl())
-  val snpCtl        = Module(new SnoopCtlWrapper())
   val mpReqQueue    = Module(new Queue(gen = new Req2NodeBundle(), entries = djparam.nrMpReqQueue, pipe = true, flow = true))
   val mpRespQueue   = Module(new Queue(gen = new Resp2NodeBundle(),entries = djparam.nrMpRespQueue, pipe = true, flow = true))
 
-
-// --------------------- Wire declaration ------------------------//
-  val mpReq2RnNode  = WireInit(0.U.asTypeOf(Decoupled(new Req2NodeBundle())))
-  val mpReq2SnNode  = WireInit(0.U.asTypeOf(Decoupled(new Req2NodeBundle())))
-
-
 // --------------------------- Connection ---------------------------//
-  dataBuffer.io.sliceId   := io.sliceId
-  dataBuffer.io.rn2db     <> io.rnDBSigs
-  dataBuffer.io.sn2db     <> io.snDBSigs
-  dataBuffer.io.ds2db     <> dataStorage.io.ds2db
-  dataBuffer.io.mpDBRCReq <> mainPipe.io.mpDBRCReq
+  dataBuffer.io.sliceId     := io.sliceId
+  dataBuffer.io.node2db     <> io.nodeDBSigs
+  dataBuffer.io.mpDBRCReq   <> fastPriorityArbDec(Seq(respPipe.io.mpDBRCReq, reqPipe.io.mpDBRCReq))
 
 
-  dataStorage.io.sliceId  := io.sliceId
-  dataStorage.io.task     <> mainPipe.io.dsTask
+  directory.io.sliceId      := io.sliceId
+  directory.io.dirRead      <> mshrCtl.io.dirRead
+  directory.io.dirWrite.s   <> fastPriorityArbDec(Seq(respPipe.io.dirWrite.s, reqPipe.io.dirWrite.s))
+  directory.io.dirWrite.sf  <> fastPriorityArbDec(Seq(respPipe.io.dirWrite.sf, reqPipe.io.dirWrite.sf))
 
 
-  directory.io.sliceId    := io.sliceId
-  directory.io.dirRead    <> mshrCtl.io.dirRead
-  directory.io.dirResp    <> mainPipe.io.dirResp
-  directory.io.dirWrite   <> mainPipe.io.dirWrite
+  mshrCtl.io.sliceId        := io.sliceId
+  mshrCtl.io.req2Slice      <> io.req2Slice
+  mshrCtl.io.resp2Slice     <> io.resp2Slice
+  mshrCtl.io.udpMSHR        <> fastPriorityArbDec(Seq(respPipe.io.udpMSHR, reqPipe.io.udpMSHR))
+  mshrCtl.io.updLockVec     <> fastPriorityArbDec(Seq(respPipe.io.updLockVec, reqPipe.io.updLockVec))
+
+  reqPipe.io.sliceId        := io.sliceId
+  reqPipe.io.dirResp        := directory.io.dirResp
+  reqPipe.io.mshrResp       := mshrCtl.io.udpResp
 
 
-  mshrCtl.io.sliceId      := io.sliceId
-  mshrCtl.io.req2Slice    <> io.rnReq2Slice
-  mshrCtl.io.resp2Slice   <> fastArbDec(Seq(io.rnResp2Slice, io.snResp2Slice))
-  mshrCtl.io.mpTask       <> mainPipe.io.mpTask
-  mshrCtl.io.udpMSHR      <> mainPipe.io.udpMSHR
+  respPipe.io.sliceId       := io.sliceId
+  respPipe.io.dirResp       := directory.io.dirResp
+  respPipe.io.mshrResp      := mshrCtl.io.udpResp
 
 
-  snpCtl.io.sliceId       := io.sliceId
-  snpCtl.io.snpTask       <> mainPipe.io.snpTask
+  reqPipe.io.task.valid     := mshrCtl.io.pipeTask.valid & mshrCtl.io.pipeTask.bits.toReqPipe
+  respPipe.io.task.valid    := mshrCtl.io.pipeTask.valid & mshrCtl.io.pipeTask.bits.toRespPipe
+  reqPipe.io.task.bits      := mshrCtl.io.pipeTask.bits
+  respPipe.io.task.bits     := mshrCtl.io.pipeTask.bits
+  mshrCtl.io.pipeTask.ready := reqPipe.io.task.ready & mshrCtl.io.pipeTask.bits.toReqPipe |
+                               respPipe.io.task.ready & mshrCtl.io.pipeTask.bits.toRespPipe
 
 
-  mainPipe.io.sliceId     := io.sliceId
-  mainPipe.io.req2Node    <> mpReqQueue.io.enq
-  mainPipe.io.resp2Node   <> mpRespQueue.io.enq
-
-
-  when(mpReqQueue.io.deq.bits.to.LOCALMAS) {
-    mpReq2SnNode.valid      := mpReqQueue.io.deq.valid
-    mpReqQueue.io.deq.ready := mpReq2SnNode.ready
-  }.otherwise {
-    mpReq2RnNode.valid      := mpReqQueue.io.deq.valid
-    mpReqQueue.io.deq.ready := mpReq2RnNode.ready
-  }
-  mpReq2RnNode.bits       := mpReqQueue.io.deq.bits
-  mpReq2SnNode.bits       := mpReqQueue.io.deq.bits
-
-
-  io.resp2RnNode          <> fastPriorityArbDec(Seq(mshrCtl.io.retry2RnNode, mpRespQueue.io.deq))
-  io.req2RnNode           <> fastPriorityArbDec(Seq(snpCtl.io.req2RnNode, mpReq2RnNode))
-  io.req2SnNode           <> mpReq2SnNode
-
+  mpReqQueue.io.enq         <> fastPriorityArbDec(Seq(respPipe.io.req2Node, reqPipe.io.req2Node))
+  mpRespQueue.io.enq        <> fastPriorityArbDec(Seq(respPipe.io.resp2Node, reqPipe.io.resp2Node))
+  io.req2Node               <> mpReqQueue.io.deq
+  io.resp2Node              <> fastPriorityArbDec(Seq(mshrCtl.io.retry2Node, mpRespQueue.io.deq))
 }

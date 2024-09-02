@@ -55,9 +55,17 @@ trait HasAddr extends DJBundle { this: Bundle => val addr = UInt(addressBits.W) 
 
 trait HasMSHRSet extends DJBundle { this: Bundle => val mshrSet = UInt(mshrSetBits.W) }
 
-trait HasMSHRWay extends DJBundle { this: Bundle => val mshrWay = UInt(mshrWayBits.W) }
+class MSHRSetBundle(implicit p: Parameters) extends DJBundle with HasMSHRSet
+
+trait HasMSHRWay extends DJBundle { this: Bundle => val mshrWay = UInt(mshrWayBits.W); val useEvict = Bool(); def useMSHR = !useEvict } // UseEvictTable
+
+trait HasMHSRIndex extends DJBundle with HasMSHRSet with HasMSHRWay { def mshrMatch(set: UInt, way: UInt): Bool = mshrSet === set & mshrWay === way }
 
 class MSHRIndexBundle(implicit p: Parameters) extends DJBundle with HasMSHRSet with HasMSHRWay
+
+object PipeID { val width = 1; val REQ = "b0".U; val RESP = "b1".U }
+
+trait HasPipeID extends Bundle { this: Bundle => val pipeId = UInt(PipeID.width.W); def toReqPipe = pipeId === PipeID.REQ; def toRespPipe = pipeId === PipeID.RESP }
 
 // ---------------------------------------------------------------- Req To Slice Bundle ----------------------------------------------------------------------------- //
 trait HasReqBaseMesBundle extends DJBundle { this: Bundle =>
@@ -70,8 +78,6 @@ trait HasReqBaseMesBundle extends DJBundle { this: Bundle =>
     val retToSrc    = Bool()
     // CHI Mes(Common)
     val opcode      = UInt(6.W)
-    // Other(Common)
-    val willSnp     = Bool()
 }
 
 class ReqBaseMesBundle(implicit p: Parameters) extends DJBundle with HasReqBaseMesBundle with HasFromIDBits
@@ -85,7 +91,7 @@ class Req2SliceBundle(implicit p: Parameters) extends DJBundle with HasReq2Slice
 
 // ---------------------------------------------------------------- Resp To Node Bundle ----------------------------------------------------------------------------- //
 
-trait HasResp2NodeBundle extends DJBundle with HasCHIChannel { this: Bundle =>
+trait HasResp2NodeBundle extends DJBundle with HasCHIChannel with HasMSHRWay { this: Bundle =>
     // CHI Id
     val srcID       = UInt(djparam.nodeIdBits.W)
     val txnID       = UInt(djparam.nodeIdBits.W)
@@ -105,7 +111,7 @@ class Resp2NodeBundle(implicit p: Parameters) extends DJBundle with HasResp2Node
 
 
 // ---------------------------------------------------------------- Req To Node Bundle ----------------------------------------------------------------------------- //
-trait HasReq2NodeBundle extends DJBundle with HasAddr { this: Bundle =>
+trait HasReq2NodeBundle extends DJBundle with HasAddr with HasMSHRWay { this: Bundle =>
     // CHI Id
     val tgtId       = UInt(djparam.nodeIdBits.W)
     val srcId       = UInt(djparam.nodeIdBits.W)
@@ -127,7 +133,7 @@ class Req2NodeBundle(implicit p: Parameters) extends DJBundle with HasReq2NodeBu
 
 
 // ---------------------------------------------------------------- Resp To Slice Bundle ----------------------------------------------------------------------------- //
-trait HasResp2SliceBundle extends DJBundle with HasDBID with HasMSHRSet { this: Bundle =>
+trait HasResp2SliceBundle extends DJBundle with HasDBID with HasMHSRIndex { this: Bundle =>
     val isSnpResp   = Bool()
     val hasData     = Bool()
     // Indicate Snoopee final state
@@ -177,17 +183,29 @@ class DBBundle(hasDBRCReq: Boolean = false)(implicit p: Parameters) extends DJBu
 
 
 // ---------------------------------------------------------------- DataBuffer Base Bundle ----------------------------------------------------------------------------- //
-class MpTaskBundle(implicit p: Parameters) extends DJBundle with HasAddr {
-    // TODO
+class PipeTaskBundle(implicit p: Parameters) extends DJBundle with HasAddr with HasPipeID with HasMSHRWay {
+    val reqMes          = new ReqBaseMesBundle()
+    val respMes         = new Bundle {
+        val slvResp     = Valid(UInt(ChiResp.width.W))
+        val masResp     = Valid(UInt(ChiResp.width.W))
+        val fwdState    = Valid(UInt(ChiResp.width.W))
+        val dbid        = Valid(UInt(dbIdBits.W))
+    }
 }
 
-class UpdateMSHRBundle(implicit p: Parameters) extends DJBundle
+class UpdateMSHRReqBundle(implicit p: Parameters) extends DJBundle with HasPipeID with HasMHSRIndex {
+    val isUpdate        = Bool()
+    def isReq           = !isUpdate
+    val tag             = UInt(mshrTagBits.W)
+    val waitSlvVec      = Vec(nrSlvIntf, Bool()) // Wait Snoop Resp
+    val waitMasVec      = Vec(nrMasIntf, Bool()) // Wait Req Resp
+}
 
-class SnpTaskBundle(implicit p: Parameters) extends DJBundle
+class UpdateMSHRRespBundle(implicit p: Parameters) extends DJBundle with HasPipeID with HasMSHRWay {
+    val retry           = Bool()
+}
 
-class DSTaskBundle(implicit p: Parameters) extends DJBundle
-
-class DirReadBundle(implicit p: Parameters) extends DJBundle with HasAddr with HasMSHRWay
+class DirReadBundle(implicit p: Parameters) extends DJBundle with HasAddr with HasMSHRWay with HasPipeID
 
 class DirRespBaseBundle(nrWays: Int, nrMetas: Int, replWayBits: Int)(implicit p: Parameters) extends DJBundle with HasAddr {
     val hit         = Bool()
@@ -197,7 +215,7 @@ class DirRespBaseBundle(nrWays: Int, nrMetas: Int, replWayBits: Int)(implicit p:
     val replRetry   = Bool()
 }
 
-class DirRespBundle(implicit p: Parameters) extends DJBundle {
+class DirRespBundle(implicit p: Parameters) extends DJBundle with HasPipeID {
     val s   = new DirRespBaseBundle(djparam.selfWays, 1, sReplWayBits) // self
     val sf  = new DirRespBaseBundle(djparam.sfDirWays, nrRnfNode, sfReplWayBits) // snoop filter
 }

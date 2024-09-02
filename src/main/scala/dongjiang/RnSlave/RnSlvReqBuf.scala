@@ -30,7 +30,7 @@ class RBFSMState(implicit p: Parameters) extends Bundle {
 class RnSlvReqBuf(rnSlvId: Int, reqBufId: Int, param: InterfaceParam)(implicit p: Parameters) extends NodeBase(isSlv = true, hasFree = true, hasReq2Slice = true, hasDBRCReq = false) {
 // --------------------- Reg and Wire declaration ------------------------//
   // req reg
-  val reqReg            = RegInit(0.U.asTypeOf(new DJBundle with HasFromIDBits {
+  val reqReg            = RegInit(0.U.asTypeOf(new DJBundle with HasFromIDBits with HasMSHRWay {
     val addr            = UInt(addressBits.W)
     val opcode          = UInt(6.W)
     val txnId           = UInt(djparam.txnidBits.W)
@@ -167,6 +167,13 @@ class RnSlvReqBuf(rnSlvId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
   reqReg := Mux(io.req2Node.fire, req2Node, Mux(io.chi.txreq.fire, reqFTxReq, reqReg))
 
 
+  /*
+   * Save MshrWay
+   */
+  when(io.req2Node.fire)        { reqReg.mshrWay := io.req2Node.bits.mshrWay; reqReg.useEvict := io.req2Node.bits.useEvict  }
+  .elsewhen(io.resp2Slice.fire) { reqReg.mshrWay := io.resp2Slice.bits.mshrWay; reqReg.useEvict := io.resp2Slice.bits.useEvict  }
+
+
 // ---------------------------  Receive CHI Resp(TxRsp and TxDat) Logic --------------------------------//
   /*
    * Receive Snoop TxRsp
@@ -247,7 +254,6 @@ class RnSlvReqBuf(rnSlvId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
   io.req2Slice.bits.opcode      := reqReg.opcode
   io.req2Slice.bits.addr        := reqReg.addr
   io.req2Slice.bits.isSnp       := false.B
-  io.req2Slice.bits.willSnp     := !CHIOp.REQ.isWriteX(reqReg.opcode)
   io.req2Slice.bits.srcID       := reqReg.srcId
   io.req2Slice.bits.txnID       := reqReg.txnId
   // IdMap
@@ -274,6 +280,8 @@ class RnSlvReqBuf(rnSlvId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
   io.resp2Slice.bits.hasData    := snpRespHasDataReg
   io.resp2Slice.bits.dbid       := dbidReg
   io.resp2Slice.bits.mshrSet    := parseMSHRAddress(reqReg.addr)._1
+  io.resp2Slice.bits.mshrWay    := reqReg.mshrWay
+  io.resp2Slice.bits.useEvict   := reqReg.useEvict
   io.resp2Slice.bits.fwdState.valid := CHIOp.SNP.isSnpXFwd(reqReg.opcode)
   io.resp2Slice.bits.fwdState.bits  := snpFwdStateReg
   // IdMap

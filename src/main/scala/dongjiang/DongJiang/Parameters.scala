@@ -94,7 +94,6 @@ case class DJParam(
                     nrMpTaskQueue: Int = 4,
                     nrMpReqQueue: Int = 4,
                     nrMpRespQueue: Int = 4,
-                    mpBlockBySet: Boolean = true,
                     // MSHR
                     nrMSHRSets: Int = 4,
                     nrMSHRWays: Int = 4,
@@ -143,12 +142,15 @@ trait HasDJParam {
     val hasCSNIntf      = djparam.csnRnSlaveIntf.nonEmpty & djparam.csnRnMasterIntf.nonEmpty
     val interfaceMes    = if(hasCSNIntf) Seq(djparam.localRnSlaveIntf, djparam.localSnMasterIntf, djparam.csnRnSlaveIntf.get, djparam.csnRnMasterIntf.get)
                           else           Seq(djparam.localRnSlaveIntf, djparam.localSnMasterIntf)
-    val nrIntfBits      = log2Ceil(interfaceMes.length)
+    val nrIntf          = interfaceMes.length
+    val nrSlvIntf       = interfaceMes.count(_.isSlave)
+    val nrMasIntf       = interfaceMes.count(_.isMaster)
+    val nrIntfBits      = log2Ceil(nrIntf)
     val nrReqBufMax     = interfaceMes.map(_.nrReqBuf).max
     val reqBufIdBits    = log2Ceil(nrReqBufMax)
 
     // Base Node Mes
-    val nrRnfNode       = djparam.nodeMes.filter(_.isRNF).length
+    val nrRnfNode       = djparam.nodeMes.count(_.isRNF)
     val rnfNodeIdBits   = log2Ceil(nrRnfNode)
     val snNodeIdSeq     = djparam.nodeMes.filter(_.isSN).map(_.nodeId)
     def fromSnNode(x: UInt) = snNodeIdSeq.map(_.asUInt === x).reduce(_ | _)
@@ -217,21 +219,13 @@ trait HasDJParam {
         val set     = modBank   >> modBankBits
         val tag     = set       >> setBits
         // return: [5:tag] [4:set] [3:modBank] [2:bank] [1:offset]
+        require(x.getWidth == addressBits)
         (tag(tagBits - 1, 0), set(setBits - 1, 0), modBank(modBankBits - 1, 0), bank(bankBits - 1, 0), offset(offsetBits - 1, 0))
     }
 
-    def parseMSHRAddress(x: UInt, mpBlockBySet: Boolean = false): (UInt, UInt, UInt) = {
-        val tag = WireInit(0.U(mshrTagBits.W))
-        val bank = WireInit(0.U(bankBits.W))
-        val (tag_, set, modBank, bank_, offset) = parseAddress(x, modBankBits = 0, setBits = mshrSetBits, tagBits = mshrTagBits)
-        if (mpBlockBySet) {
-            tag := tag_ // TODO: When !mpBlockBySet it must support useWayOH Check and RetryQueue
-            bank := bank_
-        } else {
-            require(sSetBits + sDirBankBits > mshrSetBits)
-            tag := tag_(sSetBits + sDirBankBits - 1 - mshrSetBits, 0)
-            bank := 0.U
-        }
+    def parseMSHRAddress(x: UInt): (UInt, UInt, UInt) = {
+        val (tag, set, modBank, bank, offset) = parseAddress(x, modBankBits = 0, setBits = mshrSetBits, tagBits = mshrTagBits)
+        require(sSetBits + sDirBankBits >= mshrSetBits)
         // return: [3:mshrTag] [2:mshrSet] [1:bank]
         (tag, set, bank)
     }
