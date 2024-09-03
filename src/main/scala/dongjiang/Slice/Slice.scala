@@ -40,6 +40,8 @@ class Slice()(implicit p: Parameters) extends DJModule {
   directory.io.dirRead      <> mshrCtl.io.dirRead
   directory.io.dirWrite.s   <> fastPriorityArbDec(Seq(respPipe.io.dirWrite.s, reqPipe.io.dirWrite.s))
   directory.io.dirWrite.sf  <> fastPriorityArbDec(Seq(respPipe.io.dirWrite.sf, reqPipe.io.dirWrite.sf))
+  directory.io.readMshr     <> mshrCtl.io.dirReadMshr
+  directory.io.mshrResp     := mshrCtl.io.mshrResp2Dir
 
 
   mshrCtl.io.sliceId        := io.sliceId

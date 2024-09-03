@@ -69,6 +69,9 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
     val updLockVec    = Flipped(Decoupled(new MSHRSetBundle))
     // Directory Read Req
     val dirRead       = Decoupled(new DirReadBundle())
+    // Directory Read MSHR Set Mes
+    val dirReadMshr   = Flipped(Valid(new MSHRIndexBundle()))
+    val mshrResp2Dir  = Output(Vec(djparam.nrMSHRWays, Valid(UInt(addressBits.W))))
     // Req Retry: Resp To Rn Node
     val retry2Node    = Decoupled(new Resp2NodeBundle())
   })
@@ -96,7 +99,8 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
   // task s1
   val task_s1_g       = RegInit(0.U.asTypeOf(Valid(new PipeTaskBundle())))
   val canGo_s1        = Wire(Bool())
-  val alreadyReadDirReg = RegInit(false.B)
+  val alreadyReadDirReg   = RegInit(false.B)
+  val alreadySendTaskReg  = RegInit(false.B)
 
 
 
@@ -344,15 +348,16 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
   /*
    * Set Task S1 Value
    */
-  task_s1_g.valid := Mux(task_s0.valid, true.B, task_s1_g.valid & !canGo_s1)
-  task_s1_g.bits  := Mux(task_s0.valid & canGo_s0, task_s0.bits, task_s1_g.bits)
-  canGo_s1        := io.pipeTask.ready & (io.dirRead.ready | alreadyReadDirReg)
+  task_s1_g.valid       := Mux(task_s0.valid, true.B, task_s1_g.valid & !canGo_s1)
+  task_s1_g.bits        := Mux(task_s0.valid & canGo_s0, task_s0.bits, task_s1_g.bits)
+  canGo_s1              := (io.pipeTask.ready | alreadySendTaskReg) & (io.dirRead.ready | alreadyReadDirReg)
 
   /*
    * Send mpTask to Pipe
    */
-  io.pipeTask.valid := task_s1_g.valid & canGo_s1 // TODO: May not be dependent on dirRead.fire ?
-  io.pipeTask.bits  := task_s1_g.bits
+  alreadySendTaskReg    := Mux(alreadySendTaskReg, !io.dirRead.fire, io.pipeTask.fire & !canGo_s1)
+  io.pipeTask.valid     := task_s1_g.valid & !alreadySendTaskReg
+  io.pipeTask.bits      := task_s1_g.bits
 
   /*
    * Read Directory
@@ -360,6 +365,37 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
   alreadyReadDirReg     := Mux(alreadyReadDirReg, !io.pipeTask.fire, io.dirRead.fire & !canGo_s1)
   io.dirRead.valid      := task_s1_g.valid & !alreadyReadDirReg
   io.dirRead.bits.addr  := task_s1_g.bits.addr
+  io.dirRead.bits.mshrWay   := task_s1_g.bits.mshrWay
+  io.dirRead.bits.useEvict  := task_s1_g.bits.useEvict
+  io.dirRead.bits.pipeId    := task_s1_g.bits.pipeId
+
+
+
+// ------------------------ S2: Dir Read MSHR and MSHR Resp to Dir --------------------------//
+  when(io.dirReadMshr.valid) {
+    when(!io.dirReadMshr.bits.useEvict) {
+      io.mshrResp2Dir.zip(mshrTableReg(io.dirReadMshr.bits.mshrSet)).foreach {
+        case(a, b) =>
+          a.valid := b.isValid
+          a.bits  := Cat(b.tag, io.dirReadMshr.bits.mshrSet, b.bank, 0.U(offsetBits.W))
+      }
+    }.otherwise {
+      io.mshrResp2Dir.zipWithIndex.foreach {
+        case(a, i) =>
+          if(i < evictTableReg.length) {
+            a.valid := evictTableReg(i).isValid & parseMSHRAddress(evictTableReg(i).addr)._2 === io.dirReadMshr.bits.mshrSet
+            a.bits  := evictTableReg(i).addr
+          } else {
+            a.valid := false.B
+            a.bits  := DontCare
+          }
+      }
+    }
+  }.otherwise {
+    io.mshrResp2Dir.foreach(_.valid := false.B)
+    io.mshrResp2Dir.foreach(_.bits  := DontCare)
+  }
+
 
 
 // ------------------------------------- Assertion ---------------------------------------//

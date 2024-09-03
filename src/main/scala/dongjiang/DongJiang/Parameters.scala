@@ -103,19 +103,17 @@ case class DJParam(
                     nrDataBuf: Int = 16,
                     // ------------------------ Directory Mes ------------------ //
                     // self dir & ds mes, dont care when hasLLC is false
-                    nrSelfDirBank: Int = 2,
                     selfWays: Int = 4,
                     selfSets: Int = 32,
-                    selfDirMulticycle: Int = 2,
-                    selfDirHoldMcp: Boolean = true,
                     selfReplacementPolicy: String = "plru",
                     // snoop filter dir mes
-                    nrSFDirBank: Int = 2,
                     sfDirWays: Int = 4,
                     sfDirSets: Int = 32,
-                    sfDirMulticycle: Int = 2,
-                    sfDirHoldMcp: Boolean = true,
                     sfReplacementPolicy: String = "plru",
+                    // DIR SRAM
+                    nrDirBank: Int = 2,
+                    dirMulticycle: Int = 2,
+                    dirHoldMcp: Boolean = true,
                   ) {
     require(nodeMes.nonEmpty)
     require(nrMpTaskQueue > 0)
@@ -165,25 +163,21 @@ trait HasDJParam {
 
     // DIR BASE Parameters
     val bankBits        = log2Ceil(djparam.nrBank)
+    val dirBankBits     = log2Ceil(djparam.nrDirBank)
     val offsetBits      = log2Ceil(djparam.blockBytes)
 
     // SELF DIR Parameters: [sTag] + [sSet] + [sDirBank] + [bank] + [offset]
     // [sSet] + [sDirBank] = [setBis]
     val sWayBits        = log2Ceil(djparam.selfWays)
-    val sDirBankBits    = log2Ceil(djparam.nrSelfDirBank)
-    val sSetBits        = log2Ceil(djparam.selfSets/djparam.nrSelfDirBank)
-    val sTagBits        = djparam.addressBits - sSetBits - sDirBankBits - bankBits - offsetBits
+    val sSetBits        = log2Ceil(djparam.selfSets/djparam.nrDirBank)
+    val sTagBits        = djparam.addressBits - sSetBits - dirBankBits - bankBits - offsetBits
 
     // SF DIR Parameters: [cTag] + [cSet] + [cDirBank] + [bank] + [offset]
     // [sfSet] + [sfDirBank] = [sfSetsBits]
     val sfWayBits       = log2Ceil(djparam.sfDirWays)
-    val sfDirBankBits   = log2Ceil(djparam.nrSFDirBank)
-    val sfSetBits       = log2Ceil(djparam.sfDirSets / djparam.nrSFDirBank)
-    val sfTagBits       = djparam.addressBits - sfSetBits - sfDirBankBits - bankBits - offsetBits
 
-    // DS Parameters
-    val dsWayBits       = sWayBits
-    val dsSetBits       = sSetBits
+    val sfSetBits       = log2Ceil(djparam.sfDirSets / djparam.nrDirBank)
+    val sfTagBits       = djparam.addressBits - sfSetBits - dirBankBits - bankBits - offsetBits
 
     // MSHR TABLE Parameters: [mshrTag] + [mshrSet] + [bank] + [offset]
     val mshrWayBits     = log2Ceil(djparam.nrMSHRWays)
@@ -218,15 +212,15 @@ trait HasDJParam {
         val modBank = bank      >> bankBits
         val set     = modBank   >> modBankBits
         val tag     = set       >> setBits
-        // return: [5:tag] [4:set] [3:modBank] [2:bank] [1:offset]
+        // return: [1:tag] [2:set] [3:modBank] [4:bank] [5:offset]
         require(x.getWidth == addressBits)
         (tag(tagBits - 1, 0), set(setBits - 1, 0), modBank(modBankBits - 1, 0), bank(bankBits - 1, 0), offset(offsetBits - 1, 0))
     }
 
     def parseMSHRAddress(x: UInt): (UInt, UInt, UInt) = {
         val (tag, set, modBank, bank, offset) = parseAddress(x, modBankBits = 0, setBits = mshrSetBits, tagBits = mshrTagBits)
-        require(sSetBits + sDirBankBits >= mshrSetBits)
-        // return: [3:mshrTag] [2:mshrSet] [1:bank]
+        require(sSetBits + dirBankBits >= mshrSetBits)
+        // return: [1:mshrTag] [2:mshrSet] [3:bank]
         (tag, set, bank)
     }
 
