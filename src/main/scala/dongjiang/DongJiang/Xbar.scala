@@ -16,7 +16,7 @@ class IdMap(implicit p: Parameters) extends DJModule {
         val inBank  = Input(UInt(bankBits.W))
         val outBank = Output(UInt(bankBits.W))
     })
-    val outBank = WireInit(0.U(bankBits.W))
+    val outBank     = WireInit(0.U(bankBits.W))
     val bankaValNum = WireInit(PopCount(io.bankVal).asUInt)
 
     if (djparam.nrBank == 4) {
@@ -24,16 +24,16 @@ class IdMap(implicit p: Parameters) extends DJModule {
             // Use Bank [0]
             is(1.U) { outBank :=  0.U }
             // Use Bank [0 1]
-            is(2.U) { outBank === io.inBank(0) }
+            is(2.U) { outBank := io.inBank(0) }
             // Use Bank [0 1 2 3]
-            is(4.U) { outBank === io.inBank }
+            is(4.U) { outBank := io.inBank }
         }
     } else if (djparam.nrBank == 2) {
         switch(bankaValNum) {
             // Use Bank [0]
-            is(1.U) { outBank === 0.U }
+            is(1.U) { outBank := 0.U }
             // Use Bank [0 1]
-            is(2.U) { outBank === io.inBank(0) }
+            is(2.U) { outBank := io.inBank(0) }
         }
     } else {
         // Use Bank [0]
@@ -74,7 +74,6 @@ class Xbar()(implicit p: Parameters) extends DJModule {
         }
     })
 
-    io <> DontCare
 
 // ------------------------------------------ Modules declaration And Connection ----------------------------------------------//
     val req2SliceIdMaps     = Seq.fill(nrIntf) { Module(new IdMap()) }
