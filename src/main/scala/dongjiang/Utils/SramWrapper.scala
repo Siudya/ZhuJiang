@@ -12,12 +12,12 @@ abstract class SramWrapperBaseIO[T <: Data](gen: T) extends Module {
   require(setBits > 0)
 
   val io = IO(new Bundle {
-    val req     = Decoupled(new Bundle {
+    val req     = Flipped(Decoupled(new Bundle {
       val index = UInt(setBits.W)
       val wayMaskOpt = if(ways > 1) Some(UInt(ways.W)) else None
       val wmode = Bool()
-    })
-    val data    = Decoupled(gen)
+    }))
+    val data    = Flipped(Decoupled(gen))
     val resp    = Valid(Vec(ways, gen))
   })
 }
@@ -53,7 +53,7 @@ class SramHmcSaveDataWrapper[T <: Data](
   private val reqFire       = io.req.fire
   private val readShiftReg  = RegInit(0.U((mcp + 1).W))
   private val reqBitsReg    = RegEnable(io.req.bits, io.req.fire)
-  private val reqDataReg    = RegEnable(io.data, io.req.fire)
+  private val reqDataReg    = RegEnable(io.data.bits, io.req.fire)
   private val reqValidReg   = RegInit(0.U((mcp - 1).W))
 
   reqValidReg               := Cat(reqFire, reqValidReg) >> 1.U
@@ -123,7 +123,7 @@ class SramHmcWrapper[T <: Data](
 
   sram.io.w.req.valid       := reqValidReg(mcp - 2) && reqBitsReg.wmode
   sram.io.w.req.bits.setIdx := reqBitsReg.index
-  sram.io.w.req.bits.data.foreach(_ := io.data)
+  sram.io.w.req.bits.data.foreach(_ := io.data.bits)
   if(ways > 1) sram.io.w.req.bits.waymask.get := io.req.bits.wayMaskOpt.get
 
   sram.io.r.req.valid       := reqValidReg(mcp - 2) && !reqBitsReg.wmode
@@ -167,7 +167,7 @@ class SramMcpWrapper[T <: Data](
   def mcp = multicycle
 
   require(multicycle >= 2)
-  require(holdMcp)
+  require(!holdMcp)
 
   private val sram = Module(new SRAMTemplate(gen, set, way, singlePort, shouldReset, extraReset, holdRead, bypassWrite, multicycle, holdMcp, hasMbist, suffix, foundry, sramInst))
 
@@ -180,7 +180,7 @@ class SramMcpWrapper[T <: Data](
 
   sram.io.w.req.valid       := reqFire && io.req.bits.wmode
   sram.io.w.req.bits.setIdx := io.req.bits.index
-  sram.io.w.req.bits.data.foreach(_ := io.data)
+  sram.io.w.req.bits.data.foreach(_ := io.data.bits)
   if(ways > 1) sram.io.w.req.bits.waymask.get := io.req.bits.wayMaskOpt.get
 
   sram.io.r.req.valid       := reqFire && !io.req.bits.wmode
@@ -216,8 +216,8 @@ class SramWithoutMcpWrapper[T <: Data](
   override def sets: Int = set
   override def ways: Int = way
 
-  require(multicycle >= 2)
-  require(holdMcp)
+  require(multicycle == 1)
+  require(!holdMcp)
 
   private val sram = Module(new SRAMTemplate(gen, set, way, singlePort, shouldReset, extraReset, holdRead, bypassWrite, multicycle, holdMcp, hasMbist, suffix, foundry, sramInst))
 
@@ -227,7 +227,7 @@ class SramWithoutMcpWrapper[T <: Data](
 
   sram.io.w.req.valid       := reqFire && io.req.bits.wmode
   sram.io.w.req.bits.setIdx := io.req.bits.index
-  sram.io.w.req.bits.data.foreach(_ := io.data)
+  sram.io.w.req.bits.data.foreach(_ := io.data.bits)
   if(ways > 1) sram.io.w.req.bits.waymask.get := io.req.bits.wayMaskOpt.get
 
   sram.io.r.req.valid       := reqFire && !io.req.bits.wmode
@@ -264,13 +264,13 @@ class SramWrapper[T <: Data](
   override def ways: Int = way
 
   val sramOpt = if (multicycle >= 2 & holdMcp & hmcSaveData) {
-    Some(new SramHmcSaveDataWrapper(gen, set, way, singlePort, shouldReset, extraReset, holdRead, bypassWrite, multicycle, holdMcp, hasMbist, suffix, foundry, sramInst))
-  } else if (multicycle >= 2 & holdRead & !hmcSaveData) {
-    Some(new SramHmcWrapper(gen, set, way, singlePort, shouldReset, extraReset, holdRead, bypassWrite, multicycle, holdMcp, hasMbist, suffix, foundry, sramInst))
-  } else if (multicycle >= 2 & !holdRead) {
-    Some(new SramMcpWrapper(gen, set, way, singlePort, shouldReset, extraReset, holdRead, bypassWrite, multicycle, holdMcp, hasMbist, suffix, foundry, sramInst))
+    Some(Module(new SramHmcSaveDataWrapper(gen, set, way, singlePort, shouldReset, extraReset, holdRead, bypassWrite, multicycle, holdMcp, hasMbist, suffix, foundry, sramInst)))
+  } else if (multicycle >= 2 & holdMcp & !hmcSaveData) {
+    Some(Module(new SramHmcWrapper(gen, set, way, singlePort, shouldReset, extraReset, holdRead, bypassWrite, multicycle, holdMcp, hasMbist, suffix, foundry, sramInst)))
+  } else if (multicycle >= 2 & !holdMcp) {
+    Some(Module(new SramMcpWrapper(gen, set, way, singlePort, shouldReset, extraReset, holdRead, bypassWrite, multicycle, holdMcp, hasMbist, suffix, foundry, sramInst)))
   } else if (multicycle == 1) {
-    Some(new SramWithoutMcpWrapper(gen, set, way, singlePort, shouldReset, extraReset, holdRead, bypassWrite, multicycle, holdMcp, hasMbist, suffix, foundry, sramInst))
+    Some(Module(new SramWithoutMcpWrapper(gen, set, way, singlePort, shouldReset, extraReset, holdRead, bypassWrite, multicycle, holdMcp, hasMbist, suffix, foundry, sramInst)))
   } else {
     None
   }
