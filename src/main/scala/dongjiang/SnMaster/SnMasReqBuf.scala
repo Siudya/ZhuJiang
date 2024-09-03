@@ -187,7 +187,7 @@ class SnMasReqBuf(snMasId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
   io.resp2Slice.bits.isSnpResp  := false.B // TODO
   io.resp2Slice.bits.hasData    := true.B
   io.resp2Slice.bits.dbid       := dbidReg
-  io.resp2Slice.bits.mshrSet    := parseMSHRAddress(reqReg.addr)._1
+  io.resp2Slice.bits.mshrSet    := parseMSHRAddress(reqReg.addr)._2
   io.resp2Slice.bits.mshrWay    := reqReg.mshrWay
   io.resp2Slice.bits.useEvict   := reqReg.useEvict
   io.resp2Slice.bits.fwdState   := DontCare
@@ -231,7 +231,7 @@ class SnMasReqBuf(snMasId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
   io.dbSigs.wReq.valid           := fsmReg.s_getDBID
   // IdMap
   io.dbSigs.wReq.bits.to.idL0    := IdL0.SLICE.U
-  io.dbSigs.wReq.bits.to.idL1    := parseAddress(reqReg.addr)._2 // Remap in Xbar
+  io.dbSigs.wReq.bits.to.idL1    := parseAddress(reqReg.addr)._4 // Remap in Xbar
   io.dbSigs.wReq.bits.to.idL2    := DontCare
   io.dbSigs.wReq.bits.from.idL0  := INTF.U
   io.dbSigs.wReq.bits.from.idL1  := snMasId.U

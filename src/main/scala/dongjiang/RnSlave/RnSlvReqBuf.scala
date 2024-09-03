@@ -258,7 +258,7 @@ class RnSlvReqBuf(rnSlvId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
   io.req2Slice.bits.txnID       := reqReg.txnId
   // IdMap
   io.req2Slice.bits.to.idL0     := IdL0.SLICE.U
-  io.req2Slice.bits.to.idL1     := parseAddress(reqReg.addr)._2 // Remap in Xbar
+  io.req2Slice.bits.to.idL1     := parseAddress(reqReg.addr)._4 // Remap in Xbar
   io.req2Slice.bits.to.idL2     := DontCare
   io.req2Slice.bits.from.idL0   := INTF.U
   io.req2Slice.bits.from.idL1   := rnSlvId.U
@@ -279,7 +279,7 @@ class RnSlvReqBuf(rnSlvId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
   io.resp2Slice.bits.isSnpResp  := fsmReg.s_snpResp
   io.resp2Slice.bits.hasData    := snpRespHasDataReg
   io.resp2Slice.bits.dbid       := dbidReg
-  io.resp2Slice.bits.mshrSet    := parseMSHRAddress(reqReg.addr)._1
+  io.resp2Slice.bits.mshrSet    := parseMSHRAddress(reqReg.addr)._2
   io.resp2Slice.bits.mshrWay    := reqReg.mshrWay
   io.resp2Slice.bits.useEvict   := reqReg.useEvict
   io.resp2Slice.bits.fwdState.valid := CHIOp.SNP.isSnpXFwd(reqReg.opcode)
@@ -310,7 +310,7 @@ class RnSlvReqBuf(rnSlvId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
   io.dbSigs.wReq.valid            := fsmReg.s_getDBID
   // IdMap
   io.dbSigs.wReq.bits.to.idL0     := IdL0.SLICE.U
-  io.dbSigs.wReq.bits.to.idL1     := parseAddress(reqReg.addr)._2 // Remap in Xbar
+  io.dbSigs.wReq.bits.to.idL1     := parseAddress(reqReg.addr)._4 // Remap in Xbar
   io.dbSigs.wReq.bits.to.idL2     := DontCare
   io.dbSigs.wReq.bits.from.idL0   := INTF.U
   io.dbSigs.wReq.bits.from.idL1   := rnSlvId.U
