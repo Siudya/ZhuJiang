@@ -63,8 +63,8 @@ class Zhujiang(implicit p: Parameters) extends ZJModule {
 
   val io = IO(new Bundle {
     val fromNHL2    = Vec(nrLocalRn, Flipped(new CHIBundleDecoupled(params)))
-    val localSn     = Vec(nrLocalSn, new SnIcn())
-    val localHnI    = Vec(nrLocalHNI, new HnIcn(local = true))
+//    val localSn     = Vec(nrLocalSn, new SnIcn())
+//    val localHnI    = Vec(nrLocalHNI, new HnIcn(local = true))
     val csnC2C      = Vec(nrCSNCn, new C2cLinkPort())
   })
 
@@ -74,8 +74,10 @@ class Zhujiang(implicit p: Parameters) extends ZJModule {
   private val localRing = Module(new Ring(true))
   private val csnRing = Module(new Ring(false))
 
-  localRing.io.get.sn.zip(io.localSn).foreach { case(a, b) => a <> b }
-  localRing.io.get.hni.zip(io.localHnI).foreach { case(a, b) => a <> b }
+//  localRing.io.get.sn.zip(io.localSn).foreach { case(a, b) => a <> b }
+//  localRing.io.get.hni.zip(io.localHnI).foreach { case(a, b) => a <> b }
+  localRing.io.get.sn.foreach(_ <> DontCare)
+  localRing.io.get.hni.foreach(_ <> DontCare)
   csnRing.io.get.c2c.zip(io.csnC2C).foreach { case(a, b) => a <> b }
   localRing.io.get.chip := zjparam.ringId.U
   csnRing.io.get.chip := zjparam.ringId.U

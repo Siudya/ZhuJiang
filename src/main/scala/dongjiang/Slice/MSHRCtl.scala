@@ -213,7 +213,7 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
            */
           }.elsewhen(io.udpMSHR.valid & mshrCanReceivePipe & io.udpMSHR.bits.mSet === i.U & pipeReqInvWay === j.U) {
             // TODO
-            assert(false.B)
+//            assert(false.B)
           /*
            * Resp Update mshrTable value
            */

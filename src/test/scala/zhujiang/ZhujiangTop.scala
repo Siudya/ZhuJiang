@@ -21,12 +21,12 @@ class ZhujiangTopConfig extends Config((site, here, up) => {
       NodeParam(nodeType = NodeType.S),
       NodeParam(nodeType = NodeType.P),
     ),
-    csnNodeParams = Seq(
-      NodeParam(nodeType = NodeType.R),
-      NodeParam(nodeType = NodeType.HF),
-      NodeParam(nodeType = NodeType.C),
-      NodeParam(nodeType = NodeType.P),
-    )
+//    csnNodeParams = Seq(
+//      NodeParam(nodeType = NodeType.R),
+//      NodeParam(nodeType = NodeType.HF),
+//      NodeParam(nodeType = NodeType.C),
+//      NodeParam(nodeType = NodeType.P),
+//    )
   )
 })
 
