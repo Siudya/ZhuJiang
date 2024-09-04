@@ -80,7 +80,9 @@ case class DJParam(
                     nodeIdBits: Int = 12,
                     txnidBits: Int = 12,
                     dbidBits: Int = 16,
-                    hnSrcId: Int = 0,
+                    chipID: Int = 0,
+                    localNodeID: Int = 0x10,
+                    csnNodeID: Int = 0,
                     // ------------------------- Node Mes -------------------- //
                     nodeMes: Seq[NodeParam] = Seq(  // NodeParam( name = "RN_CSN",     nodeId = 0, isRN = true ),
                                                     // NodeParam( name = "HN_CSN",     nodeId = 1, isHN = true, addressId = Some(1), addressIdBits = Some(1) ),
@@ -116,6 +118,7 @@ case class DJParam(
                     dirHoldMcp: Boolean = true,
                   ) {
     require(nodeMes.nonEmpty)
+    require(nodeMes.count(_.isDDR) == 1)
     require(nrMpTaskQueue > 0)
     require(nrMpReqQueue > 0)
     require(nrMpRespQueue > 0)
@@ -151,6 +154,7 @@ trait HasDJParam {
     val nrRnfNode       = djparam.nodeMes.count(_.isRNF)
     val rnfNodeIdBits   = log2Ceil(nrRnfNode)
     val snNodeIdSeq     = djparam.nodeMes.filter(_.isSN).map(_.nodeId)
+    val ddrcNodeId      = djparam.nodeMes.filter(_.isDDR).map(_.nodeId)(0)
     def fromSnNode(x: UInt) = snNodeIdSeq.map(_.asUInt === x).reduce(_ | _)
 
     // Slice Queue
@@ -205,6 +209,29 @@ trait HasDJParam {
     // some requirements for CHI width
     require(reqBufIdBits <= 12)
     require(dbIdBits <= 16)
+
+    def getChipTypeByAddr(x: UInt): UInt = {
+        val chipType = Wire(UInt(ChipType.width.W))
+        when(x(46, 44) === djparam.chipID.U) {
+            chipType := ChipType.Local
+        }.otherwise {
+            chipType := ChipType.CSN
+        }
+        chipType
+    }
+
+    def getMetaIdBySrcID(x: UInt): UInt = {
+        val rnfNodeId   = djparam.nodeMes.filter(_.isRNF).map(_.nodeId.U)
+        val metaId      = WireInit((nrRnfNode+1).U((rnfNodeIdBits+1).W))
+        rnfNodeId.zipWithIndex.foreach {
+            case (id, i) =>
+                when(x === id) {
+                    metaId := i.U
+                }
+        }
+        assert(metaId =/= (nrRnfNode+1).U)
+        metaId(rnfNodeIdBits-1, 0)
+    }
 
     def parseAddress(x: UInt, modBankBits: Int = 1, setBits: Int = 1, tagBits: Int = 1): (UInt, UInt, UInt, UInt, UInt) = {
         val offset  = x

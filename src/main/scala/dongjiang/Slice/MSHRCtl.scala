@@ -39,7 +39,8 @@ class MSHREntry(useAddr: Boolean = false)(implicit p: Parameters) extends DJBund
     val slvResp       = Valid(UInt(ChiResp.width.W))
     val masResp       = Valid(UInt(ChiResp.width.W))
     val fwdState      = Valid(UInt(ChiResp.width.W))
-    val dbid          = Valid(UInt(dbIdBits.W))
+    val slvDBID       = Valid(UInt(dbIdBits.W))
+    val masDBID       = Valid(UInt(dbIdBits.W))
   }
 
   def isValid       = state =/= MSHRState.Free
@@ -47,7 +48,7 @@ class MSHREntry(useAddr: Boolean = false)(implicit p: Parameters) extends DJBund
   def isBeSend      = state === MSHRState.BeSend
   def isAlreadySend = state === MSHRState.AlreadySend
   def isWaitResp    = state === MSHRState.WaitResp
-  def isResp        = respMes.slvResp.valid | respMes.masResp.valid | respMes.fwdState.valid | respMes.dbid.valid
+  def isResp        = respMes.slvResp.valid | respMes.masResp.valid | respMes.fwdState.valid
   def isReq         = !isResp
   def respBeSend    = isBeSend & isResp
   def reqBeSend     = isBeSend & isReq
@@ -88,11 +89,15 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
   val evictTableReg   = RegInit(VecInit(Seq.fill(2) { 0.U.asTypeOf(new MSHREntry(useAddr = true)) })) // Use to save snp evict / evict req from resp process // TODO: Setting the right number of entries
   val mshrLockVecReg  = RegInit(VecInit(Seq.fill(djparam.nrMSHRSets) { false.B }))
   require(evictTableReg.length <= djparam.nrMSHRWays)
+  require(evictTableReg.length >= 2)
   // Transfer Req From Node To MSHREntry
   val mshrAlloc_s0    = WireInit(0.U.asTypeOf(new MSHREntry()))
   // retry mes
   val retryTo_s0_g    = RegInit(0.U.asTypeOf(Valid(new IDBundle())))
   val udpResp_s0_g    = RegInit(0.U.asTypeOf(Valid(new UpdateMSHRRespBundle())))
+  // will receive pipe req number
+  val mshrWillUseVecReg =  RegInit(VecInit(Seq.fill(djparam.nrMSHRSets) { 0.U(mshrWayBits.W) }))
+  val evictWillUseReg   =  RegInit(0.U(mshrWayBits.W))
   // task s0
   val task_s0         = Wire(Valid(new PipeTaskBundle()))
   val canGo_s0        = Wire(Bool())
@@ -158,25 +163,40 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
 
 // ------------------------ S0: Receive Req From Pipe or Let It Retry-------------------------- //
   // mshrTableReg
-  val pipeReqInvVec       = mshrTableReg(io.udpMSHR.bits.mshrSet).map(_.isFree)
-  val pipeReqInvWay       = PriorityEncoder(pipeReqInvVec)
+  val pipeReqInvVec           = mshrTableReg(io.udpMSHR.bits.mSet).map(_.isFree)
+  val pipeReqInvWay           = PriorityEncoder(pipeReqInvVec)
   // evictTableReg
-  val evictInvVec         = evictTableReg.map(_.isFree)
-  val evictInvId          = PriorityEncoder(evictInvVec)
+  val evictInvVec             = evictTableReg.map(_.isFree)
+  val evictInvId              = PriorityEncoder(evictInvVec)
 
-  val mshrCanReceivePipe  = PopCount(pipeReqInvVec) > 0.U
-  val evictCanReceivePipe = PopCount(evictInvVec) > 0.U
-  val pipeReqSaveInEvict  = !mshrCanReceivePipe & evictCanReceivePipe
+  // judgment logic
+  val canSavePipeReq          = PopCount(pipeReqInvVec) + PopCount(evictInvVec) - mshrWillUseVecReg(io.udpMSHR.bits.mSet) - evictWillUseReg > io.udpMSHR.bits.willUseWay
+  val mshrCanReceivePipe      = PopCount(pipeReqInvVec) > 0.U
+  val evictCanReceivePipe     = PopCount(evictInvVec) > 0.U
+  val pipeReqSaveInEvict      = !mshrCanReceivePipe & evictCanReceivePipe
 
-  io.udpMSHR.ready          := true.B
+  // count will use way
+  when(io.udpMSHR.fire & io.udpMSHR.bits.isUpdate) {
+    when(mshrWillUseVecReg(io.udpMSHR.bits.mSet) <= io.udpMSHR.bits.willUseWay) {
+      mshrWillUseVecReg(io.udpMSHR.bits.mSet) := mshrWillUseVecReg(io.udpMSHR.bits.mSet) + io.udpMSHR.bits.willUseWay
+    }.otherwise {
+      mshrWillUseVecReg(io.udpMSHR.bits.mSet) := djparam.nrMSHRWays.U
+      evictWillUseReg                         := evictWillUseReg + io.udpMSHR.bits.willUseWay - PopCount(pipeReqInvVec)
+    }
+  }.elsewhen(io.udpMSHR.fire & io.udpMSHR.bits.isReq) {
+    mshrWillUseVecReg(io.udpMSHR.bits.mSet)   := mshrWillUseVecReg(io.udpMSHR.bits.mSet) - mshrCanReceivePipe.asUInt
+    evictWillUseReg                           := evictWillUseReg - (!mshrCanReceivePipe & evictCanReceivePipe).asUInt
+  }
+  // resp to pipe
+  udpResp_s0_g.valid          := io.udpMSHR.fire
+  udpResp_s0_g.bits.retry     := Mux(io.udpMSHR.bits.isUpdate, canSavePipeReq, false.B)
+  udpResp_s0_g.bits.updType   := io.udpMSHR.bits.updType
+  udpResp_s0_g.bits.pipeId    := io.udpMSHR.bits.pipeId
+  udpResp_s0_g.bits.mshrWay   := Mux(pipeReqSaveInEvict, evictInvId, pipeReqInvWay)
+  udpResp_s0_g.bits.useEvict  := pipeReqSaveInEvict
 
-  udpResp_s0_g.valid        := io.udpMSHR.fire & io.udpMSHR.bits.isReq
-  udpResp_s0_g.bits.pipeId  := io.udpMSHR.bits.pipeId
-  udpResp_s0_g.bits.retry   := !(mshrCanReceivePipe | evictCanReceivePipe)
-  udpResp_s0_g.bits.mshrWay := Mux(pipeReqSaveInEvict, evictInvId, pipeReqInvWay)
-  udpResp_s0_g.bits.useEvict := pipeReqSaveInEvict
-
-  io.udpResp                := udpResp_s0_g
+  io.udpMSHR.ready            := true.B
+  io.udpResp                  := udpResp_s0_g
 
 // ----------------------------------- S0: Update MHSR Table Value ----------------------------------- //
   /*
@@ -189,20 +209,17 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
           when(task_s0.valid & canGo_s0 & parseMSHRAddress(task_s0.bits.addr)._2 === i.U & task_s0.bits.mshrWay === j.U & task_s0.bits.useMSHR) {
             m.respMes := 0.U.asTypeOf(m.respMes)
           /*
-           * Pipe(isReq) Update mshrTable value
+           * Pipe Update mshrTable value
            */
-          }.elsewhen(io.udpMSHR.valid & io.udpMSHR.bits.isReq & mshrCanReceivePipe & io.udpMSHR.bits.mshrSet === i.U & pipeReqInvWay === j.U) {
+          }.elsewhen(io.udpMSHR.valid & mshrCanReceivePipe & io.udpMSHR.bits.mSet === i.U & pipeReqInvWay === j.U) {
             // TODO
-          /*
-           * Pipe(isUpdate) Update mshrTable value
-           */
-          }.elsewhen(io.udpMSHR.valid & io.udpMSHR.bits.isUpdate & io.udpMSHR.bits.mshrMatch(i.U, j.U)) {
-            // TODO
+            assert(false.B)
           /*
            * Resp Update mshrTable value
            */
           }.elsewhen(io.resp2Slice.valid & io.resp2Slice.bits.useMSHR & io.resp2Slice.bits.mshrMatch(i.U, j.U)) {
             // TODO
+            assert(false.B)
           /*
            * Req Update mshrTable value
            */
@@ -220,9 +237,7 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
    */
   evictTableReg.zipWithIndex.foreach {
     case(e, i) =>
-      when(io.udpMSHR.valid & io.udpMSHR.bits.isReq & pipeReqSaveInEvict & evictInvId === i.U) {
-        // TODO
-      }
+      // TODO
   }
 
 
@@ -252,7 +267,7 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
           switch(m.state) {
             is(MSHRState.Free) {
               val nodeHit = io.req2Slice.valid & canReceiveNode & i.U === reqSet & j.U === nodeReqInvWay
-              val pipeHit = io.udpMSHR.valid & io.udpMSHR.bits.isReq & mshrCanReceivePipe & io.udpMSHR.bits.mshrSet === i.U & pipeReqInvWay === j.U
+              val pipeHit = io.udpMSHR.valid & io.udpMSHR.bits.isReq & mshrCanReceivePipe & io.udpMSHR.bits.mSet === i.U & pipeReqInvWay === j.U
               m.state := Mux(nodeHit | pipeHit, MSHRState.BeSend, MSHRState.Free)
             }
             is(MSHRState.BeSend) {
@@ -335,6 +350,7 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
     taskReq.isBeSend      -> PipeID.REQ,
   ))
   task_s0.valid           := taskResp.isBeSend | taskReq.isBeSend | taskEvict.isBeSend
+  task_s0.bits.readDir    := true.B // TODO
   task_s0.bits.addr       := taskAddr
   task_s0.bits.pipeId     := taskPipeId
   task_s0.bits.mshrWay    := taskMshrWay
@@ -350,13 +366,13 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
    */
   task_s1_g.valid       := Mux(task_s0.valid, true.B, task_s1_g.valid & !canGo_s1)
   task_s1_g.bits        := Mux(task_s0.valid & canGo_s0, task_s0.bits, task_s1_g.bits)
-  canGo_s1              := (io.pipeTask.ready | alreadySendTaskReg) & (io.dirRead.ready | alreadyReadDirReg)
+  canGo_s1              := (io.pipeTask.ready | alreadySendTaskReg) & (io.dirRead.ready | alreadyReadDirReg | !task_s1_g.bits.readDir)
 
   /*
    * Send mpTask to Pipe
    */
   alreadySendTaskReg    := Mux(alreadySendTaskReg, !io.dirRead.fire, io.pipeTask.fire & !canGo_s1)
-  io.pipeTask.valid     := task_s1_g.valid & !alreadySendTaskReg
+  io.pipeTask.valid     := task_s1_g.valid & !alreadySendTaskReg & task_s1_g.bits.readDir
   io.pipeTask.bits      := task_s1_g.bits
 
   /*

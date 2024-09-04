@@ -158,7 +158,7 @@ class RnMasReqBuf(rnMasId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
   req2Node.opcode     := io.req2Node.bits.opcode
   req2Node.resp       := io.req2Node.bits.resp
   req2Node.from       := io.req2Node.bits.from
-  req2Node.tgtId      := io.req2Node.bits.tgtID
+  req2Node.tgtId      := io.req2Node.bits.tgtId
   reqIsWrite          := CHIOp.REQ.isWriteX(io.req2Node.bits.opcode)
   reqNeedData         := CHIOp.REQ.isReadX(io.req2Node.bits.opcode)
 
@@ -228,7 +228,7 @@ class RnMasReqBuf(rnMasId: Int, reqBufId: Int, param: InterfaceParam)(implicit p
   io.chi.txrsp.bits         := DontCare
   io.chi.txrsp.bits.Opcode  := Mux(fsmReg.s_compAck, CHIOp.RSP.CompAck,         mpRespReg.opcode)
   io.chi.txrsp.bits.TgtID   := Mux(fsmReg.s_compAck, reqRespHomeNIdOrSrcIdReg,  reqReg.srcId)
-  io.chi.txrsp.bits.SrcID   := djparam.hnSrcId.U
+  io.chi.txrsp.bits.SrcID   := djparam.csnNodeID.U
   io.chi.txrsp.bits.TxnID   := Mux(fsmReg.s_compAck, reqRespDBIDReg,            reqReg.txnId)
   io.chi.txrsp.bits.RespErr := Mux(fsmReg.s_compAck, DontCare,                  RespErr.NormalOkay) // TODO: Complete data error indicate
   io.chi.txrsp.bits.Resp    := Mux(fsmReg.s_compAck, DontCare,                  mpRespReg.resp)

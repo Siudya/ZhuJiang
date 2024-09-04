@@ -7,6 +7,11 @@ import org.chipsalliance.cde.config._
 import scala.collection.immutable.ListMap
 import scala.math.{max, min}
 
+object ChipType {
+    val width         = 1
+    val Local         = "b0".U
+    val CSN           = "b1".U
+}
 
 // ---------------------------------------------------------------- Xbar Id Bundle ----------------------------------------------------------------------------- //
 
@@ -27,7 +32,7 @@ object IdL1 {
 class IDBundle(implicit p: Parameters) extends DJBundle {
     val idL0 = UInt(IdL0.width.W)
     val idL1 = UInt(max(bankBits, nrIntfBits).W)
-    val idL2 = UInt(max(reqBufIdBits, mshrWayBits).W)
+    val idL2 = UInt(reqBufIdBits.W)
 
     def mshrWay  = idL2
     def reqBufId = idL2
@@ -51,7 +56,12 @@ trait HasIDBits extends DJBundle with HasFromIDBits with HasToIDBits
 
 trait HasDBID extends DJBundle { this: Bundle => val dbid = UInt(dbIdBits.W) }
 
-trait HasAddr extends DJBundle { this: Bundle => val addr = UInt(addressBits.W) }
+trait HasAddr extends DJBundle {this: Bundle =>
+    val addr    = UInt(addressBits.W);
+    def mTag    = parseMSHRAddress(addr)._1
+    def mSet    = parseMSHRAddress(addr)._2
+    def mBank   = parseMSHRAddress(addr)._3
+}
 
 trait HasMSHRSet extends DJBundle { this: Bundle => val mshrSet = UInt(mshrSetBits.W) }
 
@@ -68,6 +78,7 @@ object PipeID { val width = 1; val REQ = "b0".U; val RESP = "b1".U }
 trait HasPipeID extends Bundle { this: Bundle => val pipeId = UInt(PipeID.width.W); def toReqPipe = pipeId === PipeID.REQ; def toRespPipe = pipeId === PipeID.RESP }
 
 // ---------------------------------------------------------------- Req To Slice Bundle ----------------------------------------------------------------------------- //
+// TODO: Rename it
 trait HasReqBaseMesBundle extends DJBundle { this: Bundle =>
     // CHI Id(Use in RnSlave)
     val srcID       = UInt(djparam.nodeIdBits.W)
@@ -124,7 +135,6 @@ trait HasReq2NodeBundle extends DJBundle with HasAddr with HasMSHRWay { this: Bu
     // CHI Mes (Use in RnMaster)
     val resp        = UInt(ChiResp.width.W) // Use in write back
     val expCompAck  = Bool()
-    val tgtID       = UInt(djparam.nodeIdBits.W)
 }
 
 class Req2NodeBundleWitoutXbarId(implicit p: Parameters) extends DJBundle with HasReq2NodeBundle
@@ -184,24 +194,36 @@ class DBBundle(hasDBRCReq: Boolean = false)(implicit p: Parameters) extends DJBu
 
 // ---------------------------------------------------------------- DataBuffer Base Bundle ----------------------------------------------------------------------------- //
 class PipeTaskBundle(implicit p: Parameters) extends DJBundle with HasAddr with HasPipeID with HasMSHRWay {
+    val readDir         = Bool()
     val reqMes          = new ReqBaseMesBundle()
     val respMes         = new Bundle {
         val slvResp     = Valid(UInt(ChiResp.width.W))
         val masResp     = Valid(UInt(ChiResp.width.W))
         val fwdState    = Valid(UInt(ChiResp.width.W))
-        val dbid        = Valid(UInt(dbIdBits.W))
+        val slvDBID     = Valid(UInt(dbIdBits.W))
+        val masDBID     = Valid(UInt(dbIdBits.W))
     }
 }
 
-class UpdateMSHRReqBundle(implicit p: Parameters) extends DJBundle with HasPipeID with HasMHSRIndex {
-    val isUpdate        = Bool()
-    def isReq           = !isUpdate
-    val tag             = UInt(mshrTagBits.W)
+object UpdMSHRType { val width = 2; val RETRY = "b00".U ; val UPD = "b01".U; val REPL = "b10".U; val EVICT = "b11".U }
+
+trait HasMSHRUpdBundle extends Bundle {
+    val updType     = UInt(UpdMSHRType.width.W)
+
+    def isRetry     = updType === UpdMSHRType.RETRY
+    def isUpdate    = updType === UpdMSHRType.UPD
+    def isRepl      = updType === UpdMSHRType.REPL
+    def isEvict     = updType === UpdMSHRType.EVICT
+    def isReq       = isRepl | isEvict
+}
+
+class UpdateMSHRReqBundle(implicit p: Parameters) extends DJBundle with HasAddr with HasPipeID with HasMSHRWay with HasMSHRUpdBundle {
+    val willUseWay      = UInt(2.W)
     val waitSlvVec      = Vec(nrSlvIntf, Bool()) // Wait Snoop Resp
     val waitMasVec      = Vec(nrMasIntf, Bool()) // Wait Req Resp
 }
 
-class UpdateMSHRRespBundle(implicit p: Parameters) extends DJBundle with HasPipeID with HasMSHRWay {
+class UpdateMSHRRespBundle(implicit p: Parameters) extends DJBundle with HasPipeID with HasMSHRWay with HasMSHRUpdBundle {
     val retry           = Bool()
 }
 
