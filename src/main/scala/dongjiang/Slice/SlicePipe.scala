@@ -8,7 +8,7 @@ import chisel3.util._
 import org.chipsalliance.cde.config._
 import xs.utils.ParallelLookUp
 
-class ReqPipe()(implicit p: Parameters) extends DJModule {
+class SlicePipe()(implicit p: Parameters) extends DJModule {
 // --------------------- IO declaration ------------------------//
   val io = IO(new Bundle {
     val sliceId     = Input(UInt(bankBits.W))

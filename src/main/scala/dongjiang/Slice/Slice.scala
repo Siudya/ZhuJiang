@@ -24,8 +24,8 @@ class Slice()(implicit p: Parameters) extends DJModule {
 // --------------------- Modules declaration ------------------------//
   val dataBuffer    = Module(new DataBuffer())
   val directory     = Module(new DirectoryWrapper())
-  val reqPipe       = Module(new ReqPipe())
-  val respPipe      = Module(new RespPipe())
+  val reqPipe       = Module(new SlicePipe())
+  val respPipe      = Module(new SlicePipe())
   val mshrCtl       = Module(new MSHRCtl())
   val mpReqQueue    = Module(new Queue(gen = new Req2NodeBundle(), entries = djparam.nrMpReqQueue, pipe = true, flow = true))
   val mpRespQueue   = Module(new Queue(gen = new Resp2NodeBundle(),entries = djparam.nrMpRespQueue, pipe = true, flow = true))
