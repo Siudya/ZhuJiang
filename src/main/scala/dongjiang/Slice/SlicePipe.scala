@@ -250,7 +250,7 @@ class SlicePipe()(implicit p: Parameters) extends DJModule {
   io.udpMSHR.bits.willUseWay  := replace_s3.asUInt + evictSF_s3.asUInt
   io.udpMSHR.bits.waitSlvVec.foreach(_ := true.B) // TODO: Complete hasCSNIntf
   io.udpMSHR.bits.waitMasVec.foreach(_ := true.B) // TODO: Complete hasCSNIntf
-  require(!hasCSNIntf)
+//  require(!hasCSNIntf)
   // Common
   io.udpMSHR.bits.pipeId      := task_s3_g.bits.pipeId
 

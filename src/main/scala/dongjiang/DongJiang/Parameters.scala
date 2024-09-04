@@ -36,19 +36,20 @@ case class NodeParam
 (
   name: String = "Node",
   nodeId: Int,
+  local: Boolean = false,
   isRNF: Boolean = false,
   isRNI: Boolean = false,
+  isHN: Boolean = false,
   isSN: Boolean = false,
   isDDR: Boolean = false,
   useDCT: Boolean = false,
   useDMT: Boolean = false,
   useDWT: Boolean = false,
+  chipId: Option[Int] = None, // Only Use In isHN
   bankId: Option[Int] = None, // Only Use In isSN and !isDDR
   bankIdBits: Option[Int] = None, // Only Use In isSN and !isDDR
-  addressId: Option[Int] = None, // Only Use In isHN or isSN and isDDR
-  addressIdBits: Option[Int] = None, // Only Use In isHN or isSN and sisDDR
 ) {
-    val tpyes = Seq(isRNF, isRNI, isSN)
+    val tpyes = Seq(isRNF, isRNI, isHN, isSN)
     val isRN = isRNF | isRNI
     require(tpyes.count(_ == true) == 1)
     if(isRN) require(!isDDR)
@@ -58,10 +59,10 @@ case class NodeParam
     } else {
         require(bankId.isEmpty); require(bankIdBits.isEmpty)
     }
-    if(isSN & isDDR) {
-        require(addressId.nonEmpty); require(addressIdBits.nonEmpty)
+    if(isHN | (isSN & isDDR)) {
+        require(chipId.nonEmpty)
     } else {
-        require(addressId.isEmpty); require(addressIdBits.isEmpty)
+        require(chipId.isEmpty)
     }
 }
 
@@ -73,24 +74,23 @@ case class DJParam(
                     addressBits: Int = 48,
                     hasLLC: Boolean = true,
                     // ------------------------- Interface Mes -------------------- //
-                    localRnSlaveIntf:   InterfaceParam = InterfaceParam( name = "RnSalve_LOCAL",  isRn = true,   isSlave = true),
-                    localSnMasterIntf:  InterfaceParam = InterfaceParam( name = "SnMaster_LOCAL", isRn = false,  isSlave = false, addressId = Some(0), addressIdBits = Some(0) ),
-                    csnRnSlaveIntf:     Option[InterfaceParam] = None, // Some(InterfaceParam( name = "RnSalve_CSN",    isRn = true,   isSlave = true)),
-                    csnRnMasterIntf:    Option[InterfaceParam] = None, // Some(InterfaceParam( name = "RnMaster_CSN",   isRn = true,   isSlave = false, addressId = Some(1), addressIdBits = Some(1) )),
+                    localRnSlaveIntf:   InterfaceParam =              InterfaceParam( name = "RnSalve_LOCAL",  isRn = true,   isSlave = true),
+                    localSnMasterIntf:  InterfaceParam =              InterfaceParam( name = "SnMaster_LOCAL", isRn = false,  isSlave = false, addressId = Some(0), addressIdBits = Some(0) ),
+                    csnRnSlaveIntf:     Option[InterfaceParam] = Some(InterfaceParam( name = "RnSalve_CSN",    isRn = true,   isSlave = true)),
+                    csnRnMasterIntf:    Option[InterfaceParam] = Some(InterfaceParam( name = "RnMaster_CSN",   isRn = true,   isSlave = false, addressId = Some(1), addressIdBits = Some(1) )),
                     nodeIdBits: Int = 12,
                     txnidBits: Int = 12,
                     dbidBits: Int = 16,
-                    chipID: Int = 0,
                     localNodeID: Int = 0x10,
                     csnNodeID: Int = 0,
                     // ------------------------- Node Mes -------------------- //
-                    nodeMes: Seq[NodeParam] = Seq(  // NodeParam( name = "RN_CSN",     nodeId = 0, isRN = true ),
-                                                    // NodeParam( name = "HN_CSN",     nodeId = 1, isHN = true, addressId = Some(1), addressIdBits = Some(1) ),
-                                                    NodeParam( name = "RN_LOCAL_0", nodeId = 0x0, isRNF = true ),
-                                                    NodeParam( name = "RN_LOCAL_1", nodeId = 0x1, isRNF = true ),
-                                                    NodeParam( name = "SN_LOCAL_0", nodeId = 0x30, isSN = true, bankId = Some(0), bankIdBits = Some(1) ),
-                                                    NodeParam( name = "SN_LOCAL_1", nodeId = 0x31, isSN = true, bankId = Some(1), bankIdBits = Some(1) ),
-                                                    NodeParam( name = "SN_DDR",     nodeId = 0x32, isSN = true, isDDR = true, addressId = Some(0), addressIdBits = Some(1))
+                    nodeMes: Seq[NodeParam] = Seq(  NodeParam( name = "RN_CSN",     local = false, nodeId = 0,    isRNF = true ),
+                                                    NodeParam( name = "HN_CSN",     local = false, nodeId = 1,    isHN = true, chipId = Some(1)),
+                                                    NodeParam( name = "RN_LOCAL_0", local = true,  nodeId = 0x0,  isRNF = true ),
+                                                    NodeParam( name = "RN_LOCAL_1", local = true,  nodeId = 0x1,  isRNF = true ),
+                                                    NodeParam( name = "SN_LOCAL_0", local = true,  nodeId = 0x30, isSN = true, bankId = Some(0), bankIdBits = Some(1) ),
+                                                    NodeParam( name = "SN_LOCAL_1", local = true,  nodeId = 0x31, isSN = true, bankId = Some(1), bankIdBits = Some(1) ),
+                                                    NodeParam( name = "SN_DDR",     local = true,  nodeId = 0x32, isSN = true, isDDR = true, chipId = Some(0))
                     ),
                     // ------------------------ Slice Base Mes ------------------ //
                     nrMpTaskQueue: Int = 4,
@@ -138,6 +138,7 @@ trait HasDJParam {
     val addressBits     = djparam.addressBits
     val dataBits        = djparam.blockBytes * 8
     val beatBits        = djparam.beatBytes * 8
+    val localChipId     = djparam.nodeMes.filter(_.isDDR).map(_.chipId)(0).get
 
     // Base Interface Mes
     val hasCSNIntf      = djparam.csnRnSlaveIntf.nonEmpty & djparam.csnRnMasterIntf.nonEmpty
@@ -212,7 +213,7 @@ trait HasDJParam {
 
     def getChipTypeByAddr(x: UInt): UInt = {
         val chipType = Wire(UInt(ChipType.width.W))
-        when(x(46, 44) === djparam.chipID.U) {
+        when(x(46, 44) === localChipId.U) {
             chipType := ChipType.Local
         }.otherwise {
             chipType := ChipType.CSN
