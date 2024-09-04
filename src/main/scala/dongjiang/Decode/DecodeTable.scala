@@ -1,7 +1,9 @@
 package DONGJIANG.DECODE
 
 import DONGJIANG._
+import DONGJIANG.DECODE.InstBundle
 import DONGJIANG.DECODE.RespType._
+import DONGJIANG.ChipType._
 import DONGJIANG.DECODE.Code._
 import DONGJIANG.CHI._
 import DONGJIANG.CHI.CHIOp.REQ._
@@ -56,10 +58,11 @@ import chisel3.util._
  * It cant be Commit and Snoop / ReadDown at the same time
  */
 
-object ReadDecode {
+
+
+object LocalReadDecode {
   def readNotSharedDirty: Seq[(UInt, UInt)] = Seq(
-    Cat(ReadNotSharedDirty, I, I , I, NotResp, ChiResp.I, ChiResp.I ,ChiResp.I) -> (ReadDown | RDOp(ReadNoSnp)) ,
-    Cat(ReadNotSharedDirty, I, I , UC, NotResp, ChiResp.I, ChiResp.I ,ChiResp.I) -> 0.U,
+    Cat(Local, ReadNotSharedDirty, I, I , I, NOTRESP) -> (ReadDown | RDOp(ReadNoSnp))
   )
 
   def table: Seq[(UInt, UInt)] = readNotSharedDirty

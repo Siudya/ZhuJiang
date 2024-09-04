@@ -15,24 +15,26 @@ import DONGJIANG.CHI.ChiState._
 
 object RespType {
   val width         = 3
+  val NOTRESP       = 0.U((RespType.width + 1 + ChiResp.width * 3).W)
   val NotResp       = "b000".U
   val Snp           = "b001".U
   val SnpFwd        = "b010".U
   val RD            = "b100".U // Read Down
   val Snp_RD        = Snp | RD
-  val SnpFwd_RN     = SnpFwd | RD
+  val SnpFwd_RD     = SnpFwd | RD
 }
 
-
 class InstBundle(implicit p: Parameters) extends DJBundle {
-  val opcode    = UInt(6.W)
-  val srcState  = UInt(ChiState.width.W)
-  val othState  = UInt(ChiState.width.W)
-  val hnState   = UInt(ChiState.width.W)
-  val respType  = UInt(RespType.width.W)
-  val snpResp   = UInt(ChiResp.width.W)
-  val fwdState  = UInt(ChiResp.width.W)
-  val rdResp    = UInt(ChiResp.width.W) // Read Down
+  val chipType    = UInt(ChipType.width.W)
+  val opcode      = UInt(6.W)
+  val srcState    = UInt(ChiState.width.W)
+  val othState    = UInt(ChiState.width.W)
+  val hnState     = UInt(ChiState.width.W)
+  val respType    = UInt(RespType.width.W)
+  val respHasData = Bool()
+  val snpResp     = UInt(ChiResp.width.W)
+  val fwdState    = UInt(ChiResp.width.W)
+  val rdResp      = UInt(ChiResp.width.W) // Read Down
 }
 
 
@@ -45,22 +47,24 @@ trait HasOperationsBundle extends Bundle {
 
   // Send Read to Slave Node
   val readDown    = Bool()
+  val writeDown   = Bool()
 
   // Read DataBuffer to Send Data to Resp Node
-  val rcDB        = Bool() // Read and Clean DataBuffer
+  val rDB2Src     = Bool() // Read DataBuffer to Req Src
+  val cleanDB     = Bool() // Clean DataBuffer
 
   // Read(Send Data to Resp Node) or Write DataStorage
-  val readDS      = Bool()
-  val writeDS     = Bool()
+  val readDCU     = Bool()
+  val writeDCU    = Bool()
 
   // Write New State to Directory
   val wSDir       = Bool()
-  val wCDir       = Bool()
+  val wSFDir      = Bool()
 }
 
 class OperationsBundle extends Bundle with HasOperationsBundle
 
-class DecodeBundle(chiRespWidth: Int, chiStateWidth: Int) extends Bundle with HasOperationsBundle {
+class DecodeBundle(chiRespWidth: Int = 3, chiStateWidth: Int = 3) extends Bundle with HasOperationsBundle {
   // Commit(Resp to Rn Node)
   val respOp      = UInt(5.W)
   val resp        = UInt(chiRespWidth.W)
@@ -68,13 +72,12 @@ class DecodeBundle(chiRespWidth: Int, chiStateWidth: Int) extends Bundle with Ha
 
   // Send Snoop to Slave Node
   val snpOp       = UInt(5.W)
+//  val retToSrc    = Bool()
+//  val doNotGoToSD = Bool()
 
-  // Send Read to Slave Node
+  // Send Read or Write to Master Node
   val rdOp        = UInt(6.W)
-
-  // Read DataBuffer to Send Data to Resp Node
-
-  // Read(Send Data to Resp Node) or Write DataStorage
+  val wdOp      = UInt(6.W)
 
   // Write New State to Directory
   val hnState     = UInt(chiStateWidth.W)
@@ -93,23 +96,26 @@ class DecodeBundle(chiRespWidth: Int, chiStateWidth: Int) extends Bundle with Ha
 
 object Code {
   // Operations
-  def Commit           : UInt = Cat(1.U,  0.U(0.W))
-  def Snoop            : UInt = Cat(1.U,  0.U(Commit.getWidth.W))
-  def ReadDown         : UInt = Cat(1.U,  0.U(Snoop.getWidth.W))
-  def RCDB             : UInt = Cat(1.U,  0.U(ReadDown.getWidth.W))
-  def ReadDS           : UInt = Cat(1.U,  0.U(RCDB.getWidth.W))
-  def WriteDS          : UInt = Cat(1.U,  0.U(ReadDS.getWidth.W))
-  def WSDir            : UInt = Cat(1.U,  0.U(WriteDS.getWidth.W))
-  def WCDir            : UInt = Cat(1.U,  0.U(WSDir.getWidth.W))
+  def Commit           : UInt = { val temp = WireInit(0.U.asTypeOf(new DecodeBundle())); temp.commit := true.B;     temp.asUInt }
+  def Snoop            : UInt = { val temp = WireInit(0.U.asTypeOf(new DecodeBundle())); temp.snoop := true.B;      temp.asUInt }
+  def ReadDown         : UInt = { val temp = WireInit(0.U.asTypeOf(new DecodeBundle())); temp.readDown := true.B;   temp.asUInt }
+  def WriteDown        : UInt = { val temp = WireInit(0.U.asTypeOf(new DecodeBundle())); temp.writeDown := true.B;  temp.asUInt }
+  def RDB2Src          : UInt = { val temp = WireInit(0.U.asTypeOf(new DecodeBundle())); temp.rDB2Src := true.B;    temp.asUInt }
+  def CleanDB          : UInt = { val temp = WireInit(0.U.asTypeOf(new DecodeBundle())); temp.cleanDB := true.B;    temp.asUInt }
+  def ReadDCU          : UInt = { val temp = WireInit(0.U.asTypeOf(new DecodeBundle())); temp.readDCU := true.B;    temp.asUInt }
+  def WriteDCU         : UInt = { val temp = WireInit(0.U.asTypeOf(new DecodeBundle())); temp.writeDCU := true.B;   temp.asUInt }
+  def WSDir            : UInt = { val temp = WireInit(0.U.asTypeOf(new DecodeBundle())); temp.wSDir := true.B;      temp.asUInt }
+  def wSFDir           : UInt = { val temp = WireInit(0.U.asTypeOf(new DecodeBundle())); temp.wSFDir := true.B;     temp.asUInt }
 
   // other
-  def RespOp  (x: UInt): UInt = Cat(x,    0.U(WCDir.getWidth.W))
-  def Resp    (x: UInt): UInt = Cat(x,    0.U(RespOp(CHIOp.RSP.CompAck).getWidth.W))
-  def FwdState(x: UInt): UInt = Cat(x,    0.U(Resp(ChiResp.I).getWidth.W))
-  def SnpOp   (x: UInt): UInt = Cat(x,    0.U(FwdState(ChiResp.I).getWidth.W))
-  def RDOp    (x: UInt): UInt = Cat(x,    0.U(SnpOp(CHIOp.SNP.SnpOnce).getWidth.W))
-  def HnState (x: UInt): UInt = Cat(x,    0.U(RDOp(CHIOp.REQ.ReadNoSnp).getWidth.W))
-  def SrcState(x: UInt): UInt = Cat(x,    0.U(HnState(ChiState.I).getWidth.W))
-  def OthState(x: UInt): UInt = Cat(x,    0.U(SrcState(ChiState.I).getWidth.W))
+  def RespOp  (x: UInt): UInt = { val temp = WireInit(0.U.asTypeOf(new DecodeBundle())); temp.respOp := x;          temp.asUInt }
+  def Resp    (x: UInt): UInt = { val temp = WireInit(0.U.asTypeOf(new DecodeBundle())); temp.resp := x;            temp.asUInt }
+  def FwdState(x: UInt): UInt = { val temp = WireInit(0.U.asTypeOf(new DecodeBundle())); temp.fwdState := x;        temp.asUInt }
+  def SnpOp   (x: UInt): UInt = { val temp = WireInit(0.U.asTypeOf(new DecodeBundle())); temp.snpOp := x;           temp.asUInt }
+  def RDOp    (x: UInt): UInt = { val temp = WireInit(0.U.asTypeOf(new DecodeBundle())); temp.rdOp := x;            temp.asUInt }
+  def ReplOp  (x: UInt): UInt = { val temp = WireInit(0.U.asTypeOf(new DecodeBundle())); temp.wdOp := x;            temp.asUInt }
+  def HnState (x: UInt): UInt = { val temp = WireInit(0.U.asTypeOf(new DecodeBundle())); temp.hnState := x;         temp.asUInt }
+  def SrcState(x: UInt): UInt = { val temp = WireInit(0.U.asTypeOf(new DecodeBundle())); temp.srcState := x;        temp.asUInt }
+  def OthState(x: UInt): UInt = { val temp = WireInit(0.U.asTypeOf(new DecodeBundle())); temp.othState := x;        temp.asUInt }
 }
 
