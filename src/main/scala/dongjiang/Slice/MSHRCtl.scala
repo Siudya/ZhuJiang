@@ -24,12 +24,10 @@ class MSHREntry(useAddr: Boolean = false)(implicit p: Parameters) extends DJBund
   // state
   val state           = UInt(MSHRState.width.W)
   // addr
-  val tagOpt          = if(!useAddr) Some(UInt(mshrTagBits.W)) else None
-  val bankOpt         = if(!useAddr) Some(UInt(bankBits.W)) else None
-  val addrOpt         = if(useAddr) Some(UInt(djparam.addressBits.W)) else None
-  def tag             = tagOpt.get
-  def bank            = bankOpt.get
-  def addr            = addrOpt.get
+  val tag             = UInt(mshrTagBits.W)
+  val bank            = UInt(bankBits.W)
+  val setOpt          = if(useAddr) Some(UInt(mshrSetBits.W)) else None
+  def set             = setOpt.get
   // req mes
   val reqMes          = new ReqBaseMesBundle()
   // resp mes
@@ -52,6 +50,8 @@ class MSHREntry(useAddr: Boolean = false)(implicit p: Parameters) extends DJBund
   def isReq         = !isResp
   def respBeSend    = isBeSend & isResp
   def reqBeSend     = isBeSend & isReq
+
+  def addr(x: UInt = setOpt.getOrElse(0.U)): UInt = Cat(tag, x, bank, 0.U(offsetBits.W))
 }
 
 
@@ -71,8 +71,8 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
     // Directory Read Req
     val dirRead       = Decoupled(new DirReadBundle())
     // Directory Read MSHR Set Mes
-    val dirReadMshr   = Flipped(Valid(new MSHRIndexBundle()))
-    val mshrResp2Dir  = Output(Vec(djparam.nrMSHRWays, Valid(UInt(addressBits.W))))
+    val dirReadMshr   = Flipped(Valid(UInt(mshrSetBits.W)))
+    val mshrResp2Dir  = Output(Vec(djparam.nrMSHRWays + djparam.nrEvictWays, Valid(UInt(addressBits.W))))
     // Req Retry: Resp To Rn Node
     val retry2Node    = Decoupled(new Resp2NodeBundle())
   })
@@ -86,10 +86,8 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
 // --------------------- Reg / Wire declaration ------------------------//
   // mshrTable
   val mshrTableReg    = RegInit(VecInit(Seq.fill(djparam.nrMSHRSets) { VecInit(Seq.fill(djparam.nrMSHRWays) { 0.U.asTypeOf(new MSHREntry()) }) }))
-  val evictTableReg   = RegInit(VecInit(Seq.fill(2) { 0.U.asTypeOf(new MSHREntry(useAddr = true)) })) // Use to save snp evict / evict req from resp process // TODO: Setting the right number of entries
+  val evictTableReg   = RegInit(VecInit(Seq.fill(djparam.nrEvictWays) { 0.U.asTypeOf(new MSHREntry(useAddr = true)) })) // Use to save snp evict / evict req from resp process // TODO: Setting the right number of entries
   val mshrLockVecReg  = RegInit(VecInit(Seq.fill(djparam.nrMSHRSets) { false.B }))
-  require(evictTableReg.length <= djparam.nrMSHRWays)
-  require(evictTableReg.length >= 2)
   // Transfer Req From Node To MSHREntry
   val mshrAlloc_s0    = WireInit(0.U.asTypeOf(new MSHREntry()))
   // retry mes
@@ -115,12 +113,11 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
    * Get MSHR Mes
    */
   // mshrTableReg
-  val (blockTag, blockSet, blockBank) = parseMSHRAddress(io.req2Slice.bits.addr); dontTouch(blockTag); dontTouch(blockSet); dontTouch(blockBank)
-  val nodeReqMatchVec = mshrTableReg(blockSet).map { case m => m.isValid & m.tag === blockTag & m.bank === blockBank }
-  val nodeReqInvVec   = mshrTableReg(blockSet).map(_.isFree)
+  val nodeReqMatchVec = mshrTableReg(io.req2Slice.bits.mSet).map { case m => m.isValid & m.tag === io.req2Slice.bits.mTag & m.bank === io.req2Slice.bits.mBank }
+  val nodeReqInvVec   = mshrTableReg(io.req2Slice.bits.mSet).map(_.isFree)
   val nodeReqInvWay   = PriorityEncoder(nodeReqInvVec)
   // evictTableReg
-  val evictMatchVec   = evictTableReg.map { case m => m.isValid & m.addr === io.req2Slice.bits.addr }
+  val evictMatchVec   = evictTableReg.map { case m => m.isValid & m.addr() === io.req2Slice.bits.addr }
 
 
   /*
@@ -134,10 +131,8 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
   /*
    * Transfer Req From Node To MSHREntry
    */
-  val (reqTag, reqSet, reqBank) = parseMSHRAddress(io.req2Slice.bits.addr); dontTouch(reqTag); dontTouch(reqSet); dontTouch(reqBank)
-  mshrAlloc_s0          := DontCare
-  mshrAlloc_s0.tag      := reqTag
-  mshrAlloc_s0.bank     := reqSet
+  mshrAlloc_s0.tag      := io.req2Slice.bits.mTag
+  mshrAlloc_s0.bank     := io.req2Slice.bits.mBank
   mshrAlloc_s0.reqMes   := io.req2Slice.bits
 
 
@@ -152,7 +147,7 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
 
   /*
    * Retry Resp To Rn Node
-   * TODO: Completer Retry Logic In ReqBuf
+   * TODO: Complete Retry Logic In ReqBuf
    */
   assert(!io.retry2Node.valid)
   io.retry2Node.valid         := retryTo_s0_g.valid
@@ -206,14 +201,18 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
     case(m, i) =>
       m.zipWithIndex.foreach {
         case(m, j) =>
-          when(task_s0.valid & canGo_s0 & parseMSHRAddress(task_s0.bits.addr)._2 === i.U & task_s0.bits.mshrWay === j.U & task_s0.bits.useMSHR) {
-            m.respMes := 0.U.asTypeOf(m.respMes)
           /*
            * Pipe Update mshrTable value
            */
-          }.elsewhen(io.udpMSHR.valid & mshrCanReceivePipe & io.udpMSHR.bits.mSet === i.U & pipeReqInvWay === j.U) {
+          when(io.udpMSHR.valid & !io.udpMSHR.bits.isReq & io.udpMSHR.bits.mSet === i.U & io.udpMSHR.bits.mshrWay === j.U) {
             // TODO
-//            assert(false.B)
+            assert(false.B)
+          /*
+           * Receive Pipe Req
+           */
+          }.elsewhen(io.udpMSHR.valid & io.udpMSHR.bits.isReq & mshrCanReceivePipe & io.udpMSHR.bits.mSet === i.U & pipeReqInvWay === j.U) {
+            // TODO
+            assert(false.B)
           /*
            * Resp Update mshrTable value
            */
@@ -221,24 +220,46 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
             // TODO
             assert(false.B)
           /*
-           * Req Update mshrTable value
+           * Receive Node Req
            */
-          }.elsewhen(io.req2Slice.fire & canReceiveNode & i.U === reqSet & j.U === nodeReqInvWay) {
+          }.elsewhen(io.req2Slice.fire & canReceiveNode & i.U === io.req2Slice.bits.mSet & j.U === nodeReqInvWay) {
             m := mshrAlloc_s0
           }
       }
   }
-  io.udpMSHR.ready    := true.B
-  io.resp2Slice.ready := true.B
-
 
   /*
    * Update EVICTTable
    */
   evictTableReg.zipWithIndex.foreach {
     case(e, i) =>
-      // TODO
+      /*
+       * Pipe Update evictTable value
+       */
+      when(io.udpMSHR.valid & !io.udpMSHR.bits.isReq & io.udpMSHR.bits.mSet === i.U & io.udpMSHR.bits.mshrWay === i.U) {
+        // TODO
+        assert(false.B)
+        /*
+       * Receive Pipe Req
+       */
+      }.elsewhen(io.udpMSHR.valid & io.udpMSHR.bits.isReq & pipeReqSaveInEvict & evictInvId === i.U) {
+        // TODO
+        assert(false.B)
+      /*
+       * Resp Update evictTable value
+       */
+      }.elsewhen(io.resp2Slice.valid & io.resp2Slice.bits.useEvict & io.resp2Slice.bits.mshrWay === i.U) {
+        // TODO
+        assert(false.B)
+      }
   }
+
+
+  /*
+   * Set ready value
+   */
+  io.udpMSHR.ready := true.B
+  io.resp2Slice.ready := true.B
 
 
   /*
@@ -248,7 +269,7 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
     case(lock, i) =>
       when(io.updLockVec.valid & io.updLockVec.bits.mshrSet === i.U) {
         lock := false.B
-      }.elsewhen(task_s0.valid & canGo_s0 & parseMSHRAddress(task_s0.bits.addr)._2 === i.U) {
+      }.elsewhen(task_s0.valid & canGo_s0 & task_s0.bits.mSet === i.U) {
         lock := true.B
       }
   }
@@ -266,12 +287,12 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
         case (m, j) =>
           switch(m.state) {
             is(MSHRState.Free) {
-              val nodeHit = io.req2Slice.valid & canReceiveNode & i.U === reqSet & j.U === nodeReqInvWay
+              val nodeHit = io.req2Slice.valid & canReceiveNode & i.U === io.req2Slice.bits.mSet & j.U === nodeReqInvWay
               val pipeHit = io.udpMSHR.valid & io.udpMSHR.bits.isReq & mshrCanReceivePipe & io.udpMSHR.bits.mSet === i.U & pipeReqInvWay === j.U
               m.state := Mux(nodeHit | pipeHit, MSHRState.BeSend, MSHRState.Free)
             }
             is(MSHRState.BeSend) {
-              val hit = task_s0.valid & canGo_s0 & parseMSHRAddress(task_s0.bits.addr)._2 === i.U & task_s0.bits.mshrWay === j.U & task_s0.bits.useMSHR
+              val hit = task_s0.valid & canGo_s0 & task_s0.bits.mSet === i.U & task_s0.bits.mshrWay === j.U & task_s0.bits.useMSHR
               m.state := Mux(hit, MSHRState.AlreadySend, MSHRState.BeSend)
             }
             is(MSHRState.AlreadySend) {
@@ -317,46 +338,22 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
   /*
    * Get task_s0(evict) from MSHRTable
    */
-  val evictBeSendId       = RREncoder(evictTableReg.map {case e => e.isBeSend & !mshrLockVecReg(parseMSHRAddress(e.addr)._2) })
+  val evictBeSendId       = RREncoder(evictTableReg.map {case e => e.isBeSend & !mshrLockVecReg(e.set) })
   val taskEvict           = evictTableReg(evictBeSendId)
 
 
   /*
    * Select task_s0
    */
-  val taskReqMes          = PriorityMux(Seq(
-    taskEvict.isBeSend    -> taskEvict.reqMes,
-    taskResp.isBeSend     -> taskResp.reqMes,
-    taskReq.isBeSend      -> taskReq.reqMes
-  ))
-  val taskRespMes         = PriorityMux(Seq(
-    taskEvict.isBeSend    -> taskEvict.respMes,
-    taskResp.isBeSend     -> taskResp.respMes,
-    taskReq.isBeSend      -> taskReq.respMes
-  ))
-  val taskAddr            = PriorityMux(Seq(
-    taskEvict.isBeSend    -> taskEvict.addr,
-    taskResp.isBeSend     -> Cat(taskResp.tag, respBeSendSet, 0.U(offsetBits.W)),
-    taskReq.isBeSend      -> Cat(taskReq.tag, reqBeSendSet, 0.U(offsetBits.W)),
-  ))
-  val taskMshrWay         = PriorityMux(Seq(
-    taskEvict.isBeSend    -> evictBeSendId,
-    taskResp.isBeSend     -> respBeSendWay,
-    taskReq.isBeSend      -> reqBeSendWay,
-  ))
-  val taskPipeId          = PriorityMux(Seq(
-    taskEvict.isBeSend    -> PipeID.RESP,
-    taskResp.isBeSend     -> PipeID.RESP,
-    taskReq.isBeSend      -> PipeID.REQ,
-  ))
-  task_s0.valid           := taskResp.isBeSend | taskReq.isBeSend | taskEvict.isBeSend
+  task_s0.valid           := taskResp.isBeSend | taskReq.isBeSend
   task_s0.bits.readDir    := true.B // TODO
-  task_s0.bits.addr       := taskAddr
-  task_s0.bits.pipeId     := taskPipeId
-  task_s0.bits.mshrWay    := taskMshrWay
+  //                                                 EvictTask                                 RespTask                       ReqTask
+  task_s0.bits.addr       := Mux(taskEvict.isBeSend, taskEvict.addr(),  Mux(taskResp.isBeSend, taskResp.addr(respBeSendSet),  taskReq.addr(reqBeSendSet)))
+  task_s0.bits.pipeId     := Mux(taskEvict.isBeSend, PipeID.RESP,       Mux(taskResp.isBeSend, PipeID.RESP,                   PipeID.REQ))
+  task_s0.bits.mshrWay    := Mux(taskEvict.isBeSend, evictBeSendId,     Mux(taskResp.isBeSend, respBeSendWay,                 reqBeSendWay))
+  task_s0.bits.reqMes     := Mux(taskEvict.isBeSend, taskEvict.reqMes,  Mux(taskResp.isBeSend, taskResp.reqMes,               taskReq.reqMes))
+  task_s0.bits.respMes    := Mux(taskEvict.isBeSend, taskEvict.respMes, Mux(taskResp.isBeSend, taskResp.respMes,              taskReq.respMes))
   task_s0.bits.useEvict   := taskEvict.isBeSend
-  task_s0.bits.reqMes     := taskReqMes
-  task_s0.bits.respMes    := taskRespMes
   canGo_s0                := canGo_s1 | !task_s1_g.valid
 
 
@@ -378,34 +375,25 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
   /*
    * Read Directory
    */
-  alreadyReadDirReg     := Mux(alreadyReadDirReg, !io.pipeTask.fire, io.dirRead.fire & !canGo_s1)
-  io.dirRead.valid      := task_s1_g.valid & !alreadyReadDirReg
-  io.dirRead.bits.addr  := task_s1_g.bits.addr
-  io.dirRead.bits.mshrWay   := task_s1_g.bits.mshrWay
-  io.dirRead.bits.useEvict  := task_s1_g.bits.useEvict
+  alreadyReadDirReg         := Mux(alreadyReadDirReg, !io.pipeTask.fire, io.dirRead.fire & !canGo_s1)
+  io.dirRead.valid          := task_s1_g.valid & !alreadyReadDirReg
+  io.dirRead.bits.addr      := task_s1_g.bits.addr
   io.dirRead.bits.pipeId    := task_s1_g.bits.pipeId
 
 
 
 // ------------------------ S2: Dir Read MSHR and MSHR Resp to Dir --------------------------//
   when(io.dirReadMshr.valid) {
-    when(!io.dirReadMshr.bits.useEvict) {
-      io.mshrResp2Dir.zip(mshrTableReg(io.dirReadMshr.bits.mshrSet)).foreach {
-        case(a, b) =>
-          a.valid := b.isValid
-          a.bits  := Cat(b.tag, io.dirReadMshr.bits.mshrSet, b.bank, 0.U(offsetBits.W))
-      }
-    }.otherwise {
-      io.mshrResp2Dir.zipWithIndex.foreach {
-        case(a, i) =>
-          if(i < evictTableReg.length) {
-            a.valid := evictTableReg(i).isValid & parseMSHRAddress(evictTableReg(i).addr)._2 === io.dirReadMshr.bits.mshrSet
-            a.bits  := evictTableReg(i).addr
-          } else {
-            a.valid := false.B
-            a.bits  := DontCare
-          }
-      }
+    io.mshrResp2Dir.zipWithIndex.foreach {
+      case(r, i) =>
+        if(i < djparam.nrMSHRWays) {
+          r.valid := mshrTableReg(io.dirReadMshr.bits)(i).isValid
+          r.bits  := mshrTableReg(io.dirReadMshr.bits)(i).addr(io.dirReadMshr.bits)
+        } else {
+          val id = i - djparam.nrMSHRWays
+          r.valid := evictTableReg(id).isValid & evictTableReg(id).set === io.dirReadMshr.bits
+          r.bits  := evictTableReg(id).addr()
+        }
     }
   }.otherwise {
     io.mshrResp2Dir.foreach(_.valid := false.B)

@@ -99,6 +99,7 @@ case class DJParam(
                     // MSHR
                     nrMSHRSets: Int = 4,
                     nrMSHRWays: Int = 4,
+                    nrEvictWays: Int = 4,
                     // number of bank or buffer
                     nrBank: Int = 2,
                     nrSnpCtl: Int = 16,
@@ -119,6 +120,7 @@ case class DJParam(
                   ) {
     require(nodeMes.nonEmpty)
     require(nodeMes.count(_.isDDR) == 1)
+    require(2 <= nrEvictWays & nrEvictWays <= nrMSHRWays)
     require(nrMpTaskQueue > 0)
     require(nrMpReqQueue > 0)
     require(nrMpRespQueue > 0)

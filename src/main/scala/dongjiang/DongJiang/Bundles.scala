@@ -227,7 +227,7 @@ class UpdateMSHRRespBundle(implicit p: Parameters) extends DJBundle with HasPipe
     val retry           = Bool()
 }
 
-class DirReadBundle(implicit p: Parameters) extends DJBundle with HasAddr with HasMSHRWay with HasPipeID
+class DirReadBundle(implicit p: Parameters) extends DJBundle with HasAddr with HasPipeID
 
 class DirRespBaseBundle(nrWays: Int, nrMetas: Int, replWayBits: Int)(implicit p: Parameters) extends DJBundle with HasAddr {
     val hit         = Bool()

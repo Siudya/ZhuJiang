@@ -19,8 +19,8 @@ val io = IO(new Bundle {
   val dirResp     = Valid(new DirRespBundle())
   val dirWrite    = Flipped(new DirWriteBundle())
 
-  val readMshr    = Valid(new MSHRIndexBundle())
-  val mshrResp    = Input(Vec(djparam.nrMSHRWays, Valid(UInt(addressBits.W))))
+  val readMshr    = Valid(UInt(mshrSetBits.W))
+  val mshrResp    = Input(Vec(djparam.nrMSHRWays + djparam.nrEvictWays, Valid(UInt(addressBits.W))))
 })
 
 
@@ -65,7 +65,7 @@ val io = IO(new Bundle {
 
   val respVec       = Wire(Vec(djparam.nrDirBank, new DirRespBundle()))
 
-  val mshrReadVec   = Wire(Vec(djparam.nrDirBank, Valid(new MSHRIndexBundle())))
+  val mshrReadVec   = Wire(Vec(djparam.nrDirBank, Valid(UInt(mshrSetBits.W))))
 
 // --------------------------------- Connection -------------------------------//
   /*

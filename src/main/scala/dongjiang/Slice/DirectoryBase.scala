@@ -44,8 +44,8 @@ class DirectoryBase(
     val dirRead   = Flipped(Decoupled(new DirReadBundle))
     val dirWrite  = Flipped(Decoupled(new DirWriteBaseBundle(ways, nrMetas, replWayBits)))
     val dirResp   = Decoupled(new DirRespBaseBundle(ways, nrMetas, replWayBits))
-    val readMshr  = Valid(new MSHRIndexBundle())
-    val mshrResp  = Input(Vec(djparam.nrMSHRWays, Valid(UInt(addressBits.W))))
+    val readMshr  = Valid(UInt(mshrSetBits.W))
+    val mshrResp  = Input(Vec(djparam.nrMSHRWays + djparam.nrEvictWays, Valid(UInt(addressBits.W))))
   })
 
 // --------------------- Modules declaration ------------------------//
@@ -53,7 +53,7 @@ class DirectoryBase(
 
   val replArrayOpt  = if(!useRepl) None else Some(Module(new SRAMTemplate(UInt(repl.nBits.W), sets, way = 1, singlePort = true, shouldReset = true)))
 
-  val readPipe      = Module(new Pipe(new MSHRIndexBundle(), latency = mcp + holdMcpVal))
+  val readPipe      = Module(new Pipe(UInt(addressBits.W), latency = mcp + holdMcpVal))
 
   val replPipeOpt   = if(!useRepl) None else Some(Module(new Pipe(UInt(repl.nBits.W), latency = mcp + holdMcpVal - 1)))
 
@@ -63,7 +63,7 @@ class DirectoryBase(
   val valid_s2        = WireInit(false.B)
   val metaResp_s2     = Wire(Vec(ways, new DirEntry(nrMetas)))
   val replResp_s2     = WireInit(0.U(repl.nBits.W))
-  val mshrIndex_s2    = WireInit(0.U.asTypeOf(new MSHRIndexBundle()))
+  val addr_s2         = WireInit(0.U(addressBits.W))
   val mshrMes_s2      = Wire(Vec(djparam.nrMSHRWays, Valid(new Bundle {
     val tag           = UInt(tagBits.W)
     val bank          = UInt(bankBits.W)
@@ -71,7 +71,7 @@ class DirectoryBase(
   // s3
   val valid_s3_g      = RegInit(false.B)
   val metaResp_s3_g   = Reg(Vec(ways, new DirEntry(nrMetas)))
-  val mshrIndex_s3_g  = RegInit(0.U.asTypeOf(new MSHRIndexBundle()))
+  val addr_s3_g       = RegInit(0.U(addressBits.W))
   val mshrMes_s3_g    = Reg(Vec(djparam.nrMSHRWays, Valid(new Bundle{
     val tag           = UInt(tagBits.W)
     val bank          = UInt(bankBits.W)
@@ -83,7 +83,7 @@ class DirectoryBase(
   val tag_s3          = WireInit(0.U(tagBits.W))
   val set_s3          = WireInit(0.U(setBits.W))
   val bank_s3         = WireInit(0.U(bankBits.W))
-  val unUseWayVec     = Wire(Vec(ways, Bool()))
+  val useWayVec       = Wire(Vec(ways, Bool()))
 
 
 // ------------------------------ S1: Read / Write SRAM -----------------------------------//
@@ -118,9 +118,7 @@ class DirectoryBase(
    * enter pipe
    */
   readPipe.io.enq.valid := io.dirRead.fire
-  readPipe.io.enq.bits.mshrSet  := parseMSHRAddress(io.dirRead.bits.addr)._2
-  readPipe.io.enq.bits.mshrWay  := io.dirRead.bits.mshrWay
-  readPipe.io.enq.bits.useEvict := io.dirRead.bits.useEvict
+  readPipe.io.enq.bits  := io.dirRead.bits.addr
 
 // ------------------------------ S2: Wait SRAM Resp and Read MSHR -----------------------------------//
   /*
@@ -147,13 +145,13 @@ class DirectoryBase(
   /*
    * Receive pipe deq
    */
-  mshrIndex_s2      := readPipe.io.deq.bits
+  addr_s2           := readPipe.io.deq.bits
 
   /*
    * Read MSHR Set Mes
    */
   io.readMshr.valid := valid_s2
-  io.readMshr.bits := mshrIndex_s2
+  io.readMshr.bits  := parseMSHRAddress(addr_s2)._2
   mshrMes_s2.zip(io.mshrResp).foreach {
     case (a, b) =>
       a.valid       := b.valid
@@ -169,14 +167,13 @@ class DirectoryBase(
    */
   valid_s3_g      := valid_s2
   metaResp_s3_g   := metaResp_s2
-  mshrIndex_s3_g  := mshrIndex_s2
+  addr_s3_g       := addr_s2
   mshrMes_s3_g.zip(mshrMes_s2).foreach { case(a, b) => a := b }
   replResp_s3_g   := replResp_s3_g
 
-  tag_s3          := mshrMes_s3_g(mshrIndex_s3_g.mshrWay).bits.tag
-  set_s3          := mshrIndex_s3_g.mshrSet
-  bank_s3         := mshrMes_s3_g(mshrIndex_s3_g.mshrWay).bits.bank
-  val addr_s3     = Cat(tag_s3, set_s3, io.id, bank_s3)
+  tag_s3          := parseDirAddress(addr_s3_g)._1
+  set_s3          := parseDirAddress(addr_s3_g)._2
+  bank_s3         := parseDirAddress(addr_s3_g)._4
 
 
   /*
@@ -212,10 +209,10 @@ class DirectoryBase(
    * repl way is conflict with unuse way
    * When noUseWay is required, all ways are not Invalid by default
    */
-  unUseWayVec         := metaResp_s3_g.map { case meta => mshrMes_s3_g.map { case mshr => mshr.valid & mshr.bits.tag === meta.tag & mshr.bits.bank === meta.bank }.reduce(_ | _) }
-  val replWayIsUsing  = unUseWayVec(replWay)
-  val selUnuseWay     = PriorityEncoder(unUseWayVec)
-  val replRetry       = unUseWayVec.asUInt.andR
+  useWayVec           := metaResp_s3_g.map { case meta => mshrMes_s3_g.map { case mshr => mshr.valid & mshr.bits.tag === meta.tag & mshr.bits.bank === meta.bank }.reduce(_ | _) }
+  val replWayIsUsing  = useWayVec(replWay)
+  val selUnuseWay     = PriorityEncoder(useWayVec.map(!_))
+  val replRetry       = useWayVec.asUInt.andR
 
 
   /*
@@ -225,7 +222,7 @@ class DirectoryBase(
   io.dirResp.bits.hit       := hit
   // [Resp Mes]                         [Hit Way Mes]                      [Invalid Way Mes]                        [Unuse Way Mes]                     [Replace Way Mes]
   io.dirResp.bits.wayOH     := Mux(hit, hitWayVec.asUInt,   Mux(hasInvWay, selInvWayVec.asUInt, Mux(replWayIsUsing, UIntToOH(selUnuseWay),              UIntToOH(replWay))))
-  io.dirResp.bits.addr      := Mux(hit, addr_s3,            Mux(hasInvWay, 0.U,                 Mux(replWayIsUsing, metaResp_s3_g(selUnuseWay).tag,     metaResp_s3_g(replWay).tag)))
+  io.dirResp.bits.addr      := Mux(hit, addr_s3_g,          Mux(hasInvWay, 0.U,                 Mux(replWayIsUsing, metaResp_s3_g(selUnuseWay).tag,     metaResp_s3_g(replWay).tag)))
   io.dirResp.bits.metaVec   := Mux(hit, hitMetaVec,         Mux(hasInvWay, invMetasVec,         Mux(replWayIsUsing, metaResp_s3_g(selUnuseWay).metaVec, metaResp_s3_g(replWay).metaVec)))
   io.dirResp.bits.replRetry := replRetry
   if(useRepl) { io.dirResp.bits.replMes := replResp_s3_g }
@@ -238,7 +235,7 @@ class DirectoryBase(
    */
   if (replPolicy == "plru") {
     replArrayOpt.get.io.w.req.valid               := io.dirWrite.fire | (io.dirResp.fire & hit)
-    replArrayOpt.get.io.w.req.bits.setIdx         := parseDirAddress(Mux(io.dirWrite.fire, io.dirWrite.bits.addr, addr_s3))._2
+    replArrayOpt.get.io.w.req.bits.setIdx         := parseDirAddress(Mux(io.dirWrite.fire, io.dirWrite.bits.addr, addr_s3_g))._2
     replArrayOpt.get.io.w.req.bits.data.foreach(_ := Mux(io.dirWrite.fire,
                                                        repl.get_next_state(io.dirWrite.bits.replMes,  OHToUInt(io.dirWrite.bits.wayOH)),
                                                        repl.get_next_state(replResp_s3_g,             OHToUInt(io.dirResp.bits.wayOH))))
