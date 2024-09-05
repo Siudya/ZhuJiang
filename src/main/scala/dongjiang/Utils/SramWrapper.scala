@@ -36,6 +36,7 @@ class SramHmcSaveDataWrapper[T <: Data](
                                          holdMcp:      Boolean = false,
                                          hasMbist:     Boolean = false,
                                          suffix:       String = "",
+                                         powerCtl:     Boolean = false,
                                          val foundry:  String = "Unknown",
                                          val sramInst: String = "STANDARD")
   extends SramWrapperBaseIO(gen) {
@@ -48,7 +49,7 @@ class SramHmcSaveDataWrapper[T <: Data](
   require(holdMcp)
 
 
-  private val sram = Module(new SRAMTemplate(gen, set, way, singlePort, shouldReset, extraReset, holdRead, bypassWrite, multicycle, holdMcp, hasMbist, suffix, foundry, sramInst))
+  private val sram = Module(new SRAMTemplate(gen, set, way, singlePort, shouldReset, extraReset, holdRead, bypassWrite, multicycle, holdMcp, hasMbist, suffix, powerCtl, foundry, sramInst))
 
   private val reqFire       = io.req.fire
   private val readShiftReg  = RegInit(0.U((mcp + 1).W))
@@ -97,6 +98,7 @@ class SramHmcWrapper[T <: Data](
                                  holdMcp:      Boolean = false,
                                  hasMbist:     Boolean = false,
                                  suffix:       String = "",
+                                 powerCtl:     Boolean = false,
                                  val foundry:  String = "Unknown",
                                  val sramInst: String = "STANDARD")
   extends SramWrapperBaseIO(gen) {
@@ -108,7 +110,7 @@ class SramHmcWrapper[T <: Data](
   require(multicycle >= 2)
   require(holdMcp)
 
-  private val sram = Module(new SRAMTemplate(gen, set, way, singlePort, shouldReset, extraReset, holdRead, bypassWrite, multicycle, holdMcp, hasMbist, suffix, foundry, sramInst))
+  private val sram = Module(new SRAMTemplate(gen, set, way, singlePort, shouldReset, extraReset, holdRead, bypassWrite, multicycle, holdMcp, hasMbist, suffix, powerCtl, foundry, sramInst))
 
   private val reqFire       = io.req.fire
   private val readShiftReg  = RegInit(0.U((mcp + 1).W))
@@ -158,6 +160,7 @@ class SramMcpWrapper[T <: Data](
                                  holdMcp:      Boolean = false,
                                  hasMbist:     Boolean = false,
                                  suffix:       String = "",
+                                 powerCtl:     Boolean = false,
                                  val foundry:  String = "Unknown",
                                  val sramInst: String = "STANDARD")
   extends SramWrapperBaseIO(gen) {
@@ -169,7 +172,7 @@ class SramMcpWrapper[T <: Data](
   require(multicycle >= 2)
   require(!holdMcp)
 
-  private val sram = Module(new SRAMTemplate(gen, set, way, singlePort, shouldReset, extraReset, holdRead, bypassWrite, multicycle, holdMcp, hasMbist, suffix, foundry, sramInst))
+  private val sram = Module(new SRAMTemplate(gen, set, way, singlePort, shouldReset, extraReset, holdRead, bypassWrite, multicycle, holdMcp, hasMbist, suffix, powerCtl, foundry, sramInst))
 
   private val reqFire       = io.req.fire
   private val readShiftReg  = RegInit(0.U(mcp.W))
@@ -209,6 +212,7 @@ class SramWithoutMcpWrapper[T <: Data](
                                         holdMcp:      Boolean = false,
                                         hasMbist:     Boolean = false,
                                         suffix:       String = "",
+                                        powerCtl:     Boolean = false,
                                         val foundry:  String = "Unknown",
                                         val sramInst: String = "STANDARD")
   extends SramWrapperBaseIO(gen) {
@@ -219,7 +223,7 @@ class SramWithoutMcpWrapper[T <: Data](
   require(multicycle == 1)
   require(!holdMcp)
 
-  private val sram = Module(new SRAMTemplate(gen, set, way, singlePort, shouldReset, extraReset, holdRead, bypassWrite, multicycle, holdMcp, hasMbist, suffix, foundry, sramInst))
+  private val sram = Module(new SRAMTemplate(gen, set, way, singlePort, shouldReset, extraReset, holdRead, bypassWrite, multicycle, holdMcp, hasMbist, suffix, powerCtl, foundry, sramInst))
 
   private val reqFire       = io.req.fire
 
@@ -256,6 +260,7 @@ class SramWrapper[T <: Data](
                               hmcSaveData:  Boolean = false,
                               hasMbist:     Boolean = false,
                               suffix:       String = "",
+                              powerCtl:     Boolean = false,
                               val foundry:  String = "Unknown",
                               val sramInst: String = "STANDARD")
   extends SramWrapperBaseIO(gen) {
@@ -264,13 +269,13 @@ class SramWrapper[T <: Data](
   override def ways: Int = way
 
   val sramOpt = if (multicycle >= 2 & holdMcp & hmcSaveData) {
-    Some(Module(new SramHmcSaveDataWrapper(gen, set, way, singlePort, shouldReset, extraReset, holdRead, bypassWrite, multicycle, holdMcp, hasMbist, suffix, foundry, sramInst)))
+    Some(Module(new SramHmcSaveDataWrapper(gen, set, way, singlePort, shouldReset, extraReset, holdRead, bypassWrite, multicycle, holdMcp, hasMbist, suffix, powerCtl, foundry, sramInst)))
   } else if (multicycle >= 2 & holdMcp & !hmcSaveData) {
-    Some(Module(new SramHmcWrapper(gen, set, way, singlePort, shouldReset, extraReset, holdRead, bypassWrite, multicycle, holdMcp, hasMbist, suffix, foundry, sramInst)))
+    Some(Module(new SramHmcWrapper(gen, set, way, singlePort, shouldReset, extraReset, holdRead, bypassWrite, multicycle, holdMcp, hasMbist, suffix, powerCtl, foundry, sramInst)))
   } else if (multicycle >= 2 & !holdMcp) {
-    Some(Module(new SramMcpWrapper(gen, set, way, singlePort, shouldReset, extraReset, holdRead, bypassWrite, multicycle, holdMcp, hasMbist, suffix, foundry, sramInst)))
+    Some(Module(new SramMcpWrapper(gen, set, way, singlePort, shouldReset, extraReset, holdRead, bypassWrite, multicycle, holdMcp, hasMbist, suffix, powerCtl, foundry, sramInst)))
   } else if (multicycle == 1) {
-    Some(Module(new SramWithoutMcpWrapper(gen, set, way, singlePort, shouldReset, extraReset, holdRead, bypassWrite, multicycle, holdMcp, hasMbist, suffix, foundry, sramInst)))
+    Some(Module(new SramWithoutMcpWrapper(gen, set, way, singlePort, shouldReset, extraReset, holdRead, bypassWrite, multicycle, holdMcp, hasMbist, suffix, powerCtl, foundry, sramInst)))
   } else {
     None
   }
