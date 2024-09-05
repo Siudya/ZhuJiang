@@ -67,7 +67,7 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
     // Update Task From MainPipe
     val udpMSHR       = Flipped(Decoupled(new UpdateMSHRReqBundle()))
     val udpResp       = Valid(new UpdateMSHRRespBundle())
-    val updLockVec    = Flipped(Decoupled(new MSHRSetBundle))
+    val updLockMSHR   = Flipped(Decoupled(new MSHRSetBundle))
     // Directory Read Req
     val dirRead       = Decoupled(new DirReadBundle())
     // Directory Read MSHR Set Mes
@@ -204,9 +204,11 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
           /*
            * Pipe Update mshrTable value
            */
-          when(io.udpMSHR.valid & !io.udpMSHR.bits.isReq & io.udpMSHR.bits.mSet === i.U & io.udpMSHR.bits.mshrWay === j.U) {
-            // TODO
-            assert(false.B)
+          when(io.udpMSHR.valid & io.udpMSHR.bits.isUpdate & io.udpMSHR.bits.useMSHR & io.udpMSHR.bits.mSet === i.U & io.udpMSHR.bits.mshrWay === j.U) {
+            m.waitSlvVec := io.udpMSHR.bits.waitSlvVec
+            m.waitMasVec := io.udpMSHR.bits.waitMasVec
+            assert(PopCount(m.waitSlvVec) === 0.U)
+            assert(PopCount(m.waitMasVec) === 0.U)
           /*
            * Receive Pipe Req
            */
@@ -236,7 +238,7 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
       /*
        * Pipe Update evictTable value
        */
-      when(io.udpMSHR.valid & !io.udpMSHR.bits.isReq & io.udpMSHR.bits.mSet === i.U & io.udpMSHR.bits.mshrWay === i.U) {
+      when(io.udpMSHR.valid & io.udpMSHR.bits.isUpdate & io.udpMSHR.bits.useEvict & io.udpMSHR.bits.mSet === i.U & io.udpMSHR.bits.mshrWay === i.U) {
         // TODO
         assert(false.B)
         /*
@@ -267,13 +269,13 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
    */
   mshrLockVecReg.zipWithIndex.foreach {
     case(lock, i) =>
-      when(io.updLockVec.valid & io.updLockVec.bits.mshrSet === i.U) {
+      when(io.updLockMSHR.valid & io.updLockMSHR.bits.mshrSet === i.U) {
         lock := false.B
       }.elsewhen(task_s0.valid & canGo_s0 & task_s0.bits.mSet === i.U) {
         lock := true.B
       }
   }
-  io.updLockVec.ready := true.B
+  io.updLockMSHR.ready := true.B
 
 
 
@@ -323,7 +325,7 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
    * Get task_s0(req) from MSHRTable
    */
   val reqBeSendSetVec     = mshrTableReg.map(_.map(_.reqBeSend).reduce(_ | _))
-  val reqBeSendSet        = RREncoder(reqBeSendSetVec.zip(mshrLockVecReg).map{ case(a, b) => a & !b })
+  val reqBeSendSet        = RREncoder(reqBeSendSetVec.zip(mshrLockVecReg).map{ case(a, b) => a & !b }) // TODO: if dont need to read Dir, it should not be ctrl by mshrLockVecReg
   val reqBeSendWay        = RREncoder(mshrTableReg(reqBeSendSet).map(_.reqBeSend))
   val taskReq             = mshrTableReg(reqBeSendSet)(reqBeSendWay)
 
@@ -331,14 +333,14 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
    * Get task_s0(resp) from MSHRTable
    */
   val respBeSendSetVec    = mshrTableReg.map(_.map(_.respBeSend).reduce(_ | _))
-  val respBeSendSet       = RREncoder(respBeSendSetVec.zip(mshrLockVecReg).map{ case(a, b) => a & !b })
+  val respBeSendSet       = RREncoder(respBeSendSetVec.zip(mshrLockVecReg).map{ case(a, b) => a & !b }) // TODO: if dont need to read Dir, it should not be ctrl by mshrLockVecReg
   val respBeSendWay       = RREncoder(mshrTableReg(respBeSendSet).map(_.respBeSend))
   val taskResp            = mshrTableReg(respBeSendSet)(respBeSendWay)
 
   /*
    * Get task_s0(evict) from MSHRTable
    */
-  val evictBeSendId       = RREncoder(evictTableReg.map {case e => e.isBeSend & !mshrLockVecReg(e.set) })
+  val evictBeSendId       = RREncoder(evictTableReg.map {case e => e.isBeSend & !mshrLockVecReg(e.set) }) // TODO: if dont need to read Dir, it should not be ctrl by mshrLockVecReg
   val taskEvict           = evictTableReg(evictBeSendId)
 
 

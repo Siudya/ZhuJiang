@@ -23,7 +23,7 @@ class SlicePipe()(implicit p: Parameters) extends DJModule {
     // Update Task To MSHR
     val udpMSHR     = Decoupled(new UpdateMSHRReqBundle())
     val mshrResp    = Flipped(Valid(new UpdateMSHRRespBundle()))
-    val updLockVec  = Decoupled(new MSHRSetBundle)
+    val updLockMSHR = Decoupled(new MSHRSetBundle)
     // Req To Node
     val req2Node    = Decoupled(new Req2NodeBundle())
     // Resp To Node
@@ -78,6 +78,7 @@ class SlicePipe()(implicit p: Parameters) extends DJModule {
   val doneRepl_s3_g       = RegInit(false.B)
   val doneEvict_s3_g      = RegInit(false.B)
   val reqBeSend_s3        = Wire(Vec(7, new Req2NodeBundle()))
+
 
 
 
@@ -248,8 +249,8 @@ class SlicePipe()(implicit p: Parameters) extends DJModule {
   io.udpMSHR.bits.useEvict    := task_s3_g.bits.useEvict
   // Use In Update
   io.udpMSHR.bits.willUseWay  := replace_s3.asUInt + evictSF_s3.asUInt
-  io.udpMSHR.bits.waitSlvVec.foreach(_ := true.B) // TODO: Complete hasCSNIntf
-  io.udpMSHR.bits.waitMasVec.foreach(_ := true.B) // TODO: Complete hasCSNIntf
+  io.udpMSHR.bits.waitSlvVec.foreach(_ := todo_s3.reqToSlv) // TODO: Complete hasCSNIntf
+  io.udpMSHR.bits.waitMasVec.foreach(_ := todo_s3.reqToMas) // TODO: Complete hasCSNIntf
 //  require(!hasCSNIntf)
   // Common
   io.udpMSHR.bits.pipeId      := task_s3_g.bits.pipeId
@@ -295,8 +296,7 @@ class SlicePipe()(implicit p: Parameters) extends DJModule {
   io.req2Node.valid := canSendReq & todoList.reduce(_ | _)
   io.req2Node.bits  := reqBeSend_s3(toBeSendId)
   doneList.zipWithIndex.foreach { case(d, i) => d := Mux(d, !canGo_s3, io.req2Node.fire & toBeSendId === i.U) }
-
-
+  
 
 
 

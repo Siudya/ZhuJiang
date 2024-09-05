@@ -60,6 +60,9 @@ trait HasOperationsBundle extends Bundle {
   // Write New State to Directory
   val wSDir       = Bool()
   val wSFDir      = Bool()
+
+  def reqToSlv    = snoop
+  def reqToMas    = readDown | writeDown | readDCU | writeDCU
 }
 
 class OperationsBundle extends Bundle with HasOperationsBundle

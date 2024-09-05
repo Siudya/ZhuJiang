@@ -48,7 +48,7 @@ class Slice()(implicit p: Parameters) extends DJModule {
   mshrCtl.io.req2Slice      <> io.req2Slice
   mshrCtl.io.resp2Slice     <> io.resp2Slice
   mshrCtl.io.udpMSHR        <> fastPriorityArbDec(Seq(respPipe.io.udpMSHR, reqPipe.io.udpMSHR))
-  mshrCtl.io.updLockVec     <> fastPriorityArbDec(Seq(respPipe.io.updLockVec, reqPipe.io.updLockVec))
+  mshrCtl.io.updLockMSHR    <> fastPriorityArbDec(Seq(respPipe.io.updLockMSHR, reqPipe.io.updLockMSHR))
 
   reqPipe.io.sliceId        := io.sliceId
   reqPipe.io.dirResp        := directory.io.dirResp
