@@ -14,8 +14,11 @@ case class CHIBundleParameters(
     addressBits: Int,
     dataBits: Int,
     dataCheck: Boolean,
-    txnIdBits: Int = 12, // TODO: 8-bit for issueB, 12-bit for issueE or higher
-    dbIdBits: Int = 12
+    txnIdBits: Int = 12,     // issueB: 8, issueE: 12
+    dbIdBits: Int = 12,      // issueB: 8, issueE: 12
+    reqOpcodeBits: Int = 7, // issueB: 6, issueE: 7
+    rspOpcodeBits: Int = 5, // issueB: 4, issueE: 5
+    datOpcodeBits: Int = 4  // issueB: 3, issueE: 4
 // TODO: has snoop
 ) {
     require(nodeIdBits >= 7 && nodeIdBits <= 11)
@@ -27,18 +30,24 @@ case class CHIBundleParameters(
 object CHIBundleParameters {
     def apply(
         nodeIdBits: Int = 7,
-        addressBits: Int = 44,
+        addressBits: Int = 48,
         dataBits: Int = 256,
         dataCheck: Boolean = false,
-        txnIdBits: Int = 12,
-        dbIdBits: Int = 12
+        txnIdBits: Int = 8,
+        dbIdBits: Int = 8,
+        reqOpcodeBits: Int = 6,
+        rspOpcodeBits: Int = 4,
+        datOpcodeBits: Int = 3
     ): CHIBundleParameters = new CHIBundleParameters(
         nodeIdBits = nodeIdBits,
         addressBits = addressBits,
         dataBits = dataBits,
         dataCheck = dataCheck,
         txnIdBits = txnIdBits,
-        dbIdBits = dbIdBits
+        dbIdBits = dbIdBits,
+        reqOpcodeBits = reqOpcodeBits,
+        rspOpcodeBits = rspOpcodeBits,
+        datOpcodeBits = datOpcodeBits
     )
 }
 
@@ -48,11 +57,11 @@ class CHIBundleREQ(params: CHIBundleParameters)(implicit p: Parameters) extends 
     val qos           = UInt(4.W)                 // TODO: not use?
     val tgtID         = UInt(params.nodeIdBits.W) // TODO: not use?
     val srcID         = UInt(params.nodeIdBits.W)
-    val txnID         = UInt(12.W)
+    val txnID         = UInt(params.txnIdBits.W)
     val returnNID     = UInt(params.nodeIdBits.W) // TODO: not use?
     val stashNIDValid = Bool()
     val returnTxnID   = UInt(8.W)
-    val opcode        = UInt(7.W)
+    val opcode        = UInt(params.reqOpcodeBits.W)
     val size          = UInt(3.W)
     val addr          = UInt(params.addressBits.W)
     val ns            = Bool()                    // TODO: not use?
@@ -62,7 +71,7 @@ class CHIBundleREQ(params: CHIBundleParameters)(implicit p: Parameters) extends 
     val pCrdType      = UInt(4.W)
     val memAttr       = UInt(4.W)
     val snpAttr       = UInt(1.W)
-    val lpID          = UInt(4.W)
+    val lpID          = UInt(5.W)
     val snoopMe       = Bool()
     val expCompAck    = Bool()
     val traceTag      = Bool()
@@ -110,12 +119,12 @@ class CHIBundleRSP(params: CHIBundleParameters)(implicit p: Parameters) extends 
     val qos      = UInt(4.W)                 // TODO: not use?
     val tgtID    = UInt(params.nodeIdBits.W) // TODO: not use?
     val srcID    = UInt(params.nodeIdBits.W)
-    val txnID    = UInt(12.W)
-    val opcode   = UInt(5.W)
+    val txnID    = UInt(params.txnIdBits.W)
+    val opcode   = UInt(params.rspOpcodeBits.W)
     val respErr  = UInt(2.W)
     val resp     = UInt(3.W)
     val fwdState = UInt(3.W)                 // Used for DCT
-    val dbID     = UInt(12.W)
+    val dbID     = UInt(params.dbIdBits.W)
     val pCrdType = UInt(4.W)
     val traceTag = Bool()
 
@@ -166,9 +175,9 @@ class CHIBundleSNP(params: CHIBundleParameters)(implicit p: Parameters) extends 
 
     val qos         = UInt(4.W)                 // TODO: not use?
     val srcID       = UInt(params.nodeIdBits.W)
-    val txnID       = UInt(12.W)
+    val txnID       = UInt(params.txnIdBits.W)
     val fwdNID      = UInt(params.nodeIdBits.W) // Used for DCT
-    val fwdTxnID    = UInt(12.W)                // Used for DCT
+    val fwdTxnID    = UInt(params.txnIdBits.W)  // Used for DCT
     val opcode      = UInt(5.W)
     val addr        = UInt((params.addressBits - 3).W)
     val doNotGoToSD = Bool()
@@ -199,13 +208,13 @@ class CHIBundleDAT(params: CHIBundleParameters)(implicit p: Parameters) extends 
     val qos       = UInt(4.W)                 // TODO: not use?
     val tgtID     = UInt(params.nodeIdBits.W) // TODO: not use?
     val srcID     = UInt(params.nodeIdBits.W)
-    val txnID     = UInt(12.W)
+    val txnID     = UInt(params.txnIdBits.W)
     val homeNID   = UInt(params.nodeIdBits.W) // Used for DCT
-    val opcode    = UInt(4.W)
+    val opcode    = UInt(params.datOpcodeBits.W)
     val respErr   = UInt(2.W)
     val resp      = UInt(3.W)
     val fwdState  = UInt(3.W)                 // Used for DCT
-    val dbID      = UInt(12.W)
+    val dbID      = UInt(params.dbIdBits.W)
     val ccID      = UInt(2.W)                 // TODO: not use?
     val dataID    = UInt(2.W)
     val traceTag  = Bool()
