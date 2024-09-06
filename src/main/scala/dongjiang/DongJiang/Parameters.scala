@@ -14,21 +14,19 @@ case class InterfaceParam
 (
     // BASE
     name: String, // RNSLAVE / RNMASTER / SNMASTER
-    nrReqBuf: Int = 16,
     isRn: Boolean,
     isSlave: Boolean,
-    // Use In Master
-    addressId: Option[Int] = None,
-    addressIdBits: Option[Int] = None,
+    chipId: Option[Int] = None, // Use In MASTER
+    nrReqBuf: Int = 16,
+    nrPCUEntry: Int = 16,
 ) {
     val reqBufIdBits = log2Ceil(nrReqBuf)
+    val pcuIdBits = log2Ceil(nrPCUEntry)
     val isSn = !isRn
     val isMaster = !isSlave
     val hasReq2Slice = true
     val hasDBRCReq = isMaster
-    require(addressId.nonEmpty | isSlave)
-    if(isMaster) require(addressId.nonEmpty)      else require(addressId.isEmpty)
-    if(isMaster) require(addressIdBits.nonEmpty)  else require(addressIdBits.isEmpty)
+    if(isMaster) require(chipId.nonEmpty) else require(chipId.isEmpty)
 }
 
 // Node Param In Local Ring
@@ -75,9 +73,9 @@ case class DJParam(
                     hasLLC: Boolean = true,
                     // ------------------------- Interface Mes -------------------- //
                     localRnSlaveIntf:   InterfaceParam =              InterfaceParam( name = "RnSalve_LOCAL",  isRn = true,   isSlave = true),
-                    localSnMasterIntf:  InterfaceParam =              InterfaceParam( name = "SnMaster_LOCAL", isRn = false,  isSlave = false, addressId = Some(0), addressIdBits = Some(0) ),
+                    localSnMasterIntf:  InterfaceParam =              InterfaceParam( name = "SnMaster_LOCAL", isRn = false,  isSlave = false, chipId = Some(0)),
                     csnRnSlaveIntf:     Option[InterfaceParam] = None, // Some(InterfaceParam( name = "RnSalve_CSN",    isRn = true,   isSlave = true)),
-                    csnRnMasterIntf:    Option[InterfaceParam] = None, // Some(InterfaceParam( name = "RnMaster_CSN",   isRn = true,   isSlave = false, addressId = Some(1), addressIdBits = Some(1) )),
+                    csnRnMasterIntf:    Option[InterfaceParam] = None, // Some(InterfaceParam( name = "RnMaster_CSN",   isRn = true,   isSlave = false, chipId = Some(1) )),
                     nodeIdBits: Int = 12,
                     txnidBits: Int = 12,
                     dbidBits: Int = 16,
@@ -201,6 +199,7 @@ trait HasDJParam {
     // TODO
 
     // TIMEOUT CHECK CNT VALUE
+    val TIMEOUT_PCU     = 10000 // PCU
     val TIMEOUT_RB      = 10000 // ReqBuf
     val TIMEOUT_DB      = 8000  // DataBuffer
     val TIMEOUT_BT      = 8000  // BlockTable

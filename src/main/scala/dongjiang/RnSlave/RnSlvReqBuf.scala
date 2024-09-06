@@ -27,7 +27,7 @@ class RBFSMState(implicit p: Parameters) extends Bundle {
 }
 
 
-class RnSlvReqBuf(rnSlvId: Int, reqBufId: Int, param: InterfaceParam)(implicit p: Parameters) extends NodeBase(isSlv = true, hasFree = true, hasReq2Slice = true, hasDBRCReq = false) {
+class RnSlvReqBuf(rnSlvId: Int, reqBufId: Int, param: InterfaceParam)(implicit p: Parameters) extends PCUBaseIO(isSlv = true, hasFree = true, hasReq2Slice = true, hasDBRCReq = false) {
 // --------------------- Reg and Wire declaration ------------------------//
   // req reg
   val reqReg            = RegInit(0.U.asTypeOf(new DJBundle with HasFromIDBits with HasMSHRWay {

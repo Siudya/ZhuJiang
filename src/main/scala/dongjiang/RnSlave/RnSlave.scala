@@ -8,7 +8,7 @@ import org.chipsalliance.cde.config._
 import Utils.FastArb._
 import Utils.IDConnector.idSelDec2DecVec
 
-class RnSlave(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) extends NodeBase(isSlv = true, hasReq2Slice = true, hasDBRCReq = false) {
+class RnSlave(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) extends PCUBaseIO(isSlv = true, hasReq2Slice = true, hasDBRCReq = false) {
 // --------------------- Modules declaration ------------------------//
   def createReqBuf(id: Int) = { val reqBuf = Module(new RnSlvReqBuf(rnSlvId, id, param)); reqBuf }
   val reqBufs               = (0 until param.nrReqBuf).map(i => createReqBuf(i))

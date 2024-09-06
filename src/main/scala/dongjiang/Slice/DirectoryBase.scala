@@ -41,6 +41,7 @@ class DirectoryBase(
 // --------------------- IO declaration ------------------------//
   val io = IO(new Bundle {
     val id        = Input(UInt(modBankBits.W))
+    // TODO: Design a control link to control ready
     val dirRead   = Flipped(Decoupled(new DirReadBundle))
     val dirWrite  = Flipped(Decoupled(new DirWriteBaseBundle(ways, nrMetas, replWayBits)))
     val dirResp   = Decoupled(new DirRespBaseBundle(ways, nrMetas, replWayBits))

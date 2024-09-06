@@ -29,7 +29,7 @@ class MSHREntry(useAddr: Boolean = false)(implicit p: Parameters) extends DJBund
   val setOpt          = if(useAddr) Some(UInt(mshrSetBits.W)) else None
   def set             = setOpt.get
   // req mes
-  val reqMes          = new ReqBaseMesBundle()
+  val reqMes          = new ReqBaseMesBundle() // TODO: Evict not need from
   // resp mes
   val waitSlvVec      = Vec(nrSlvIntf, Bool()) // Wait Snoop Resp
   val waitMasVec      = Vec(nrMasIntf, Bool()) // Wait Req Resp
@@ -118,12 +118,14 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
   val nodeReqInvWay   = PriorityEncoder(nodeReqInvVec)
   // evictTableReg
   val evictMatchVec   = evictTableReg.map { case m => m.isValid & m.addr() === io.req2Slice.bits.addr }
+  // mshrLockVecReg
+  val lockMatch       = mshrLockVecReg(io.req2Slice.bits.mSet)
 
 
   /*
    * Get Block Message
    */
-  val blockByMHSR     = nodeReqMatchVec.reduce(_ | _) | PopCount(nodeReqInvVec) <= 1.U | !evictMatchVec.reduce(_ | _)
+  val blockByMHSR     = nodeReqMatchVec.reduce(_ | _) | PopCount(nodeReqInvVec) <= 1.U | !evictMatchVec.reduce(_ | _) | lockMatch
   val blockByPipeReq  = io.udpMSHR.valid & io.udpMSHR.bits.isReq
   val canReceiveNode  = blockByMHSR | blockByPipeReq
 

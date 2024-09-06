@@ -8,7 +8,7 @@ import org.chipsalliance.cde.config._
 import Utils.FastArb._
 import Utils.IDConnector.idSelDec2DecVec
 
-class SnMaster(snMasId: Int, param: InterfaceParam)(implicit p: Parameters) extends NodeBase(isSlv = false, hasReq2Slice = false, hasDBRCReq = true) {
+class SnMaster(snMasId: Int, param: InterfaceParam)(implicit p: Parameters) extends PCUBaseIO(isSlv = false, hasReq2Slice = false, hasDBRCReq = true) {
 // --------------------- Modules declaration ------------------------//
   def createReqBuf(id: Int) = { val reqBuf = Module(new SnMasReqBuf(snMasId, id, param)); reqBuf }
   val reqBufs               = (0 until param.nrReqBuf).map(i => createReqBuf(i))
@@ -89,9 +89,9 @@ class SnMaster(snMasId: Int, param: InterfaceParam)(implicit p: Parameters) exte
 
 
 // --------------------- Assertion ------------------------------- //
-  if (param.addressIdBits.getOrElse(0) > 0) {
-    assert(Mux(io.req2Node.valid, io.req2Node.bits.addr(addressBits - 1, addressBits - param.addressIdBits.get) === param.addressId.get.U, true.B))
-  }
+//  if (param.addressIdBits.getOrElse(0) > 0) {
+//    assert(Mux(io.req2Node.valid, io.req2Node.bits.addr(addressBits - 1, addressBits - param.addressIdBits.get) === param.addressId.get.U, true.B))
+//  }
 
   assert(Mux(io.chi.rxrsp.valid, PopCount(reqBufs.map(_.io.chi.rxrsp.fire)) === 1.U, true.B))
   assert(Mux(io.chi.rxdat.valid, PopCount(reqBufs.map(_.io.chi.rxdat.fire)) === 1.U, true.B))

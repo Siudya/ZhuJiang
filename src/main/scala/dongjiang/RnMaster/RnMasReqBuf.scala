@@ -33,7 +33,7 @@ class RBFSMState(implicit p: Parameters) extends Bundle {
 }
 
 
-class RnMasReqBuf(rnMasId: Int, reqBufId: Int, param: InterfaceParam)(implicit p: Parameters) extends NodeBase(isSlv = false, hasFree = true, hasReq2Slice = true, hasDBRCReq = true) {
+class RnMasReqBuf(rnMasId: Int, reqBufId: Int, param: InterfaceParam)(implicit p: Parameters) extends PCUBaseIO(isSlv = false, hasFree = true, hasReq2Slice = true, hasDBRCReq = true) {
 // --------------------- Reg and Wire declaration ------------------------//
   // reqBuf Ctrl
   val freeReg       = RegInit(true.B)

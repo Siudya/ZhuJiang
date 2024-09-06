@@ -23,7 +23,7 @@ class ReqBufSelector(param: InterfaceParam)(implicit p: Parameters) extends DJMo
   io.out1 := PriorityEncoder(idle1)
 }
 
-abstract class NodeBase(isSlv:Boolean, hasFree: Boolean = false, hasReq2Slice: Boolean = false, hasDBRCReq: Boolean = false)(implicit p: Parameters) extends DJModule {
+abstract class PCUBaseIO(isSlv:Boolean, hasFree: Boolean = false, hasReq2Slice: Boolean = false, hasDBRCReq: Boolean = false)(implicit p: Parameters) extends DJModule {
 // --------------------- IO declaration ------------------------//
   val io = IO(new Bundle {
     val freeOpt       = if(hasFree) Some(Output(Bool())) else None

@@ -25,7 +25,7 @@ class RBFSMState(implicit p: Parameters) extends Bundle {
 }
 
 
-class SnMasReqBuf(snMasId: Int, reqBufId: Int, param: InterfaceParam)(implicit p: Parameters) extends NodeBase(isSlv = false, hasFree = true, hasDBRCReq = true) {
+class SnMasReqBuf(snMasId: Int, reqBufId: Int, param: InterfaceParam)(implicit p: Parameters) extends PCUBaseIO(isSlv = false, hasFree = true, hasDBRCReq = true) {
   /*
    * Connect Unuse CHI Channels
    */

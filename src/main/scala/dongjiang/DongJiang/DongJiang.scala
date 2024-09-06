@@ -239,7 +239,7 @@ class DongJiang()(implicit p: Parameters) extends DJModule {
 
 // ------------------------------------------ Modules declaration ----------------------------------------------//
 
-    val localRnSlave    = Module(new RnSlave(IdL1.LOCALSLV, djparam.localRnSlaveIntf))
+    val localRnSlave    = Module(new RnSlavePCU(IdL1.LOCALSLV, djparam.localRnSlaveIntf))
     val localSnMaster   = Module(new SnMaster(IdL1.LOCALMAS, djparam.localSnMasterIntf))
     val csnRnSlaveOpt   = if (hasCSNIntf) Some(Module(new RnSlave(IdL1.CSNSLV, djparam.csnRnSlaveIntf.get))) else None
     val csnRnMasterOpt  = if (hasCSNIntf) Some(Module(new RnMaster(IdL1.CSNMAS, djparam.csnRnMasterIntf.get))) else None
