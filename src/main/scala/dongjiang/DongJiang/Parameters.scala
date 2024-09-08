@@ -199,7 +199,7 @@ trait HasDJParam {
     // TODO
 
     // TIMEOUT CHECK CNT VALUE
-    val TIMEOUT_PCU     = 10000 // PCU
+    val TIMEOUT_PCU     = 5000 // PCU
     val TIMEOUT_RB      = 10000 // ReqBuf
     val TIMEOUT_DB      = 8000  // DataBuffer
     val TIMEOUT_BT      = 8000  // BlockTable

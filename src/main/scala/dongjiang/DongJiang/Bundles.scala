@@ -36,6 +36,7 @@ class IDBundle(implicit p: Parameters) extends DJBundle {
 
     def mshrWay  = idL2
     def reqBufId = idL2
+    def pcuId    = idL2
 
     def isSLICE  = idL0 === IdL0.SLICE.U
     def isINTF   = idL0 === IdL0.INTF.U
@@ -135,6 +136,8 @@ trait HasReq2NodeBundle extends DJBundle with HasAddr with HasMSHRWay { this: Bu
     // CHI Mes (Use in RnMaster)
     val resp        = UInt(ChiResp.width.W) // Use in write back
     val expCompAck  = Bool()
+    // Replace (Use In SnMaster)
+    val replace     = Bool()
 }
 
 class Req2NodeBundleWitoutXbarId(implicit p: Parameters) extends DJBundle with HasReq2NodeBundle

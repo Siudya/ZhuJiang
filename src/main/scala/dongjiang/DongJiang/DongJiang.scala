@@ -49,11 +49,10 @@ class DongJiang()(implicit p: Parameters) extends DJModule {
 
 /*
  * How To Detemine A Req( Read / Dataless / Atomic / CMO / Write ) Go To Which Master( RNMASTER / SNMASTER ):
- * 1. Use Address Id Bits
+ * 1. Use CoreID
  *
- * How To Detemine A Req( Read / Dataless / Atomic / CMO / Write ) Go To Which HN/SN Node:
- * 1. It is only one HN(expect DongJiang) in CSN, its tgtId always be 0
- * 2. Its DCU tgtId is same as bankId in Local Ring; The DDR tgtId is the max value of tgtId
+ * How To Detemine A Req( Read / Dataless / Atomic / CMO / Write ) Go To HN(In CSN) or SN(In LocalRing) Node:
+ * 1. Use CoreID
  *
  * How To Detemine A Snoop Go To Which Slave:
  * 1. It will be detemine by SF Result; It may be possible to send Snoop to Slave more than one
@@ -240,7 +239,7 @@ class DongJiang()(implicit p: Parameters) extends DJModule {
 // ------------------------------------------ Modules declaration ----------------------------------------------//
 
     val localRnSlave    = Module(new RnSlavePCU(IdL1.LOCALSLV, djparam.localRnSlaveIntf))
-    val localSnMaster   = Module(new SnMaster(IdL1.LOCALMAS, djparam.localSnMasterIntf))
+    val localSnMaster   = Module(new SnMasterPCU(IdL1.LOCALMAS, djparam.localSnMasterIntf))
     val csnRnSlaveOpt   = if (hasCSNIntf) Some(Module(new RnSlave(IdL1.CSNSLV, djparam.csnRnSlaveIntf.get))) else None
     val csnRnMasterOpt  = if (hasCSNIntf) Some(Module(new RnMaster(IdL1.CSNMAS, djparam.csnRnMasterIntf.get))) else None
     val intfs           = if (hasCSNIntf) Seq(localRnSlave, localSnMaster, csnRnSlaveOpt.get, csnRnMasterOpt.get)

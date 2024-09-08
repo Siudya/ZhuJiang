@@ -13,9 +13,9 @@ import xs.utils._
 
 /*
  * Req Retry:             [Free]  -----> [Req2Slice] -----> [WaitSliceResp] --retry--> [Req2Slice]
- * Req:                   [Free]  -----> [Req2Slice] -----> [WaitSliceResp] ----->     [Resp2Node] -----> [WaitCompAck] -----> [UpdMSHR]
- * Req Nest By Snp case:            ^                      ^
- *                             waitSnpDone            WaitSnpDone
+ * Req:                   [Free]  -----> [Req2Slice] -----> [WaitSliceResp] -----> [RCDB] -----> [Resp2Node] -----> [WaitCompAck] -----> [Resp2Slice]
+ * Req Nest By Snp case:            ^                  ^
+ *                             waitSnpDone        WaitSnpDone
  *
  *
  * Write Retry:           [Free]  -----> [GetDBID] -----> [WaitDBID] -----> [DBIDResp2Node] -----> [WaitData] -----> [Req2Slice] -----> [WaitSliceResp] --retry--> [Req2Slice]
@@ -47,11 +47,11 @@ object PCUState {
   val width = 4
   // commom
   val Free            = "b0000".U
-  val Req2Slice       = "b0010".U
-  val WaitSliceResp   = "b0011".U
+  val Req2Slice       = "b0001".U
+  val WaitSliceResp   = "b0010".U
+  val RCDB            = "b0011".U // Read & Clean DataBuffer
   val Resp2Node       = "b0100".U
   val WaitCompAck     = "b0101".U
-  val UpdMSHR         = "b0110".U
   val GetDBID         = "b0111".U
   val WaitDBID        = "b1000".U
   val DBIDResp2Node   = "b1001".U
@@ -88,14 +88,13 @@ class RnSlavePCU(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) ex
 // --------------------- Reg and Wire declaration ------------------------//
   val pcus          = RegInit(VecInit(Seq.fill(param.nrPCUEntry) { 0.U.asTypeOf(new PCUEntry(param)) }))
   // PCU Receive Req ID
-  val pcuGetReq     = Wire(Bool())
   val pcuGetReqID   = Wire(UInt(param.pcuIdBits.W))
   // PCU Send Req To Slice
   val pcuSendReqID  = Wire(UInt(param.pcuIdBits.W))
   // req from slice or txreq
-  val reqAddr       = Wire(UInt(PCUState.width.W))
   val req2Node      = WireInit(0.U.asTypeOf(pcus(0).reqMes))
   val reqFTxReq     = WireInit(0.U.asTypeOf(pcus(0).reqMes))
+  val addrSaveInPCU = Wire(UInt(addressBits.W))
   val reqSaveInPCU  = WireInit(0.U.asTypeOf(pcus(0).reqMes))
 
 
@@ -113,13 +112,13 @@ class RnSlavePCU(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) ex
           val reqHit    = io.chi.txreq.fire & !isWriteX(io.chi.txreq.bits.Opcode) & pcuGetReqID === i.U
           val snpHit    = io.req2Node.fire & pcuGetReqID === i.U
           val writeHit  = io.chi.txreq.fire & isWriteX(io.chi.txreq.bits.Opcode) & pcuGetReqID === i.U
-          pcu.state     := Mux(reqHit, PCUState.Free,
+          pcu.state     := Mux(reqHit, PCUState.Req2Slice,
                             Mux(snpHit, PCUState.Snp2Node,
                               Mux(writeHit, PCUState.GetDBID, pcu.state)))
         }
         // State: Req2Slice
         is(PCUState.Req2Slice) {
-          val hit = io.req2Slice.fire & pcuSendReqID === i.U
+          val hit   = io.req2Slice.fire & pcuSendReqID === i.U
           pcu.state := Mux(hit, PCUState.WaitSliceResp, pcu.state)
         }
       }
@@ -134,8 +133,10 @@ class RnSlavePCU(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) ex
       /*
        * Receive New Req
        */
-      when(pcuGetReq & pcuGetReqID === i.U) {
-        pcu.reqMes := reqSaveInPCU
+      when((io.chi.txreq.fire | io.req2Node.fire) & pcuGetReqID === i.U) {
+        pcu.addr    := addrSaveInPCU
+        pcu.reqMes  := reqSaveInPCU
+        assert(pcu.state === PCUState.Free)
       }
   }
 
@@ -147,8 +148,9 @@ class RnSlavePCU(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) ex
   /*
    * Receive req2Node(Snoop)
    */
-  reqAddr             := io.req2Node.bits.addr
   req2Node.opcode     := io.req2Node.bits.opcode
+  req2Node.mshrWay    := io.req2Node.bits.mshrWay
+  req2Node.useEvict   := io.req2Node.bits.useEvict
   req2Node.from       := io.req2Node.bits.from
   req2Node.tgtId      := io.req2Node.bits.tgtId
   req2Node.txnId      := io.req2Node.bits.txnId
@@ -159,7 +161,6 @@ class RnSlavePCU(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) ex
   /*
    * Receive CHITXREQ(Read / Dataless / Atomic / CMO)
    */
-  reqAddr             := io.chi.txreq.bits.Addr
   reqFTxReq.opcode    := io.chi.txreq.bits.Opcode
   reqFTxReq.from.idL0 := IdL0.INTF.U
   reqFTxReq.txnId     := io.chi.txreq.bits.TxnID
@@ -171,7 +172,7 @@ class RnSlavePCU(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) ex
   val pcuFreeVec      = pcus.map(_.isFree)
   val pcuFreeNum      = PopCount(pcuFreeVec)
   pcuGetReqID         := PriorityEncoder(pcuFreeVec)
-  pcuGetReq           := (io.req2Node.valid & pcuFreeNum > 0.U) | (io.chi.txreq.valid & pcuFreeNum >= 1.U)
+  addrSaveInPCU       := Mux(io.req2Node.valid, io.req2Node.bits.addr, io.chi.txreq.bits.Addr)
   reqSaveInPCU        := Mux(io.req2Node.valid, req2Node, reqFTxReq)
 
   /*
@@ -224,5 +225,5 @@ class RnSlavePCU(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) ex
 // ---------------------------  Assertion  --------------------------------//
   val cntReg = RegInit(VecInit(Seq.fill(param.nrPCUEntry) { 0.U(64.W) }))
   cntReg.zip(pcus).foreach { case(c, p) => c := Mux(p.isFree, 0.U, c + 1.U) }
-  cntReg.zipWithIndex.foreach { case(c, i) => assert(c < TIMEOUT_RB.U, "RNSLV PCU[0x%x] ADDR[0x%x] OP[0x%x] FROM[0x%x] TIMEOUT", i.U, pcus(i).addr, pcus(i).reqMes.opcode, pcus(i).reqMes.from.idL0) }
+  cntReg.zipWithIndex.foreach { case(c, i) => assert(c < TIMEOUT_PCU.U, "RNSLV PCU[0x%x] ADDR[0x%x] OP[0x%x] FROM[0x%x] TIMEOUT", i.U, pcus(i).addr, pcus(i).reqMes.opcode, pcus(i).reqMes.from.idL0) }
 }
