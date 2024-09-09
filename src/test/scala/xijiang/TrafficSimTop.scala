@@ -14,19 +14,19 @@ import scala.annotation.tailrec
 class TfsTopConfig extends Config((site, here, up) => {
   case ZJParametersKey => ZJParameters(
     localNodeParams = Seq(
+      NodeParam(nodeType = NodeType.R, splitFlit = true),
       NodeParam(nodeType = NodeType.R),
-      NodeParam(nodeType = NodeType.R),
-      NodeParam(nodeType = NodeType.HF),
+      NodeParam(nodeType = NodeType.HF, splitFlit = true),
       NodeParam(nodeType = NodeType.S),
       NodeParam(nodeType = NodeType.R),
       NodeParam(nodeType = NodeType.R),
       NodeParam(nodeType = NodeType.HF),
       NodeParam(nodeType = NodeType.HI),
-      NodeParam(nodeType = NodeType.S),
+      NodeParam(nodeType = NodeType.S, splitFlit = true),
     ),
     csnNodeParams = Seq(
       NodeParam(nodeType = NodeType.R),
-      NodeParam(nodeType = NodeType.HF),
+      NodeParam(nodeType = NodeType.HF, splitFlit = true),
       NodeParam(nodeType = NodeType.C),
       NodeParam(nodeType = NodeType.P),
     ),

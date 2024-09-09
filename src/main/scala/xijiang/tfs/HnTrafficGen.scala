@@ -2,14 +2,15 @@ package xijiang.tfs
 
 import chisel3._
 import org.chipsalliance.cde.config.Parameters
-import xijiang.router.{HnTx, HnRx}
+import xijiang.Node
+import xijiang.router.{HnRx, HnTx}
 import zhujiang.chi.ChannelEncodings
 import zhujiang.ZJModule
 
-class HnTrafficGen(local: Boolean)(implicit p: Parameters) extends ZJModule {
+class HnTrafficGen(local: Boolean, node: Node)(implicit p: Parameters) extends ZJModule {
   val io = IO(new Bundle {
-    val rx = Flipped(new HnTx)
-    val tx = Flipped(new HnRx(local))
+    val rx = Flipped(new HnTx(node))
+    val tx = Flipped(new HnRx(local, node))
     val nodeId = Input(UInt(niw.W))
   })
   private val respTxGen = Module(new TrafficSimTx)

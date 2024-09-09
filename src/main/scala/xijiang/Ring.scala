@@ -1,6 +1,7 @@
 package xijiang
 
 import chisel3._
+import chisel3.util._
 import org.chipsalliance.cde.config.Parameters
 import xijiang.c2c.{C2cLinkPort, C2cPackLayer}
 import xijiang.router._
@@ -9,17 +10,17 @@ import xijiang.tfs._
 
 class RingIO(local: Boolean)(implicit p: Parameters) extends ZJBundle {
   private val ring = if(local) p(ZJParametersKey).localRing else p(ZJParametersKey).csnRing
-  private val rnNum = ring.count(_.nodeType == NodeType.R)
-  private val hfNum = ring.count(_.nodeType == NodeType.HF)
-  private val hiNum = ring.count(_.nodeType == NodeType.HI)
-  private val c2cNum = ring.count(_.nodeType == NodeType.C)
-  private val snNum = ring.count(_.nodeType == NodeType.S)
-  val rn = Vec(rnNum, new RnIcn)
-  val hnf = Vec(hfNum, new HnIcn(local))
-  val hni = Vec(hiNum, new HnIcn(local))
-  val c2c = Vec(c2cNum, new C2cLinkPort)
+  private val rns = ring.filter(_.nodeType == NodeType.R)
+  private val hfs = ring.filter(_.nodeType == NodeType.HF)
+  private val his = ring.filter(_.nodeType == NodeType.HI)
+  private val c2cs = ring.filter(_.nodeType == NodeType.C)
+  private val sns = ring.filter(_.nodeType == NodeType.S)
+  val rn = MixedVec(rns.map(r => new RnIcn(r)))
+  val hnf = MixedVec(hfs.map(h => new HnIcn(local, h)))
+  val hni = MixedVec(his.map(h => new HnIcn(local, h)))
+  val c2c = MixedVec(c2cs.map(c => new CnIcn(c)))
+  val sn = MixedVec(sns.map(s => new SnIcn(s)))
   val chip = Input(UInt(chipAddrBits.W))
-  val sn = Vec(snNum, new SnIcn)
 }
 
 class TfsIO(local: Boolean)(implicit p: Parameters) extends ZJBundle {
@@ -57,10 +58,10 @@ class Ring(local: Boolean)(implicit p: Parameters) extends ZJModule {
   private val c2cs = routersAndNodes.filter(_._2.nodeType == NodeType.C)
   private val sns = routersAndNodes.filter(_._2.nodeType == NodeType.S)
 
-  rns.zipWithIndex.foreach({ case ((r, _), idx) =>
+  rns.zipWithIndex.foreach({ case ((r, n), idx) =>
     val rn = r.asInstanceOf[RequestRouter]
     if(tfs) {
-      val m = Module(new RnTrafficGen)
+      val m = Module(new RnTrafficGen(n))
       m.io.rx <> rn.icn.tx
       rn.icn.rx <> m.io.tx
       m.io.nodeId := rn.router.nodeId
@@ -70,10 +71,10 @@ class Ring(local: Boolean)(implicit p: Parameters) extends ZJModule {
     }
   })
 
-  hnfs.zipWithIndex.foreach({ case ((r, _), idx) =>
+  hnfs.zipWithIndex.foreach({ case ((r, n), idx) =>
     val hnf = r.asInstanceOf[HomeRouter]
     if(tfs) {
-      val m = Module(new HnTrafficGen(local))
+      val m = Module(new HnTrafficGen(local, n))
       m.io.rx <> hnf.icn.tx
       hnf.icn.rx <> m.io.tx
       m.io.nodeId := hnf.router.nodeId
@@ -83,10 +84,10 @@ class Ring(local: Boolean)(implicit p: Parameters) extends ZJModule {
     }
   })
 
-  hnis.zipWithIndex.foreach({ case ((r, _), idx) =>
+  hnis.zipWithIndex.foreach({ case ((r, n), idx) =>
     val hni = r.asInstanceOf[HomeRouter]
     if(tfs) {
-      val m = Module(new HnTrafficGen(local))
+      val m = Module(new HnTrafficGen(local, n))
       m.io.rx <> hni.icn.tx
       hni.icn.rx <> m.io.tx
       m.io.nodeId := hni.router.nodeId
@@ -96,17 +97,17 @@ class Ring(local: Boolean)(implicit p: Parameters) extends ZJModule {
     }
   })
 
-  c2cs.zipWithIndex.foreach({ case ((r, _), idx) =>
+  c2cs.zipWithIndex.foreach({ case ((r, n), idx) =>
     val cn = r.asInstanceOf[ChipToChipRouter]
     if(tfs) {
-      val m = Module(new CnTrafficGen)
+      val m = Module(new CnTrafficGen(n))
       m.io.rx <> cn.icn.tx
       cn.icn.rx <> m.io.tx
       cn.router.chip := tfsio.get.remoteChip(idx)
       m.io.nodeId := cn.router.nodeId
       m.suggestName(s"cnTxGen_$idx")
     } else {
-      val c2cPacker = Module(new C2cPackLayer)
+      val c2cPacker = Module(new C2cPackLayer(n))
       c2cPacker.io.ring.rx <> cn.icn.tx
       cn.icn.rx <> c2cPacker.io.ring.tx
       cn.router.chip := c2cPacker.io.ring.chip
@@ -115,10 +116,10 @@ class Ring(local: Boolean)(implicit p: Parameters) extends ZJModule {
     }
   })
 
-  sns.zipWithIndex.foreach({ case ((r, _), idx) =>
+  sns.zipWithIndex.foreach({ case ((r, n), idx) =>
     val sn = r.asInstanceOf[SubordinateRouter]
     if(tfs) {
-      val m = Module(new SnTrafficGen)
+      val m = Module(new SnTrafficGen(n))
       m.io.rx <> sn.icn.tx
       sn.icn.rx <> m.io.tx
       m.io.nodeId := sn.router.nodeId
