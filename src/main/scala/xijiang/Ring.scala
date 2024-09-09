@@ -16,8 +16,8 @@ class RingIO(local: Boolean)(implicit p: Parameters) extends ZJBundle {
   private val c2cs = ring.filter(_.nodeType == NodeType.C)
   private val sns = ring.filter(_.nodeType == NodeType.S)
   val rn = MixedVec(rns.map(r => new RnIcn(r)))
-  val hnf = MixedVec(hfs.map(h => new HnIcn(local, h)))
-  val hni = MixedVec(his.map(h => new HnIcn(local, h)))
+  val hnf = MixedVec(hfs.map(h => new HnfIcn(local, h)))
+  val hni = MixedVec(his.map(h => new HniIcn(local, h)))
   val c2c = MixedVec(c2cs.map(c => new CnIcn(c)))
   val sn = MixedVec(sns.map(s => new SnIcn(s)))
   val chip = Input(UInt(chipAddrBits.W))
@@ -72,9 +72,9 @@ class Ring(local: Boolean)(implicit p: Parameters) extends ZJModule {
   })
 
   hnfs.zipWithIndex.foreach({ case ((r, n), idx) =>
-    val hnf = r.asInstanceOf[HomeRouter]
+    val hnf = r.asInstanceOf[HomeFullRouter]
     if(tfs) {
-      val m = Module(new HnTrafficGen(local, n))
+      val m = Module(new HnfTrafficGen(local, n))
       m.io.rx <> hnf.icn.tx
       hnf.icn.rx <> m.io.tx
       m.io.nodeId := hnf.router.nodeId
@@ -85,9 +85,9 @@ class Ring(local: Boolean)(implicit p: Parameters) extends ZJModule {
   })
 
   hnis.zipWithIndex.foreach({ case ((r, n), idx) =>
-    val hni = r.asInstanceOf[HomeRouter]
+    val hni = r.asInstanceOf[HomeIoRouter]
     if(tfs) {
-      val m = Module(new HnTrafficGen(local, n))
+      val m = Module(new HniTrafficGen(local, n))
       m.io.rx <> hni.icn.tx
       hni.icn.rx <> m.io.tx
       m.io.nodeId := hni.router.nodeId
