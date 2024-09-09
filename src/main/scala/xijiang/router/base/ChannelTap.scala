@@ -7,13 +7,13 @@ import zhujiang.{ZJModule, ZJParametersKey}
 import zhujiang.chi.Flit
 
 class SingleChannelTap[T <: Flit](gen: T, channel: String, c2c: Boolean)(implicit p: Parameters) extends ZJModule {
-  private val fw = gen.getWidth
+
   private val timerBits = p(ZJParametersKey).injectRsvdTimerShift
   val io = IO(new Bundle {
     val in = Input(new ChannelBundle(gen))
     val out = Output(new ChannelBundle(gen))
-    val inject = Flipped(Decoupled(UInt(fw.W)))
-    val eject = Decoupled(UInt(fw.W))
+    val inject = Flipped(Decoupled(gen))
+    val eject = Decoupled(gen)
     val nid = Input(UInt(niw.W))
   })
   private val modName = if(c2c) {
@@ -31,7 +31,7 @@ class SingleChannelTap[T <: Flit](gen: T, channel: String, c2c: Boolean)(implici
   private val s_wait_slot = (1 << waitSlotShift).U(3.W)
   private val state = RegInit(s_normal)
   private val counter = RegInit(0.U(timerBits.W))
-  private val flitNext = Wire(Valid(UInt(fw.W)))
+  private val flitNext = Wire(Valid(gen))
   private val rsvdNext = Wire(Valid(UInt(niw.W)))
   private val injectFire = io.inject.fire
   private val ejectFire = io.eject.fire
@@ -64,10 +64,10 @@ class SingleChannelTap[T <: Flit](gen: T, channel: String, c2c: Boolean)(implici
   dontTouch(availableSlot)
   io.inject.ready := emptySlot && availableSlot
 
-  private val injectFlit = WireInit(io.inject.bits.asTypeOf(gen))
+  private val injectFlit = WireInit(io.inject.bits)
   if(!c2c) injectFlit.src := io.nid
   flitNext.valid := injectFire || io.in.flit.valid && !ejectFire
-  flitNext.bits := Mux(injectFire, injectFlit.asUInt, io.in.flit.bits)
+  flitNext.bits := Mux(injectFire, injectFlit, io.in.flit.bits)
 
   rsvdNext.valid := (state(injectRsvdShift) || io.in.rsvd.valid) && !injectFire
   rsvdNext.bits := Mux(state(injectRsvdShift) && !io.in.rsvd.valid, io.nid, io.in.rsvd.bits)
@@ -76,9 +76,9 @@ class SingleChannelTap[T <: Flit](gen: T, channel: String, c2c: Boolean)(implici
   io.out.rsvd := Pipe(rsvdNext)
 
   if(c2c) {
-    io.eject.valid := Flit.getTgt(io.in.flit.bits)(p)(nodeNidBits - 1, 0) === io.nid(nodeNidBits - 1, 0) && io.in.flit.valid
+    io.eject.valid := io.in.flit.bits.tgt(nodeNidBits - 1, 0) === io.nid(nodeNidBits - 1, 0) && io.in.flit.valid
   } else {
-    io.eject.valid := Flit.getTgt(io.in.flit.bits)(p) === io.nid && io.in.flit.valid
+    io.eject.valid := io.in.flit.bits.tgt === io.nid && io.in.flit.valid
   }
   io.eject.bits := io.in.flit.bits
 }
@@ -87,12 +87,11 @@ class ChannelTap[T <: Flit](
   val gen: T, channel: String, ringNum: Int,
   ejectBuf: Int = 0, c2c: Boolean = false
 )(implicit p: Parameters) extends ZJModule {
-  private val fw = gen.getWidth
   val io = IO(new Bundle {
     val rx = Input(Vec(ringNum, new ChannelBundle(gen)))
     val tx = Output(Vec(ringNum, new ChannelBundle(gen)))
-    val inject = Flipped(Decoupled(UInt(fw.W)))
-    val eject = Decoupled(UInt(fw.W))
+    val inject = Flipped(Decoupled(gen))
+    val eject = Decoupled(gen)
     val nid = Input(UInt(niw.W))
     val injectTapSelOH = Input(Vec(ringNum, Bool()))
   })
@@ -103,7 +102,7 @@ class ChannelTap[T <: Flit](
   }
 
   private val taps = Seq.fill(ringNum)(Module(new SingleChannelTap(gen, channel, c2c)))
-  private val ejectArb = Module(new RRArbiter(UInt(gen.getWidth.W), ringNum))
+  private val ejectArb = Module(new RRArbiter(gen, ringNum))
   for(idx <- taps.indices) {
     taps(idx).io.in := io.rx(idx)
     io.tx(idx) := taps(idx).io.out

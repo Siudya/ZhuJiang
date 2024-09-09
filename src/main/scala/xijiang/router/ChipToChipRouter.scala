@@ -6,36 +6,37 @@ import org.chipsalliance.cde.config.Parameters
 import xijiang.{Node, NodeType}
 import zhujiang.ZJBundle
 import xijiang.router.base.BaseRouter
+import zhujiang.chi._
 
-class CnTx(implicit p: Parameters) extends ZJBundle {
-  val req = Decoupled(UInt(reqFlitBits.W))
-  val resp = Decoupled(UInt(respFlitBits.W))
-  val data = Decoupled(UInt(dataFlitBits.W))
-  val snoop = Decoupled(UInt(snoopFlitBits.W))
+class CnTx(node: Node)(implicit p: Parameters) extends ZJBundle {
+  val req = if(node.splitFlit) Decoupled(new ReqFlit) else Decoupled(UInt(reqFlitBits.W))
+  val resp = if(node.splitFlit) Decoupled(new RespFlit) else Decoupled(UInt(respFlitBits.W))
+  val data = if(node.splitFlit) Decoupled(new DataFlit) else Decoupled(UInt(dataFlitBits.W))
+  val snoop = if(node.splitFlit) Decoupled(new SnoopFlit) else Decoupled(UInt(snoopFlitBits.W))
 }
 
-class CnRx(implicit p: Parameters) extends ZJBundle {
-  val req = Flipped(Decoupled(UInt(reqFlitBits.W)))
-  val resp = Flipped(Decoupled(UInt(respFlitBits.W)))
-  val data = Flipped(Decoupled(UInt(dataFlitBits.W)))
-  val snoop = Flipped(Decoupled(UInt(snoopFlitBits.W)))
+class CnRx(node: Node)(implicit p: Parameters) extends ZJBundle {
+  val req = if(node.splitFlit) Flipped(Decoupled(new ReqFlit)) else Flipped(Decoupled(UInt(reqFlitBits.W)))
+  val resp = if(node.splitFlit) Flipped(Decoupled(new RespFlit)) else Flipped(Decoupled(UInt(respFlitBits.W)))
+  val data = if(node.splitFlit) Flipped(Decoupled(new DataFlit)) else Flipped(Decoupled(UInt(dataFlitBits.W)))
+  val snoop = if(node.splitFlit) Flipped(Decoupled(new SnoopFlit)) else Flipped(Decoupled(UInt(snoopFlitBits.W)))
 }
 
-class CnIcn(implicit p: Parameters) extends ZJBundle {
-  val tx = new CnTx
-  val rx = new CnRx
+class CnIcn(node: Node)(implicit p: Parameters) extends ZJBundle {
+  val tx = new CnTx(node)
+  val rx = new CnRx(node)
 }
 
 class ChipToChipRouter(node: Node)(implicit p: Parameters) extends BaseRouter(node,
   Seq("RSP", "DAT", "SNP", "REQ"), Seq("RSP", "DAT", "SNP", "REQ")) {
-  val icn = IO(new CnIcn)
+  val icn = IO(new CnIcn(node))
   require(node.csnNode && node.nodeType == NodeType.C)
-  icn.tx.req <> ejectMap("REQ")
-  icn.tx.resp <> ejectMap("RSP")
-  icn.tx.data <> ejectMap("DAT")
-  icn.tx.snoop <> ejectMap("SNP")
-  injectMap("REQ") <> icn.rx.req
-  injectMap("RSP") <> icn.rx.resp
-  injectMap("DAT") <> icn.rx.data
-  injectMap("SNP") <> icn.rx.snoop
+  connEject(icn.tx.req, "REQ")
+  connEject(icn.tx.resp, "RSP")
+  connEject(icn.tx.data, "DAT")
+  connEject(icn.tx.snoop, "SNP")
+  connInject(icn.rx.req, "REQ")
+  connInject(icn.rx.resp, "RSP")
+  connInject(icn.rx.data, "DAT")
+  connInject(icn.rx.snoop, "SNP")
 }

@@ -20,7 +20,8 @@ object NodeType {
 
 case class NodeParam(
   name: String = "",
-  nodeType: Int = NodeType.R
+  nodeType: Int = NodeType.R,
+  splitFlit: Boolean = false
 )
 
 case class Node(
@@ -30,7 +31,8 @@ case class Node(
   nodeNetBits: Int = 1,
   nodeNidBits: Int = 4,
   ringSize: Int = 3,
-  oddNode: Boolean = false
+  oddNode: Boolean = false,
+  splitFlit: Boolean = false
 ) {
   var nid: Int = 0
   var left: Node = null

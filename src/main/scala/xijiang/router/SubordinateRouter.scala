@@ -6,30 +6,31 @@ import org.chipsalliance.cde.config.Parameters
 import xijiang.router.base.BaseRouter
 import xijiang.{Node, NodeType}
 import zhujiang.ZJBundle
+import zhujiang.chi._
 
-class SnTx(implicit p: Parameters) extends ZJBundle {
-  val req = Decoupled(UInt(reqFlitBits.W))
-  val data = Decoupled(UInt(dataFlitBits.W))
+class SnTx(node: Node)(implicit p: Parameters) extends ZJBundle {
+  val ereq = if(node.splitFlit) Decoupled(new ReqFlit) else Decoupled(UInt(reqFlitBits.W))
+  val data = if(node.splitFlit) Decoupled(new DataFlit) else Decoupled(UInt(dataFlitBits.W))
 }
 
-class SnRx(implicit p: Parameters) extends ZJBundle {
-  val resp = Flipped(Decoupled(UInt(respFlitBits.W)))
-  val data = Flipped(Decoupled(UInt(dataFlitBits.W)))
+class SnRx(node: Node)(implicit p: Parameters) extends ZJBundle {
+  val resp = if(node.splitFlit) Flipped(Decoupled(new RespFlit)) else Flipped(Decoupled(UInt(respFlitBits.W)))
+  val data = if(node.splitFlit) Flipped(Decoupled(new DataFlit)) else Flipped(Decoupled(UInt(dataFlitBits.W)))
 }
 
-class SnIcn(implicit p: Parameters) extends ZJBundle {
-  val tx = new SnTx
-  val rx = new SnRx
+class SnIcn(node: Node)(implicit p: Parameters) extends ZJBundle {
+  val tx = new SnTx(node)
+  val rx = new SnRx(node)
 }
 
 class SubordinateRouter(node: Node)(implicit p: Parameters) extends BaseRouter(node,
   Seq("ERQ", "DAT"), Seq("RSP", "DAT")) {
-  val icn = IO(new SnIcn)
+  val icn = IO(new SnIcn(node))
 
-  injectMap("RSP") <> icn.rx.resp
-  injectMap("DAT") <> icn.rx.data
-  icn.tx.req <> ejectMap("ERQ")
-  icn.tx.data <> ejectMap("DAT")
+  connEject(icn.tx.ereq, "ERQ")
+  connEject(icn.tx.data, "DAT")
+  connInject(icn.rx.resp, "RSP")
+  connInject(icn.rx.data, "DAT")
 
   if(!node.csnNode) {
     print(

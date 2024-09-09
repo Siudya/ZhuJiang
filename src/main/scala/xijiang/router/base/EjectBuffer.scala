@@ -10,11 +10,11 @@ import zhujiang.chi.Flit
 class EjectBuffer[T <: Flit](gen: T, size: Int, chn: String)(implicit p: Parameters) extends ZJModule {
   private val tagBits = 12 + 2 * niw // TgtId + SrcId + TxnId
   val io = IO(new Bundle {
-    val enq = Flipped(Decoupled(UInt(gen.getWidth.W)))
-    val deq = Decoupled(UInt(gen.getWidth.W))
+    val enq = Flipped(Decoupled(gen))
+    val deq = Decoupled(gen)
   })
   override val desiredName = s"EjectBuffer$chn"
-  private val queue = Module(new Queue(UInt(gen.getWidth.W), size, pipe = true))
+  private val queue = Module(new Queue(gen, size, pipe = true))
   private val rsvdTags = Reg(Vec(size, UInt(tagBits.W)))
   private val rsvdValids = RegInit(VecInit(Seq.fill(size)(false.B)))
   private val empties = RegInit(size.U(log2Ceil(size + 1).W))
@@ -31,7 +31,7 @@ class EjectBuffer[T <: Flit](gen: T, size: Int, chn: String)(implicit p: Paramet
     assert(queue.io.enq.ready)
   }
 
-  private def getTag(flit: UInt): UInt = flit(tagBits + 3, 4)
+  private def getTag(flit: Flit): UInt = Cat(flit.txn, flit.src, flit.tgt)
 
   io.deq <> queue.io.deq
   private val rsvdSel = PickOneLow(rsvdValids)
