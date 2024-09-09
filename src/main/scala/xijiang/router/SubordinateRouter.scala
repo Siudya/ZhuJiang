@@ -9,7 +9,7 @@ import zhujiang.ZJBundle
 import zhujiang.chi._
 
 class SnTx(node: Node)(implicit p: Parameters) extends ZJBundle {
-  val ereq = if(node.splitFlit) Decoupled(new ReqFlit) else Decoupled(UInt(reqFlitBits.W))
+  val req = if(node.splitFlit) Decoupled(new ReqFlit) else Decoupled(UInt(reqFlitBits.W))
   val data = if(node.splitFlit) Decoupled(new DataFlit) else Decoupled(UInt(dataFlitBits.W))
 }
 
@@ -27,7 +27,7 @@ class SubordinateRouter(node: Node)(implicit p: Parameters) extends BaseRouter(n
   Seq("ERQ", "DAT"), Seq("RSP", "DAT")) {
   val icn = IO(new SnIcn(node))
 
-  connEject(icn.tx.ereq, "ERQ")
+  connEject(icn.tx.req, "ERQ")
   connEject(icn.tx.data, "DAT")
   connInject(icn.rx.resp, "RSP")
   connInject(icn.rx.data, "DAT")

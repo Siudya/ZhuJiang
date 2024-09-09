@@ -23,5 +23,5 @@ class SnTrafficGen(node: Node)(implicit p: Parameters) extends ZJModule {
   TrafficSimTx.connTfsTx(dataTxGen, io.tx.data, io.nodeId, ChannelEncodings.DAT.U, clock, reset)
 
   TrafficSimRx.connTfsRx(dataRxGen, io.rx.data, io.nodeId, ChannelEncodings.DAT.U, clock, reset)
-  TrafficSimRx.connTfsRx(reqRxGen, io.rx.ereq, io.nodeId, ChannelEncodings.ERQ.U, clock, reset)
+  TrafficSimRx.connTfsRx(reqRxGen, io.rx.req, io.nodeId, ChannelEncodings.ERQ.U, clock, reset)
 }
