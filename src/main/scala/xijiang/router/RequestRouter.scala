@@ -6,7 +6,7 @@ import org.chipsalliance.cde.config.Parameters
 import xijiang.{Node, NodeType}
 import zhujiang.{ZJBundle, ZJParametersKey}
 import zhujiang.chi._
-import xijiang.router.base.BaseRouter
+import xijiang.router.base.{BaseIcnBundle, BaseRouter}
 
 class RnTx(node: Node)(implicit p: Parameters) extends ZJBundle {
   val resp = if(node.splitFlit) Decoupled(new RespFlit) else Decoupled(UInt(respFlitBits.W))
@@ -20,7 +20,7 @@ class RnRx(node: Node)(implicit p: Parameters) extends ZJBundle {
   val data = if(node.splitFlit) Flipped(Decoupled(new DataFlit)) else Flipped(Decoupled(UInt(dataFlitBits.W)))
 }
 
-class RnIcn(node: Node)(implicit p: Parameters) extends ZJBundle {
+class RnIcn(node: Node)(implicit p: Parameters) extends BaseIcnBundle(node) {
   val tx = new RnTx(node)
   val rx = new RnRx(node)
 }

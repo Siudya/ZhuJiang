@@ -10,6 +10,8 @@ import zhujiang.{ZJBundle, ZJModule, ZJParametersKey}
 
 import scala.collection.mutable
 
+class BaseIcnBundle(val node: Node)(implicit p: Parameters) extends ZJBundle
+
 class ChannelBundle[T <: Flit](gen: T)(implicit p: Parameters) extends ZJBundle {
   val flit = Valid(gen)
   val rsvd = Valid(UInt(niw.W))

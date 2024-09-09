@@ -38,7 +38,7 @@ class FlitMonitor()(implicit val p: Parameters) extends BlackBox with HasBlackBo
        |    input  bit \t\t\t\t\tinject,
        |    input  byte \t\t\t\tflit_type,
        |    input  bit [${maxFlitBits - 1}:0] \tflit,
-       |    output bit \t\t\t\t\tfault
+       |    output reg \t\t\t\t\tfault
        |  );
        |  wire [15:0] nid;
        |  assign nid = {${16 - niw}'h0, nodeId};
