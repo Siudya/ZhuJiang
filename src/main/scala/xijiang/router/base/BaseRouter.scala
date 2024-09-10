@@ -30,34 +30,48 @@ class RouterRingIO(csn: Boolean)(implicit p: Parameters) extends ZJBundle {
   val rx = Input(new RingSide(csn))
 }
 
-class BaseRouter(val node: Node, ejects: Seq[String], injects: Seq[String])(implicit p: Parameters) extends ZJModule {
+trait BaseRouterUtils {
+  m: ZJModule =>
+  def node: Node
+  def injects: Seq[String]
+  def ejects: Seq[String]
+
+  val local = !node.csnNode
   val ringNum = if(node.csnNode) 1 else 2
-  private val local = !node.csnNode
+  val c2c = node.csnNode && node.nodeType == NodeType.C
+
   val router = IO(new Bundle {
     val rings = Vec(ringNum, new RouterRingIO(local))
     val chip = Input(UInt(p(ZJParametersKey).chipAddrBits.W))
     val nodeId = Output(UInt(niw.W))
   })
 
-  private val c2c = node.csnNode && node.nodeType == NodeType.C
-  private val nid = if(node.csnNode) {
+  val nid = if(node.csnNode) {
     genNodeId(1.U(1.W), (node.nodeType % 4).U(nodeTypeBits.W), router.chip)
   } else {
     node.nodeId.U(niw.W)
   }
-  router.nodeId := nid
-  private val ejectReqBuf = p(ZJParametersKey).reqEjectBufDepth
-  private val ejectSnoopBuf = p(ZJParametersKey).snoopEjectBufDepth
 
-  private val reqTap = if((injects ++ ejects).contains("REQ")) Some(Module(new ChannelTap(new ReqFlit, "REQ", ringNum, ejectReqBuf, c2c = c2c))) else None
-  private val respTap = if((injects ++ ejects).contains("RSP")) Some(Module(new ChannelTap(new RespFlit, "RSP", ringNum, 0, c2c))) else None
-  private val dataTap = if((injects ++ ejects).contains("DAT")) Some(Module(new ChannelTap(new DataFlit, "DAT", ringNum, 0, c2c))) else None
-  private val snoopTap = if((injects ++ ejects).contains("SNP")) Some(Module(new ChannelTap(new SnoopFlit, "SNP", ringNum, ejectSnoopBuf, c2c = c2c))) else None
-  private val ereqTap = if((injects ++ ejects).contains("ERQ") && local) Some(Module(new ChannelTap(new ReqFlit, "REQ", ringNum, ejectReqBuf, c2c = c2c))) else None
-  private val tfbNodeRegister = if((injects ++ ejects).nonEmpty && hasTfb) Some(Module(new NodeRegister)) else None
-  tfbNodeRegister.foreach(_.io.nodeId := nid)
+  val injectMap = mutable.Map[String, DecoupledIO[Flit]]()
+  val ejectMap = mutable.Map[String, DecoupledIO[Flit]]()
 
-  private def connectRing[K <: Flit](tap: Option[ChannelTap[K]], tx: ChannelBundle[K], rx: ChannelBundle[K], ridx: Int): Unit = {
+  private val flitMap = Map[String, Flit](
+    "REQ" -> new ReqFlit,
+    "RSP" -> new RespFlit,
+    "DAT" -> new DataFlit,
+    "SNP" -> new SnoopFlit,
+    "ERQ" -> new ReqFlit
+  )
+  private val localRing = m.p(ZJParametersKey).localRing
+  private val legalTargetsMap = Map[String, Seq[Int]](
+    "REQ" -> localRing.filter(n => n.nodeType == NodeType.HF || n.nodeType == NodeType.HI).map(_.nodeId).filterNot(_ == node.nodeId),
+    "RSP" -> localRing.filter(n => n.nodeType != NodeType.S).map(_.nodeId).filterNot(_ == node.nodeId),
+    "DAT" -> localRing.map(_.nodeId).filterNot(_ == node.nodeId),
+    "SNP" -> localRing.filter(n => n.nodeType == NodeType.R).map(_.nodeId).filterNot(_ == node.nodeId),
+    "ERQ" -> localRing.filter(n => n.nodeType == NodeType.S).map(_.nodeId).filterNot(_ == node.nodeId),
+  )
+
+  def connectRing[K <: Flit](tap: Option[ChannelTap[K]], tx: ChannelBundle[K], rx: ChannelBundle[K], ridx: Int): Unit = {
     if(tap.isDefined) {
       tap.get.io.nid := nid
       tap.get.io.rx(ridx) := rx
@@ -78,26 +92,7 @@ class BaseRouter(val node: Node, ejects: Seq[String], injects: Seq[String])(impl
     }
   }
 
-  for(ridx <- 0 until ringNum) {
-    connectRing(reqTap, router.rings(ridx).tx.req, router.rings(ridx).rx.req, ridx)
-    connectRing(respTap, router.rings(ridx).tx.resp, router.rings(ridx).rx.resp, ridx)
-    connectRing(dataTap, router.rings(ridx).tx.data, router.rings(ridx).rx.data, ridx)
-    connectRing(snoopTap, router.rings(ridx).tx.snoop, router.rings(ridx).rx.snoop, ridx)
-    if(local) connectRing(ereqTap, router.rings(ridx).tx.ereq.get, router.rings(ridx).rx.ereq.get, ridx)
-  }
-
-  val injectMap = mutable.Map[String, DecoupledIO[Flit]]()
-  val ejectMap = mutable.Map[String, DecoupledIO[Flit]]()
-
-  private val flitMap = Map[String, Flit](
-    "REQ" -> new ReqFlit,
-    "RSP" -> new RespFlit,
-    "DAT" -> new DataFlit,
-    "SNP" -> new SnoopFlit,
-    "ERQ" -> new ReqFlit
-  )
-
-  private def registerInjectTap[K <: Flit](chn: String, tap: Option[ChannelTap[K]]): Unit = {
+  def registerInjectTap[K <: Flit](chn: String, tap: Option[ChannelTap[K]]): Unit = {
     if(injects.contains(chn)) {
       val buf = Module(new Queue(flitMap(chn), 2))
       val mon = if(hasTfb) Some(Module(new FlitMonitor)) else None
@@ -118,15 +113,16 @@ class BaseRouter(val node: Node, ejects: Seq[String], injects: Seq[String])(impl
           assert(!m.io.fault, s"channel $chn inject wrong flit!")
         }
       })
+      if(local) {
+        val legalTarget = legalTargetsMap(chn).map(_.U === tap.get.io.inject.bits.tgt).reduce(_ || _)
+        when(tap.get.io.inject.fire) {
+          assert(legalTarget, cf"Illegal target id ${tap.get.io.inject.bits.tgt} of $chn flit @ node 0x${node.nodeId}")
+        }
+      }
     }
   }
-  registerInjectTap("REQ", reqTap)
-  registerInjectTap("RSP", respTap)
-  registerInjectTap("DAT", dataTap)
-  registerInjectTap("SNP", snoopTap)
-  if(local) registerInjectTap("ERQ", ereqTap)
 
-  private def registerEjectTap[K <: Flit](chn: String, tap: Option[ChannelTap[K]]): Unit = {
+  def registerEjectTap[K <: Flit](chn: String, tap: Option[ChannelTap[K]]): Unit = {
     if(ejects.contains(chn)) {
       val buf = Module(new Queue(flitMap(chn), 1, pipe = true))
       val mon = if(hasTfb) Some(Module(new FlitMonitor)) else None
@@ -147,20 +143,51 @@ class BaseRouter(val node: Node, ejects: Seq[String], injects: Seq[String])(impl
       })
     }
   }
-  registerEjectTap("REQ", reqTap)
-  registerEjectTap("RSP", respTap)
-  registerEjectTap("DAT", dataTap)
-  registerEjectTap("SNP", snoopTap)
-  if(local) registerEjectTap("ERQ", ereqTap)
 
   def connInject(io: DecoupledIO[Data], chn: String): Unit = {
     injectMap(chn).valid := io.valid
     injectMap(chn).bits := io.bits.asTypeOf(injectMap(chn).bits)
     io.ready := injectMap(chn).ready
   }
+
   def connEject(io: DecoupledIO[Data], chn: String): Unit = {
     io.valid := ejectMap(chn).valid
     io.bits := ejectMap(chn).bits.asTypeOf(io.bits)
     ejectMap(chn).ready := io.ready
   }
+}
+
+class BaseRouter(val node: Node, val ejects: Seq[String], val injects: Seq[String])(implicit p: Parameters) extends ZJModule
+  with BaseRouterUtils {
+  router.nodeId := nid
+  private val ejectReqBuf = p(ZJParametersKey).reqEjectBufDepth
+  private val ejectSnoopBuf = p(ZJParametersKey).snoopEjectBufDepth
+
+  private val reqTap = if((injects ++ ejects).contains("REQ")) Some(Module(new ChannelTap(new ReqFlit, "REQ", ringNum, ejectReqBuf, c2c = c2c))) else None
+  private val respTap = if((injects ++ ejects).contains("RSP")) Some(Module(new ChannelTap(new RespFlit, "RSP", ringNum, 0, c2c))) else None
+  private val dataTap = if((injects ++ ejects).contains("DAT")) Some(Module(new ChannelTap(new DataFlit, "DAT", ringNum, 0, c2c))) else None
+  private val snoopTap = if((injects ++ ejects).contains("SNP")) Some(Module(new ChannelTap(new SnoopFlit, "SNP", ringNum, ejectSnoopBuf, c2c = c2c))) else None
+  private val ereqTap = if((injects ++ ejects).contains("ERQ") && local) Some(Module(new ChannelTap(new ReqFlit, "REQ", ringNum, ejectReqBuf, c2c = c2c))) else None
+  private val tfbNodeRegister = if((injects ++ ejects).nonEmpty && hasTfb) Some(Module(new NodeRegister)) else None
+  tfbNodeRegister.foreach(_.io.nodeId := nid)
+
+  for(ridx <- 0 until ringNum) {
+    connectRing(reqTap, router.rings(ridx).tx.req, router.rings(ridx).rx.req, ridx)
+    connectRing(respTap, router.rings(ridx).tx.resp, router.rings(ridx).rx.resp, ridx)
+    connectRing(dataTap, router.rings(ridx).tx.data, router.rings(ridx).rx.data, ridx)
+    connectRing(snoopTap, router.rings(ridx).tx.snoop, router.rings(ridx).rx.snoop, ridx)
+    if(local) connectRing(ereqTap, router.rings(ridx).tx.ereq.get, router.rings(ridx).rx.ereq.get, ridx)
+  }
+
+  registerInjectTap("REQ", reqTap)
+  registerInjectTap("RSP", respTap)
+  registerInjectTap("DAT", dataTap)
+  registerInjectTap("SNP", snoopTap)
+  if(local) registerInjectTap("ERQ", ereqTap)
+
+  registerEjectTap("REQ", reqTap)
+  registerEjectTap("RSP", respTap)
+  registerEjectTap("DAT", dataTap)
+  registerEjectTap("SNP", snoopTap)
+  if(local) registerEjectTap("ERQ", ereqTap)
 }
