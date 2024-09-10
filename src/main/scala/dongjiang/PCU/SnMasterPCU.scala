@@ -196,7 +196,7 @@ class SnMasterPCU(snMasId: Int, param: InterfaceParam)(implicit p: Parameters) e
   io.chi.txreq.bits.Addr        := pcus(pcuReq2NodeID).addr
   io.chi.txreq.bits.Opcode      := pcus(pcuReq2NodeID).reqMes.opcode
   io.chi.txreq.bits.TgtID       := ddrcNodeId.U
-  io.chi.txreq.bits.SrcID       := djparam.localNodeID.U
+  io.chi.txreq.bits.SrcID       := hnfNodeId.U
   io.chi.txreq.bits.TxnID       := pcuReq2NodeID
   io.chi.txreq.bits.Size        := log2Ceil(djparam.blockBytes).U
   io.chi.txreq.bits.MemAttr     := MemAttr(false.B, true.B, false.B, false.B).asUInt

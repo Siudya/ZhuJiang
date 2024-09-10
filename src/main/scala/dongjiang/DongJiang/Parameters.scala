@@ -30,41 +30,6 @@ case class InterfaceParam
     if(isMaster) require(chipId.nonEmpty) else require(chipId.isEmpty)
 }
 
-// Node Param In Local Ring
-case class NodeParam
-(
-  name: String = "Node",
-  nodeId: Int,
-  local: Boolean = false,
-  isRNF: Boolean = false,
-  isRNI: Boolean = false,
-  isHN: Boolean = false,
-  isSN: Boolean = false,
-  isDDR: Boolean = false,
-  useDCT: Boolean = false,
-  useDMT: Boolean = false,
-  useDWT: Boolean = false,
-  chipId: Option[Int] = None, // Only Use In isHN
-  bankId: Option[Int] = None, // Only Use In isSN and !isDDR
-  bankIdBits: Option[Int] = None, // Only Use In isSN and !isDDR
-) {
-    val tpyes = Seq(isRNF, isRNI, isHN, isSN)
-    val isRN = isRNF | isRNI
-    require(tpyes.count(_ == true) == 1)
-    if(isRN) require(!isDDR)
-    if(isSN) require(!useDCT)
-    if(isSN & !isDDR) {
-        require(bankId.nonEmpty); require(bankIdBits.nonEmpty)
-    } else {
-        require(bankId.isEmpty); require(bankIdBits.isEmpty)
-    }
-    if(isHN | (isSN & isDDR)) {
-        require(chipId.nonEmpty)
-    } else {
-        require(chipId.isEmpty)
-    }
-}
-
 
 case class DJParam(
                     // -------------------------- Base Mes ---------------------- //
@@ -80,17 +45,6 @@ case class DJParam(
                     nodeIdBits: Int = 12,
                     txnidBits: Int = 12,
                     dbidBits: Int = 16,
-                    localNodeID: Int = 0x10,
-                    csnNodeID: Int = 0,
-                    // ------------------------- Node Mes -------------------- //
-                    nodeMes: Seq[NodeParam] = Seq(  // NodeParam( name = "RN_CSN",     local = false, nodeId = 0,    isRNF = true ),
-                                                    // NodeParam( name = "HN_CSN",     local = false, nodeId = 1,    isHN = true, chipId = Some(1)),
-                                                    NodeParam( name = "RN_LOCAL_0", local = true,  nodeId = 0x0,  isRNF = true ),
-                                                    NodeParam( name = "RN_LOCAL_1", local = true,  nodeId = 0x1,  isRNF = true ),
-                                                    NodeParam( name = "SN_LOCAL_0", local = true,  nodeId = 0x40, isSN = true, bankId = Some(0), bankIdBits = Some(1) ),
-                                                    NodeParam( name = "SN_LOCAL_1", local = true,  nodeId = 0x41, isSN = true, bankId = Some(1), bankIdBits = Some(1) ),
-                                                    NodeParam( name = "SN_DDR",     local = true,  nodeId = 0x42, isSN = true, isDDR = true, chipId = Some(0))
-                    ),
                     // ------------------------ DCU Base Mes ------------------ //
                     nrDSBank: Int = 2,
                     nrDCUWBuf: Int = 4,
@@ -122,8 +76,6 @@ case class DJParam(
                     dirMulticycle: Int = 2,
                     dirHoldMcp: Boolean = true,
                   ) {
-    require(nodeMes.nonEmpty)
-    require(nodeMes.count(_.isDDR) == 1)
     require(2 <= nrEvictWays & nrEvictWays <= nrMSHRWays)
     require(nrMpTaskQueue > 0)
     require(nrMpReqQueue > 0)
@@ -138,17 +90,44 @@ case class DJParam(
 
 
 trait HasParseZJParam extends HasZJParams {
+    val localRnfNode    = zjparam.localRing.filter(_.nodeType == NodeType.R)
     val localHnfNode    = zjparam.localRing.filter(_.nodeType == NodeType.HF).last
+    val localSnNode     = zjparam.localRing.filter(_.nodeType == NodeType.S)
     val hasCSN          = zjparam.csnRing.nonEmpty
     val csnHnfNodeOpt   = if(hasCSN) Option(zjparam.csnRing.filter(_.nodeType == NodeType.HF).last) else None
     val csnRnfNodeOpt   = if(hasCSN) Option(zjparam.csnRing.filter(_.nodeType == NodeType.R).last) else None
 
     require(zjparam.localRing.count(_.nodeType == NodeType.HF) == 1)
+    require(localSnNode.last.mainMemory)
     require(localHnfNode.splitFlit)
-
     if(hasCSN) {
         require(csnHnfNodeOpt.get.splitFlit)
         require(csnRnfNodeOpt.get.splitFlit)
+    }
+
+    // Local Base Node Mes
+    val nrRnfNode       = zjparam.localRing.count(_.nodeType  == NodeType.R)
+    val rnfNodeIdBits   = log2Ceil(nrRnfNode)
+    val rnNodeIdSeq     = localRnfNode.map(_.nodeId)
+    val snNodeIdSeq     = localSnNode.map(_.nodeId)
+    val ddrcNodeId      = localSnNode.map(_.nodeId).last
+    val hnfNodeId       = localHnfNode.nodeId
+
+    // CSN Base Node Mes
+    val csnHnfNodeId    = 0 // TODO
+
+    def fromSnNode(x: UInt) = snNodeIdSeq.map(_.asUInt === x).reduce(_ | _)
+
+    def getMetaIdBySrcID(x: UInt): UInt = {
+        val metaId = WireInit((nrRnfNode + 1).U((rnfNodeIdBits + 1).W))
+        rnNodeIdSeq.zipWithIndex.foreach {
+            case (id, i) =>
+                when(x === id.U) {
+                    metaId := i.U
+                }
+        }
+        assert(metaId =/= (nrRnfNode + 1).U)
+        metaId(rnfNodeIdBits - 1, 0)
     }
 }
 
@@ -162,7 +141,8 @@ trait HasDJParam extends HasParseZJParam {
     val addressBits     = djparam.addressBits
     val dataBits        = djparam.blockBytes * 8
     val beatBits        = djparam.beatBytes * 8
-    val localChipId     = djparam.nodeMes.filter(_.isDDR).map(_.chipId)(0).get
+    val localChipId     = 0 // TODO
+    val csnChipId       = 1 // TODO
 
     // Base Interface Mes
     val hasCSNIntf      = djparam.csnRnSlaveIntf.nonEmpty & djparam.csnRnMasterIntf.nonEmpty
@@ -174,13 +154,6 @@ trait HasDJParam extends HasParseZJParam {
     val nrIntfBits      = log2Ceil(nrIntf)
     val nrPCUMax        = interfaceMes.map(_.nrPCUEntry).max
     val pcuIdBits       = log2Ceil(nrPCUMax)
-
-    // Base Node Mes
-    val nrRnfNode       = djparam.nodeMes.count(_.isRNF)
-    val rnfNodeIdBits   = log2Ceil(nrRnfNode)
-    val snNodeIdSeq     = djparam.nodeMes.filter(_.isSN).map(_.nodeId)
-    val ddrcNodeId      = djparam.nodeMes.filter(_.isDDR).map(_.nodeId)(0)
-    def fromSnNode(x: UInt) = snNodeIdSeq.map(_.asUInt === x).reduce(_ | _)
 
     // Base DCU Mes
     val nrDCUsEntry     = djparam.selfSets * djparam.selfWays
@@ -254,19 +227,6 @@ trait HasDJParam extends HasParseZJParam {
             chipType := ChipType.CSN
         }
         chipType
-    }
-
-    def getMetaIdBySrcID(x: UInt): UInt = {
-        val rnfNodeId   = djparam.nodeMes.filter(_.isRNF).map(_.nodeId.U)
-        val metaId      = WireInit((nrRnfNode+1).U((rnfNodeIdBits+1).W))
-        rnfNodeId.zipWithIndex.foreach {
-            case (id, i) =>
-                when(x === id) {
-                    metaId := i.U
-                }
-        }
-        assert(metaId =/= (nrRnfNode+1).U)
-        metaId(rnfNodeIdBits-1, 0)
     }
 
     def parseAddress(x: UInt, modBankBits: Int = 1, setBits: Int = 1, tagBits: Int = 1): (UInt, UInt, UInt, UInt, UInt) = {

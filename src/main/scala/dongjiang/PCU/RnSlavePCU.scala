@@ -220,7 +220,7 @@ class RnSlavePCU(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) ex
 //  io.chi.rxdat.bits         := DontCare
 //  io.chi.rxdat.bits.Opcode  := CHIOp.DAT.CompData
 //  io.chi.rxdat.bits.TgtID   := pcus(0).reqMes.srcId
-//  io.chi.rxdat.bits.SrcID   := djparam.localNodeID.U
+//  io.chi.rxdat.bits.SrcID   := hnfNodeId.U
 //  io.chi.rxdat.bits.TxnID   := pcus(0).reqMes.txnId
 //  io.chi.rxdat.bits.DBID    := 0.U
 //  io.chi.rxdat.bits.HomeNID := 0.U

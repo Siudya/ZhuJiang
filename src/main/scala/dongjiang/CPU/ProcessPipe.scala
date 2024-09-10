@@ -174,7 +174,7 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
   taskRD_s3.mshrWay     := task_s3_g.bits.mshrWay
   taskRD_s3.useEvict    := task_s3_g.bits.useEvict
   taskRD_s3.tgtId       := Mux(taskChipType === ChipType.Local, ddrcNodeId.U, DontCare)
-  taskRD_s3.srcId       := Mux(taskChipType === ChipType.Local, djparam.localNodeID.U, djparam.csnNodeID.U)
+  taskRD_s3.srcId       := Mux(taskChipType === ChipType.Local, hnfNodeId.U, csnHnfNodeId.U)
   taskRD_s3.opcode      := decode_s3.rdOp
   taskRD_s3.expCompAck  := Mux(taskChipType === ChipType.Local, false.B, true.B)
   taskRD_s3.from.idL1   := io.sliceId
