@@ -60,7 +60,8 @@ case class ZJParameters(
 
   private def getRing(nodeParams: Seq[NodeParam], csn: Boolean): Seq[Node] = {
     require(nodeParams.size >= 3)
-    var rId = 0
+    var rfId = 0
+    var riId = 0
     var hfId = 0
     var hiId = 0
     var cId = 0
@@ -76,11 +77,11 @@ case class ZJParameters(
         ringSize = nodeParams.size,
         oddNode = idx % 2 == 1,
         splitFlit = np.splitFlit,
-        mainMemory = np.mainMemory,
-        dmaPort = np.dmaPort
+        mainMemory = np.mainMemory
       )
       n.nodeType match {
-        case NodeType.R => n.nid = rId; rId = rId + 1
+        case NodeType.RF => n.nid = rfId; rfId = rfId + 1
+        case NodeType.RI => n.nid = riId; riId = riId + 1
         case NodeType.HF => n.nid = hfId; hfId = hfId + 1
         case NodeType.HI => n.nid = hiId; hiId = hiId + 1
         case NodeType.C => n.nid = cId; cId = cId + 1

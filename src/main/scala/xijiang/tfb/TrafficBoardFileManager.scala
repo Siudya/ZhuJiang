@@ -67,11 +67,14 @@ object TrafficBoardFileManager {
        |#define NODE_NET_BITS ${params.nodeNetBits}
        |#define FLIT_BUF_SIZE ${(params.maxFlitBits + 7) / 8}
        |
-       |#define R_TYPE ${NodeType.R}
-       |#define HF_TYPE ${NodeType.HF}
-       |#define HI_TYPE ${NodeType.HI}
-       |#define C_TYPE ${NodeType.C}
-       |#define S_TYPE ${NodeType.S}
+       |#define LRF_TYPE ${NodeType.RF | (0 << params.nodeTypeBits)}
+       |#define LRI_TYPE ${NodeType.RI | (0 << params.nodeTypeBits)}
+       |#define LHF_TYPE ${NodeType.HF | (0 << params.nodeTypeBits)}
+       |#define LHI_TYPE ${NodeType.HI | (0 << params.nodeTypeBits)}
+       |#define LS_TYPE  ${NodeType.S | (0 << params.nodeTypeBits)}
+       |#define CRF_TYPE ${NodeType.RF | (1 << params.nodeTypeBits)}
+       |#define CHF_TYPE ${NodeType.HF | (1 << params.nodeTypeBits)}
+       |#define C2C_TYPE ${NodeType.C | (1 << params.nodeTypeBits)}
        |
        |#define REQ ${ChannelEncodings.REQ}
        |#define RSP ${ChannelEncodings.RSP}
@@ -140,12 +143,13 @@ object TrafficBoardFileManager {
        |  public:
        |  mutex info_lock;
        |  // local nodes
-       |  vector<uint16_t> lrn;
+       |  vector<uint16_t> lrf;
+       |  vector<uint16_t> lri;
        |  vector<uint16_t> lhf;
        |  vector<uint16_t> lhi;
        |  vector<uint16_t> lsn;
        |  // csn nodes
-       |  vector<uint16_t> crn;
+       |  vector<uint16_t> crf;
        |  vector<uint16_t> chf;
        |  vector<uint16_t> c2c;
        |  uint64_t global_timer = 0;
@@ -163,13 +167,13 @@ object TrafficBoardFileManager {
        |};
        |
        |void TrafficBoard::register_node(uint16_t node_id) {
-       |  lock_guard lg(scb_lock);
+       |  scb_lock.lock();
        |  if(scoreboard.count(node_id) != 0) {
        |    TFB_ERR("cannot register node 0x%x more than once!\\n", node_id);
+       |    scb_lock.unlock();
        |    return;
        |  }
-       |  uint8_t type = get_field(node_id, NODE_TYPE_OFF, NODE_TYPE_BITS);
-       |  uint8_t net = get_field(node_id, NODE_NET_OFF, NODE_NET_BITS);
+       |  uint8_t type = get_field(node_id, NODE_TYPE_OFF, NODE_TYPE_BITS + NODE_NET_BITS);
        |  scoreboard[node_id] = unordered_map<uint8_t, list<unique_ptr<TrafficBoardEntry>>>();
        |  scoreboard[node_id][REQ] = list<unique_ptr<TrafficBoardEntry>>();
        |  scoreboard[node_id][RSP] = list<unique_ptr<TrafficBoardEntry>>();
@@ -183,29 +187,18 @@ object TrafficBoardFileManager {
        |  locks[node_id][SNP] = make_unique<mutex>();
        |  locks[node_id][ERQ] = make_unique<mutex>();
        |
-       |  if(0 == net) {
-       |    if(type == R_TYPE)
-       |      lrn.push_back(node_id);
-       |    else if(type == HF_TYPE)
-       |      lhf.push_back(node_id);
-       |    else if(type == HI_TYPE)
-       |      lhi.push_back(node_id);
-       |    else if(type == S_TYPE)
-       |      lsn.push_back(node_id);
-       |    else {
-       |      TFB_ERR("cannot register C2C 0x%x on local ring\\n", node_id);
-       |    }
-       |  } else {
-       |    if(type == R_TYPE)
-       |      crn.push_back(node_id);
-       |    else if(type == HF_TYPE)
-       |      chf.push_back(node_id);
-       |    else if(type == C_TYPE)
-       |      c2c.push_back(node_id);
-       |    else {
-       |      TFB_ERR("cannot register HNI or SN 0x%x on csn ring\\n", node_id);
-       |    }
+       |  switch(type) {
+       |    case LRF_TYPE: lrf.push_back(node_id); break;
+       |    case LRI_TYPE: lri.push_back(node_id); break;
+       |    case LHF_TYPE: lhf.push_back(node_id); break;
+       |    case LHI_TYPE: lhi.push_back(node_id); break;
+       |    case LS_TYPE:  lsn.push_back(node_id); break;
+       |    case CRF_TYPE: crf.push_back(node_id); break;
+       |    case CHF_TYPE: chf.push_back(node_id); break;
+       |    case C2C_TYPE: c2c.push_back(node_id); break;
+       |    default: TFB_ERR("cannot register 0x%x, unknown type tag %d\\n", node_id, type); break;
        |  }
+       |  scb_lock.unlock();
        |}
        |
        |#define MONITOR_ERR(cond, ...) \\
@@ -217,7 +210,7 @@ object TrafficBoardFileManager {
        |svBit TrafficBoard::add_record(uint16_t node_id, uint8_t chn, const svBitVecVal *flit) {
        |  MONITOR_ERR(scoreboard.count(node_id) == 0, "node 0x%x is sampled before registered!\\n", node_id);
        |  uint16_t tgt_id = get_field(*((const uint64_t *)flit), TGT_ID_OFF, NODE_ID_BITS);
-       |  bool c2c = get_field(node_id, NODE_TYPE_OFF, NODE_TYPE_BITS) == C_TYPE;
+       |  bool c2c = get_field(node_id, NODE_TYPE_OFF, NODE_TYPE_BITS + NODE_NET_BITS) == C2C_TYPE;
        |  bool csn = get_field(node_id, NODE_NET_OFF, NODE_NET_BITS) == 0x1;
        |  uint16_t final_tgt_id = tgt_id;
        |  if(verbose) {
@@ -227,7 +220,7 @@ object TrafficBoardFileManager {
        |  if(csn && !c2c) {
        |    uint16_t src_chip = get_field(node_id, 0, NODE_NID_BITS);
        |    uint16_t tgt_chip = get_field(tgt_id, 0, NODE_NID_BITS);
-       |    final_tgt_id = (1 << NODE_NET_OFF) | (C_TYPE << NODE_TYPE_OFF) | tgt_chip;
+       |    final_tgt_id = (C2C_TYPE << NODE_TYPE_OFF) | tgt_chip;
        |    MONITOR_ERR(src_chip == tgt_chip, "csn node 0x%x injects illegal flit with tgt_id: 0x%x, target chip_id cannot be chip_id of itself!\\n", node_id, tgt_id);
        |  }
        |  MONITOR_ERR(scoreboard.count(final_tgt_id) == 0, "node 0x%x injected flit target node 0x%x is not registered on chn %d!\\n", node_id, final_tgt_id, chn);
@@ -311,45 +304,32 @@ object TrafficBoardFileManager {
        |
        |uint8_t tfb_get_nodes_size(uint8_t type) {
        |  const auto &tfb = TrafficBoard::get_instance();
-       |  if(type == 0x00)
-       |    return tfb.lrn.size();
-       |  else if(type == 0x01)
-       |    return tfb.lhf.size();
-       |  else if(type == 0x02)
-       |    return tfb.lhi.size();
-       |  else if(type == 0x04)
-       |    return tfb.lsn.size();
-       |  else if(type == 0x10)
-       |    return tfb.crn.size();
-       |  else if(type == 0x11)
-       |    return tfb.chf.size();
-       |  else if(type == 0x13)
-       |    return tfb.c2c.size();
-       |  else
-       |    TFB_ERR("wrong node type 0x%x\\n", type);
-       |  return 0;
+       |  switch(type) {
+       |    case LRF_TYPE: return tfb.lrf.size();
+       |    case LRI_TYPE: return tfb.lri.size();
+       |    case LHF_TYPE: return tfb.lhf.size();
+       |    case LHI_TYPE: return tfb.lhi.size();
+       |    case LS_TYPE:  return tfb.lsn.size();
+       |    case CRF_TYPE: return tfb.crf.size();
+       |    case CHF_TYPE: return tfb.chf.size();
+       |    case C2C_TYPE: return tfb.c2c.size();
+       |    default: TFB_ERR("wrong node type 0x%x\\n", type); return 0;
+       |  }
        |}
        |
        |uint8_t tfb_get_nodes(uint8_t type, uint16_t *nodes_array_ptr) {
        |  const auto &tfb = TrafficBoard::get_instance();
        |  const vector<uint16_t> *vec_ptr = nullptr;
-       |  if(type == 0x00)
-       |    vec_ptr = &(tfb.lrn);
-       |  else if(type == 0x01)
-       |    vec_ptr = &(tfb.lhf);
-       |  else if(type == 0x02)
-       |    vec_ptr = &(tfb.lhi);
-       |  else if(type == 0x04)
-       |    vec_ptr = &(tfb.lsn);
-       |  else if(type == 0x10)
-       |    vec_ptr = &(tfb.crn);
-       |  else if(type == 0x11)
-       |    vec_ptr = &(tfb.chf);
-       |  else if(type == 0x13)
-       |    vec_ptr = &(tfb.c2c);
-       |  else {
-       |    TFB_ERR("wrong node type 0x%x\\n", type);
-       |    return 1;
+       |  switch(type) {
+       |    case LRF_TYPE: vec_ptr = &(tfb.lrf); break;
+       |    case LRI_TYPE: vec_ptr = &(tfb.lri); break;
+       |    case LHF_TYPE: vec_ptr = &(tfb.lhf); break;
+       |    case LHI_TYPE: vec_ptr = &(tfb.lhi); break;
+       |    case LS_TYPE:  vec_ptr = &(tfb.lsn); break;
+       |    case CRF_TYPE: vec_ptr = &(tfb.crf); break;
+       |    case CHF_TYPE: vec_ptr = &(tfb.chf); break;
+       |    case C2C_TYPE: vec_ptr = &(tfb.c2c); break;
+       |    default: TFB_ERR("wrong node type 0x%x\\n", type); return 1;
        |  }
        |  for(int i = 0; i < vec_ptr->size(); i++) nodes_array_ptr[i] = (*vec_ptr).at(i);
        |  return 0;
