@@ -3,7 +3,7 @@ package xijiang.router
 import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config.Parameters
-import xijiang.router.base.BaseRouter
+import xijiang.router.base.{BaseIcnBundle, BaseRouter}
 import xijiang.{Node, NodeType}
 import zhujiang.ZJBundle
 import zhujiang.chi._
@@ -29,7 +29,7 @@ class HnfRx(local: Boolean, node: Node)(implicit p: Parameters) extends ZJBundle
   val snoop = if(node.splitFlit) Flipped(Decoupled(new SnoopFlit)) else Flipped(Decoupled(UInt(snoopFlitBits.W)))
 }
 
-class HnfIcn(local: Boolean, node: Node)(implicit p: Parameters) extends ZJBundle {
+class HnfIcn(local: Boolean, node: Node)(implicit p: Parameters) extends BaseIcnBundle(node) {
   val tx = new HnfTx(node)
   val rx = new HnfRx(local, node)
 }

@@ -8,19 +8,40 @@ import xijiang.router._
 import zhujiang.{ZJBundle, ZJModule, ZJParametersKey}
 import xijiang.tfs._
 
-class RingIO(local: Boolean)(implicit p: Parameters) extends ZJBundle {
-  private val ring = if(local) p(ZJParametersKey).localRing else p(ZJParametersKey).csnRing
-  private val rns = ring.filter(_.nodeType == NodeType.R)
-  private val hfs = ring.filter(_.nodeType == NodeType.HF)
-  private val his = ring.filter(_.nodeType == NodeType.HI)
-  private val c2cs = ring.filter(_.nodeType == NodeType.C)
-  private val sns = ring.filter(_.nodeType == NodeType.S)
-  val rn = MixedVec(rns.map(r => new RnIcn(r)))
-  val hnf = MixedVec(hfs.map(h => new HnfIcn(local, h)))
-  val hni = MixedVec(his.map(h => new HniIcn(local, h)))
-  val c2c = MixedVec(c2cs.map(c => new CnIcn(c)))
-  val sn = MixedVec(sns.map(s => new SnIcn(s)))
-  val chip = Input(UInt(chipAddrBits.W))
+object RingIO {
+  def apply(local: Boolean, p: Parameters): (Seq[RnIcn], Seq[HnfIcn], Seq[HniIcn], Seq[SnIcn], Seq[C2cLinkPort], UInt) = {
+    val ring = if(local) p(ZJParametersKey).localRing else p(ZJParametersKey).csnRing
+    val rns = ring.filter(_.nodeType == NodeType.R)
+    val hfs = ring.filter(_.nodeType == NodeType.HF)
+    val his = ring.filter(_.nodeType == NodeType.HI)
+    val c2cs = ring.filter(_.nodeType == NodeType.C)
+    val sns = ring.filter(_.nodeType == NodeType.S)
+    val rn = rns.map(n => {
+      val icn = IO(new RnIcn(n)(p))
+      val pfxStr = if(n.dmaPort) "dma_" else "cpu_"
+      if(local) icn.suggestName(s"${pfxStr}rn_id_${n.nodeId.toHexString}")
+      icn
+    })
+    val hnf = hfs.map(n => {
+      val icn = IO(new HnfIcn(local, n)(p))
+      if(local) icn.suggestName(s"hnf_id_${n.nodeId.toHexString}")
+      icn
+    })
+    val hni = his.map(n => {
+      val icn = IO(new HniIcn(local, n)(p))
+      if(local) icn.suggestName(s"hni_id_${n.nodeId.toHexString}")
+      icn
+    })
+    val sn = sns.map(n => {
+      val icn = IO(new SnIcn(n)(p))
+      val pfxStr = if(n.mainMemory) "mem_" else "dcu_"
+      if(local) icn.suggestName(s"${pfxStr}sn_id_${n.nodeId.toHexString}")
+      icn
+    })
+    val c2c = Seq.fill(c2cs.size)(IO(new C2cLinkPort()(p)))
+    val chip = IO(Input(UInt(p(ZJParametersKey).chipAddrBits.W)))
+    (rn, hnf, hni, sn, c2c, chip)
+  }
 }
 
 class TfsIO(local: Boolean)(implicit p: Parameters) extends ZJBundle {
@@ -34,9 +55,15 @@ class Ring(local: Boolean)(implicit p: Parameters) extends ZJModule {
   private val tfs = p(ZJParametersKey).tfsParams.isDefined
   private val ringName = if(local) "LocalRing" else "CsnRing"
   override val desiredName = ringName
-  val io = if(!tfs) Some(IO(new RingIO(local))) else None
+  private val icn = if(!tfs) Some(RingIO(local, p)) else None
   val tfsio = if(tfs) Some(IO(new TfsIO(local))) else None
-  io.foreach(dontTouch(_))
+  val icnRns: Option[Seq[RnIcn]] = icn.map(_._1)
+  val icnHfs: Option[Seq[HnfIcn]] = icn.map(_._2)
+  val icnHis: Option[Seq[HniIcn]] = icn.map(_._3)
+  val icnSns: Option[Seq[SnIcn]] = icn.map(_._4)
+  val icnC2cs: Option[Seq[C2cLinkPort]] = icn.map(_._5)
+  val ioChip: Option[UInt] = icn.map(_._6)
+
   tfsio.foreach(dontTouch(_))
 
   private val ring = if(local) p(ZJParametersKey).localRing else p(ZJParametersKey).csnRing
@@ -48,7 +75,7 @@ class Ring(local: Boolean)(implicit p: Parameters) extends ZJModule {
     if(tfs) {
       r.router.chip := tfsio.get.chip
     } else {
-      r.router.chip := io.get.chip
+      r.router.chip := ioChip.get
     }
     if(local) r.router.rings.last.rx := right._1.router.rings.last.tx
   }
@@ -67,7 +94,8 @@ class Ring(local: Boolean)(implicit p: Parameters) extends ZJModule {
       m.io.nodeId := rn.router.nodeId
       m.suggestName(s"rnTxGen_$idx")
     } else {
-      io.get.rn(idx) <> rn.icn
+      icnRns.get(idx) <> rn.icn
+      dontTouch(icnRns.get(idx))
     }
   })
 
@@ -80,7 +108,8 @@ class Ring(local: Boolean)(implicit p: Parameters) extends ZJModule {
       m.io.nodeId := hnf.router.nodeId
       m.suggestName(s"hnfTxGen_$idx")
     } else {
-      io.get.hnf(idx) <> hnf.icn
+      icnHfs.get(idx) <> hnf.icn
+      dontTouch(icnHfs.get(idx))
     }
   })
 
@@ -93,7 +122,22 @@ class Ring(local: Boolean)(implicit p: Parameters) extends ZJModule {
       m.io.nodeId := hni.router.nodeId
       m.suggestName(s"hniTxGen_$idx")
     } else {
-      io.get.hni(idx) <> hni.icn
+      icnHis.get(idx) <> hni.icn
+      dontTouch(icnHis.get(idx))
+    }
+  })
+
+  sns.zipWithIndex.foreach({ case ((r, n), idx) =>
+    val sn = r.asInstanceOf[SubordinateRouter]
+    if(tfs) {
+      val m = Module(new SnTrafficGen(n))
+      m.io.rx <> sn.icn.tx
+      sn.icn.rx <> m.io.tx
+      m.io.nodeId := sn.router.nodeId
+      m.suggestName(s"snTxGen_$idx")
+    } else {
+      icnSns.get(idx) <> sn.icn
+      dontTouch(icnSns.get(idx))
     }
   })
 
@@ -112,20 +156,8 @@ class Ring(local: Boolean)(implicit p: Parameters) extends ZJModule {
       cn.icn.rx <> c2cPacker.io.ring.tx
       cn.router.chip := c2cPacker.io.ring.chip
       c2cPacker.suggestName("c2cPackLayer")
-      io.get.c2c(idx) <> c2cPacker.io.c2c
-    }
-  })
-
-  sns.zipWithIndex.foreach({ case ((r, n), idx) =>
-    val sn = r.asInstanceOf[SubordinateRouter]
-    if(tfs) {
-      val m = Module(new SnTrafficGen(n))
-      m.io.rx <> sn.icn.tx
-      sn.icn.rx <> m.io.tx
-      m.io.nodeId := sn.router.nodeId
-      m.suggestName(s"snTxGen_$idx")
-    } else {
-      io.get.sn(idx) <> sn.icn
+      icnC2cs.get(idx) <> c2cPacker.io.c2c
+      dontTouch(icnC2cs.get(idx))
     }
   })
 
