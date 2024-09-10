@@ -306,15 +306,15 @@ class ConnectToNHL2(params: CHIBundleParameters, node: Node)(implicit p: Paramet
     })
 
     io.toRnIcn.rx.req.valid := io.fromNHL2.txreq.valid
-    io.toRnIcn.rx.req.bits  := io.fromNHL2.txreq.bits.asTypeOf(new CHIBundleREQ(params)).toReqFlit.asUInt
+    io.toRnIcn.rx.req.bits  := io.fromNHL2.txreq.bits.asTypeOf(new CHIBundleREQ(params)).toReqFlit
     io.fromNHL2.txreq.ready := io.toRnIcn.rx.req.ready
 
     io.toRnIcn.rx.resp.valid := io.fromNHL2.txrsp.valid
-    io.toRnIcn.rx.resp.bits := io.fromNHL2.txrsp.bits.asTypeOf(new CHIBundleRSP(params)).toRespFlit.asUInt
+    io.toRnIcn.rx.resp.bits := io.fromNHL2.txrsp.bits.asTypeOf(new CHIBundleRSP(params)).toRespFlit
     io.fromNHL2.txrsp.ready := io.toRnIcn.rx.resp.ready
 
     io.toRnIcn.rx.data.valid := io.fromNHL2.txdat.valid
-    io.toRnIcn.rx.data.bits := io.fromNHL2.txdat.bits.asTypeOf(new CHIBundleDAT(params)).toDataFlit.asUInt
+    io.toRnIcn.rx.data.bits := io.fromNHL2.txdat.bits.asTypeOf(new CHIBundleDAT(params)).toDataFlit
     io.fromNHL2.txdat.ready := io.toRnIcn.rx.data.ready
 
     io.fromNHL2.rxsnp.valid := io.toRnIcn.tx.snoop.valid

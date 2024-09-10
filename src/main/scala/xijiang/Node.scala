@@ -22,8 +22,12 @@ case class NodeParam(
   name: String = "",
   nodeType: Int = NodeType.R,
   splitFlit: Boolean = false,
-  mainMemory: Boolean = false
-)
+  mainMemory: Boolean = false,
+  dmaPort: Boolean = false
+) {
+  if(dmaPort) require(nodeType == NodeType.R)
+  if(mainMemory) require(nodeType == NodeType.S)
+}
 
 case class Node(
   suffix: String = "",
@@ -34,7 +38,8 @@ case class Node(
   ringSize: Int = 3,
   oddNode: Boolean = false,
   splitFlit: Boolean = false,
-  mainMemory: Boolean = false
+  mainMemory: Boolean = false,
+  dmaPort: Boolean = false
 ) {
   var nid: Int = 0
   var left: Node = null

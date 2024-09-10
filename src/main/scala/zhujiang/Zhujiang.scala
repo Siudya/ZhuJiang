@@ -17,6 +17,9 @@ import chisel3.util.{Decoupled, DecoupledIO}
 import xijiang.c2c.C2cLinkPort
 import zhujiang.chi.{DataFlit, ReqFlit, RespFlit}
 import zhujiang.nhl2._
+import sifive.enterprise.firrtl.NestedPrefixModulesAnnotation
+import xijiang.router.base.BaseIcnBundle
+import xijiang.{Ring, RingIO}
 
 
 class Zhujiang(implicit p: Parameters) extends ZJModule {
@@ -42,57 +45,61 @@ class Zhujiang(implicit p: Parameters) extends ZJModule {
        |}
        |""".stripMargin)
 
-  /*
-   * NHL2 CHI Bundle Param
-   */
-  val params = new CHIBundleParameters(
-    nodeIdBits = niw,
-    addressBits = raw,
-    dataBits = dw,
-    dataCheck = dcw > 0,
-    txnIdBits = 12,
-    dbIdBits = 16
-  )
-
-  /*
-   * IO
-   */
-  val nrLocalRn = zjparam.localRing.filter(_.nodeType == NodeType.R).length
-  val nrLocalSn = zjparam.localRing.filter(_.nodeType == NodeType.S).length
-  val nrLocalHNI = zjparam.localRing.filter(_.nodeType == NodeType.HI).length
-  val nrCSNCn = zjparam.csnRing.filter(_.nodeType == NodeType.C).length
-
-  val io = IO(new Bundle {
-    val fromNHL2    = Vec(nrLocalRn, Flipped(new CHIBundleDecoupled(params)))
-//    val localSn     = Vec(nrLocalSn, new SnIcn())
-//    val localHnI    = Vec(nrLocalHNI, new HnIcn(local = true))
-    val csnC2C      = Vec(nrCSNCn, new C2cLinkPort())
-  })
 
   /*
    * xijiang
    */
   private val localRing = Module(new Ring(true))
   private val csnRing = Module(new Ring(false))
+  private val (lrns, lhfs, lhis, lsns, lc2cs, lchip) = RingIO(true, p)
+  private val (crns, chfs, chis, csns, cc2cs, cchip) = RingIO(false, p)
 
-//  localRing.io.get.sn.zip(io.localSn).foreach { case(a, b) => a <> b }
-//  localRing.io.get.hni.zip(io.localHnI).foreach { case(a, b) => a <> b }
-  localRing.io.get.sn.foreach(_ <> DontCare)
-  localRing.io.get.hni.foreach(_ <> DontCare)
-  csnRing.io.get.c2c.zip(io.csnC2C).foreach { case(a, b) => a <> b }
-  localRing.io.get.chip := zjparam.ringId.U
-  csnRing.io.get.chip := zjparam.ringId.U
+  private def conn(a: Seq[BaseIcnBundle], b: Option[Seq[BaseIcnBundle]]) = {
+    if(b.isDefined) {
+      a.zip(b.get).foreach({ case (m, s) =>
+        m <> s
+      })
+    }
+  }
+  conn(lrns, localRing.icnRns)
+  conn(lhfs, localRing.icnHfs)
+  conn(lhis, localRing.icnHis)
+  conn(lsns, localRing.icnSns)
+
+  conn(crns, csnRing.icnRns)
+  conn(chfs, csnRing.icnHfs)
+  conn(chis, csnRing.icnHis)
+
+  if(csnRing.icnC2cs.isDefined) {
+    cc2cs.zip(csnRing.icnC2cs.get).foreach({ case (a, b) => a <> b })
+  }
+  localRing.ioChip.foreach(_ := lchip)
+  csnRing.ioChip.foreach(_ := cchip)
 
   /*
-   * NHL2 Interface transform
+   * NHL2 CHI Bundle Param
    */
-  val connectToNHL2s = Seq.fill(nrLocalRn) { Module(new ConnectToNHL2(params, zjparam.localRing.filter(_.nodeType == NodeType.R).last)) }
+  val params    = new CHIBundleParameters(
+    nodeIdBits  = niw,
+    addressBits = raw,
+    dataBits    = dw,
+    dataCheck   = dcw > 0,
+    txnIdBits   = 12,
+    dbIdBits    = 16
+  )
 
+  /*
+   *Connect NHL2 IO <> xijiang
+   */
+  val nrLocalRn = lrns.length
+  val io = IO(new Bundle { val fromNHL2 = Vec(nrLocalRn, Flipped(new CHIBundleDecoupled(params))) })
+  val connectToNHL2s = Seq.fill(nrLocalRn) { Module(new ConnectToNHL2(params, zjparam.localRing.filter(_.nodeType == NodeType.R).last)) }
   connectToNHL2s.zipWithIndex.foreach {
-    case(connect, i) =>
+    case (connect, i) =>
       connect.io.fromNHL2 <> io.fromNHL2(i)
-      connect.io.toRnIcn <> localRing.io.get.rn(i)
+      connect.io.toRnIcn  <> localRing.icnRns.get(i)
   }
+
 
   /*
    * dongjiang
@@ -103,9 +110,7 @@ class Zhujiang(implicit p: Parameters) extends ZJModule {
   val dongjiang = Module(new DongJiang())
   val ddrc      = Module(new DCU(ddrcNode))
 
-  dongjiang.io.toLocal <> localRing.io.get.hnf(0)
-  if(nrCSNCn > 0) dongjiang.io.toCSNOpt.get.rn <> csnRing.io.get.rn(0)
-  if(nrCSNCn > 0) dongjiang.io.toCSNOpt.get.hn <> csnRing.io.get.hnf(0)
+  dongjiang.io.toLocal  <> localRing.icnHfs.get.last
+  ddrc.io.sn            <> localRing.icnSns.get.last
 
-  localRing.io.get.sn.last <> ddrc.io.sn
 }
