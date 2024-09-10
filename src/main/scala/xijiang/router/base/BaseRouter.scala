@@ -67,7 +67,7 @@ trait BaseRouterUtils {
     "REQ" -> localRing.filter(n => n.nodeType == NodeType.HF || n.nodeType == NodeType.HI).map(_.nodeId).filterNot(_ == node.nodeId),
     "RSP" -> localRing.filter(n => n.nodeType != NodeType.S).map(_.nodeId).filterNot(_ == node.nodeId),
     "DAT" -> localRing.map(_.nodeId).filterNot(_ == node.nodeId),
-    "SNP" -> localRing.filter(n => n.nodeType == NodeType.R).map(_.nodeId).filterNot(_ == node.nodeId),
+    "SNP" -> localRing.filter(n => n.nodeType == NodeType.R && !n.dmaPort).map(_.nodeId).filterNot(_ == node.nodeId),
     "ERQ" -> localRing.filter(n => n.nodeType == NodeType.S).map(_.nodeId).filterNot(_ == node.nodeId),
   )
 
