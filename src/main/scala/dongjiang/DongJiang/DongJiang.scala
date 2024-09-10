@@ -13,11 +13,12 @@ import xs.utils.perf.{DebugOptions, DebugOptionsKey}
 import Utils.GenerateVerilog
 import Utils.IDConnector._
 import Utils.FastArb._
-import xijiang.router.{HnIcn, RnIcn, SnIcn}
+import xijiang.NodeType
+import xijiang.router.{HnfIcn, RnIcn}
 import zhujiang.HasZJParams
 
-abstract class DJModule(implicit val p: Parameters) extends Module with HasDJParam with HasZJParams
-abstract class DJBundle(implicit val p: Parameters) extends Bundle with HasDJParam with HasZJParams
+abstract class DJModule(implicit val p: Parameters) extends Module with HasDJParam
+abstract class DJBundle(implicit val p: Parameters) extends Bundle with HasDJParam
 
 
 class DongJiang()(implicit p: Parameters) extends DJModule {
@@ -229,10 +230,10 @@ class DongJiang()(implicit p: Parameters) extends DJModule {
 
 // ------------------------------------------ IO declaration ----------------------------------------------//
     val io = IO(new Bundle {
-        val toLocal        = Flipped(new HnIcn(local = true))
+        val toLocal        = Flipped(new HnfIcn(local = true, node = localHnfNode))
         val toCSNOpt       = if (hasCSNIntf) Some(new Bundle {
-            val hn         = Flipped(new HnIcn(local = false))
-            val rn         = Flipped(new RnIcn)
+            val hn         = Flipped(new HnfIcn(local = false, node = csnHnfNodeOpt.get))
+            val rn         = Flipped(new RnIcn(node = csnRnfNodeOpt.get))
         }) else None
     })
 
@@ -255,32 +256,16 @@ class DongJiang()(implicit p: Parameters) extends DJModule {
 
 
 // ---------------------------------------------- Connection ---------------------------------------------------//
-
-    def connectBundle[T1 <: UInt, T2 <: Bundle](in: DecoupledIO[T1], out: DecoupledIO[T2]): Unit = {
-        out.valid   := in.valid
-        out.bits    := in.bits.asTypeOf(out.bits)
-        in.ready    := out.ready
-        require(in.bits.getWidth == out.bits.getWidth)
-    }
-
-    def connectUInt[T1 <: Bundle, T2 <: UInt](in: DecoupledIO[T1], out: DecoupledIO[T2]): Unit = {
-        out.valid := in.valid
-        out.bits := in.bits.asTypeOf(out.bits)
-        in.ready := out.ready
-        require(in.bits.getWidth == out.bits.getWidth)
-    }
-
-
     /*
      * Connect LOCAL RING CHI IO
      */
     // tx req
-    connectBundle(io.toLocal.tx.req, localRnSlave.io.chi.txreq)
+    io.toLocal.tx.req   <> localRnSlave.io.chi.txreq
     // tx rsp & dat
     val rspQ = Module(new Queue(new RespFlit(), entries = 2))
     val datQ = Module(new Queue(new DataFlit(), entries = 2))
-    connectBundle(io.toLocal.tx.resp, rspQ.io.enq)
-    connectBundle(io.toLocal.tx.data, datQ.io.enq)
+    io.toLocal.tx.resp  <> rspQ.io.enq
+    io.toLocal.tx.data  <> datQ.io.enq
     // tx rsp
     localSnMaster.io.chi.rxrsp.valid    := rspQ.io.deq.valid & fromSnNode(rspQ.io.deq.bits.SrcID)
     localRnSlave.io.chi.txrsp.valid     := rspQ.io.deq.valid & !fromSnNode(rspQ.io.deq.bits.SrcID)
@@ -294,33 +279,33 @@ class DongJiang()(implicit p: Parameters) extends DJModule {
     localRnSlave.io.chi.txdat.bits      := datQ.io.deq.bits
     when(fromSnNode(datQ.io.deq.bits.SrcID)) { datQ.io.deq.ready := localSnMaster.io.chi.rxdat.ready }.otherwise { datQ.io.deq.ready := localRnSlave.io.chi.txdat.ready }
     // rx ereq & snp
-    connectUInt(localSnMaster.io.chi.txreq, io.toLocal.rx.ereq.get)
-    connectUInt(localRnSlave.io.chi.rxsnp, io.toLocal.rx.snoop)
-    localSnMaster.io.chi.rxsnp <> DontCare
+    localSnMaster.io.chi.txreq          <> io.toLocal.rx.req.get
+    localRnSlave.io.chi.rxsnp           <> io.toLocal.rx.snoop
+    localSnMaster.io.chi.rxsnp          <> DontCare
     // rx rsp & dat
-    connectUInt(fastArbDec(Seq(localSnMaster.io.chi.txrsp, localRnSlave.io.chi.rxrsp)), io.toLocal.rx.resp)
-    connectUInt(fastArbDec(Seq(localSnMaster.io.chi.txdat, localRnSlave.io.chi.rxdat)), io.toLocal.rx.data)
+    fastArbDec(Seq(localSnMaster.io.chi.txrsp, localRnSlave.io.chi.rxrsp)) <> io.toLocal.rx.resp
+    fastArbDec(Seq(localSnMaster.io.chi.txdat, localRnSlave.io.chi.rxdat)) <> io.toLocal.rx.data
 
     /*
      * Connect CSN CHI IO
      */
     if(hasCSNIntf) {
         // tx
-        connectBundle(io.toCSNOpt.get.hn.tx.req, csnRnSlaveOpt.get.io.chi.txreq)
-        connectBundle(io.toCSNOpt.get.hn.tx.resp, csnRnSlaveOpt.get.io.chi.txrsp)
-        connectBundle(io.toCSNOpt.get.hn.tx.data, csnRnSlaveOpt.get.io.chi.txdat)
+        io.toCSNOpt.get.hn.tx.req <> csnRnSlaveOpt.get.io.chi.txreq
+        io.toCSNOpt.get.hn.tx.resp <> csnRnSlaveOpt.get.io.chi.txrsp
+        io.toCSNOpt.get.hn.tx.data <> csnRnSlaveOpt.get.io.chi.txdat
         // rx
-        connectUInt(csnRnSlaveOpt.get.io.chi.rxsnp, io.toCSNOpt.get.hn.rx.snoop)
-        connectUInt(csnRnSlaveOpt.get.io.chi.rxrsp, io.toCSNOpt.get.hn.rx.resp)
-        connectUInt(csnRnSlaveOpt.get.io.chi.rxdat, io.toCSNOpt.get.hn.rx.data)
+        csnRnSlaveOpt.get.io.chi.rxsnp <> io.toCSNOpt.get.hn.rx.snoop
+        csnRnSlaveOpt.get.io.chi.rxrsp <> io.toCSNOpt.get.hn.rx.resp
+        csnRnSlaveOpt.get.io.chi.rxdat <> io.toCSNOpt.get.hn.rx.data
         // tx
-        connectUInt(csnRnMasterOpt.get.io.chi.txreq, io.toCSNOpt.get.rn.rx.req)
-        connectUInt(csnRnMasterOpt.get.io.chi.txrsp, io.toCSNOpt.get.rn.rx.resp)
-        connectUInt(csnRnMasterOpt.get.io.chi.txdat, io.toCSNOpt.get.rn.rx.data)
+        csnRnMasterOpt.get.io.chi.txreq <> io.toCSNOpt.get.rn.rx.req
+        csnRnMasterOpt.get.io.chi.txrsp <> io.toCSNOpt.get.rn.rx.resp
+        csnRnMasterOpt.get.io.chi.txdat <> io.toCSNOpt.get.rn.rx.data
         // rx
-        connectBundle(io.toCSNOpt.get.rn.tx.snoop, csnRnMasterOpt.get.io.chi.rxsnp)
-        connectBundle(io.toCSNOpt.get.rn.tx.resp, csnRnMasterOpt.get.io.chi.rxrsp)
-        connectBundle(io.toCSNOpt.get.rn.tx.data, csnRnMasterOpt.get.io.chi.rxdat)
+        io.toCSNOpt.get.rn.tx.snoop <> csnRnMasterOpt.get.io.chi.rxsnp
+        io.toCSNOpt.get.rn.tx.resp <> csnRnMasterOpt.get.io.chi.rxrsp
+        io.toCSNOpt.get.rn.tx.data <> csnRnMasterOpt.get.io.chi.rxdat
     }
 
     /*

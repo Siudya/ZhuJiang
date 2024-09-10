@@ -4,6 +4,9 @@ import DONGJIANG.CHI._
 import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config._
+import xijiang.NodeType
+import zhujiang.HasZJParams
+
 import scala.math.{max, min}
 
 case object DJParamKey extends Field[DJParam](DJParam())
@@ -129,7 +132,24 @@ case class DJParam(
     require(sfReplacementPolicy == "random" || sfReplacementPolicy == "plru")
 }
 
-trait HasDJParam {
+
+trait HasParseZJParam extends HasZJParams {
+    val localHnfNode    = zjparam.localRing.filter(_.nodeType == NodeType.HF).last
+    val hasCSN          = zjparam.csnRing.nonEmpty
+    val csnHnfNodeOpt   = if(hasCSN) Option(zjparam.csnRing.filter(_.nodeType == NodeType.HF).last) else None
+    val csnRnfNodeOpt   = if(hasCSN) Option(zjparam.csnRing.filter(_.nodeType == NodeType.R).last) else None
+
+    require(zjparam.localRing.count(_.nodeType == NodeType.HF) == 1)
+    require(localHnfNode.splitFlit)
+
+    if(hasCSN) {
+        require(csnHnfNodeOpt.get.splitFlit)
+        require(csnRnfNodeOpt.get.splitFlit)
+    }
+}
+
+
+trait HasDJParam extends HasParseZJParam {
     val p: Parameters
     val djparam = p(DJParamKey)
 
