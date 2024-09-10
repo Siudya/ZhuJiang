@@ -33,9 +33,9 @@ class Zhujiang(implicit p: Parameters) extends ZJModule {
   conn(lsns, localRing.icnSns)
 
   conn(crns, csnRing.icnRns)
-  conn(chfs, csnRing.icnRns)
-  conn(chis, csnRing.icnRns)
-  conn(csns, csnRing.icnRns)
+  conn(chfs, csnRing.icnHfs)
+  conn(chis, csnRing.icnHis)
+  conn(csns, csnRing.icnSns)
 
   if(csnRing.icnC2cs.isDefined) {
     cc2cs.zip(csnRing.icnC2cs.get).foreach({ case (a, b) => a <> b })

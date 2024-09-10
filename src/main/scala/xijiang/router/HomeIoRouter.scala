@@ -35,7 +35,6 @@ class HniIcn(local: Boolean, node: Node)(implicit p: Parameters) extends BaseIcn
 
 class HomeIoRouter(node: Node)(implicit p: Parameters) extends BaseRouter(node,
   Seq("REQ", "RSP", "DAT"), Seq("RSP", "DAT", "ERQ")) {
-  private val local = !node.csnNode
   val icn = IO(new HniIcn(local, node))
 
   connEject(icn.tx.req, "REQ")
