@@ -20,10 +20,8 @@ case class InterfaceParam
     isRn: Boolean,
     isSlave: Boolean,
     chipId: Option[Int] = None, // Use In MASTER
-    nrReqBuf: Int = 16,
     nrPCUEntry: Int = 16,
 ) {
-    val reqBufIdBits = log2Ceil(nrReqBuf)
     val pcuIdBits = log2Ceil(nrPCUEntry)
     val isSn = !isRn
     val isMaster = !isSlave
@@ -89,11 +87,17 @@ case class DJParam(
                                                     // NodeParam( name = "HN_CSN",     local = false, nodeId = 1,    isHN = true, chipId = Some(1)),
                                                     NodeParam( name = "RN_LOCAL_0", local = true,  nodeId = 0x0,  isRNF = true ),
                                                     NodeParam( name = "RN_LOCAL_1", local = true,  nodeId = 0x1,  isRNF = true ),
-                                                    NodeParam( name = "SN_LOCAL_0", local = true,  nodeId = 0x30, isSN = true, bankId = Some(0), bankIdBits = Some(1) ),
-                                                    NodeParam( name = "SN_LOCAL_1", local = true,  nodeId = 0x31, isSN = true, bankId = Some(1), bankIdBits = Some(1) ),
-                                                    NodeParam( name = "SN_DDR",     local = true,  nodeId = 0x32, isSN = true, isDDR = true, chipId = Some(0))
+                                                    NodeParam( name = "SN_LOCAL_0", local = true,  nodeId = 0x40, isSN = true, bankId = Some(0), bankIdBits = Some(1) ),
+                                                    NodeParam( name = "SN_LOCAL_1", local = true,  nodeId = 0x41, isSN = true, bankId = Some(1), bankIdBits = Some(1) ),
+                                                    NodeParam( name = "SN_DDR",     local = true,  nodeId = 0x42, isSN = true, isDDR = true, chipId = Some(0))
                     ),
-                    // ------------------------ Slice Base Mes ------------------ //
+                    // ------------------------ DCU Base Mes ------------------ //
+                    nrDSBank: Int = 2,
+                    nrDCUWBuf: Int = 4,
+                    nrDCURQ: Int = 4,
+                    dcuMulticycle: Int = 2,
+                    dcuHoldMcp: Boolean = true,
+                    // ------------------------ CPU Base Mes ------------------ //
                     nrMpTaskQueue: Int = 4,
                     nrMpReqQueue: Int = 4,
                     nrMpRespQueue: Int = 4,
@@ -103,8 +107,7 @@ case class DJParam(
                     nrEvictWays: Int = 4,
                     // number of bank or buffer
                     nrBank: Int = 2,
-                    nrSnpCtl: Int = 16,
-                    nrDataBuf: Int = 16,
+                    nrDatBuf: Int = 16,
                     // ------------------------ Directory Mes ------------------ //
                     // self dir & ds mes, dont care when hasLLC is false
                     selfWays: Int = 4,
@@ -130,6 +133,7 @@ case class DJParam(
     require(nrMSHRWays <= min(selfWays, sfDirWays))
     require(selfReplacementPolicy == "random" || selfReplacementPolicy == "plru")
     require(sfReplacementPolicy == "random" || sfReplacementPolicy == "plru")
+    require(log2Ceil(nrDCUWBuf) <= dbidBits)
 }
 
 
@@ -168,8 +172,8 @@ trait HasDJParam extends HasParseZJParam {
     val nrSlvIntf       = interfaceMes.count(_.isSlave)
     val nrMasIntf       = interfaceMes.count(_.isMaster)
     val nrIntfBits      = log2Ceil(nrIntf)
-    val nrReqBufMax     = interfaceMes.map(_.nrReqBuf).max
-    val reqBufIdBits    = log2Ceil(nrReqBufMax)
+    val nrPCUMax        = interfaceMes.map(_.nrPCUEntry).max
+    val pcuIdBits       = log2Ceil(nrPCUMax)
 
     // Base Node Mes
     val nrRnfNode       = djparam.nodeMes.count(_.isRNF)
@@ -178,13 +182,24 @@ trait HasDJParam extends HasParseZJParam {
     val ddrcNodeId      = djparam.nodeMes.filter(_.isDDR).map(_.nodeId)(0)
     def fromSnNode(x: UInt) = snNodeIdSeq.map(_.asUInt === x).reduce(_ | _)
 
+    // Base DCU Mes
+    val nrDCUsEntry     = djparam.selfSets * djparam.selfWays
+    val nrPerDCUEntry   = nrDCUsEntry / djparam.nrBank
+    val nrDSEntry       = nrPerDCUEntry / djparam.nrDSBank
+    // DCU Index = [sSet] + [sWay] = [dsIndex] + [dsBank]
+    // Bank -> EREQ TgtID
+    val dcuIndexBits    = log2Ceil(nrPerDCUEntry)
+    val dsIndexBits     = log2Ceil(nrDSEntry)
+    val dsBankBits      = log2Ceil(djparam.nrDSBank)
+
+
     // Slice Queue
     val mpTaskQBits     = log2Ceil(djparam.nrMpTaskQueue)
     val mpReqQBits      = log2Ceil(djparam.nrMpReqQueue)
     val mpRespQBits     = log2Ceil(djparam.nrMpRespQueue)
 
     // Slice Id Bits Parameters
-    val dbIdBits        = log2Ceil(djparam.nrDataBuf)
+    val dbIdBits        = log2Ceil(djparam.nrDatBuf)
 
     // DIR BASE Parameters
     val bankBits        = log2Ceil(djparam.nrBank)
@@ -219,18 +234,17 @@ trait HasDJParam extends HasParseZJParam {
     // TODO
 
     // TIMEOUT CHECK CNT VALUE
-    val TIMEOUT_PCU     = 5000 // PCU
-    val TIMEOUT_RB      = 10000 // ReqBuf
+    val TIMEOUT_RSPCU   = 8000 // Rn Slave PCU
+    val TIMEOUT_SMPCU   = 7000 // Sn Master PCU
+    val TIMEOUT_RMPCU   = 8000 // Rn Master PCU
     val TIMEOUT_DB      = 8000  // DataBuffer
     val TIMEOUT_BT      = 8000  // BlockTable
-    val TIMEOUT_MP      = 8000  // MainPipe
-    val TIMEOUT_SNP     = 8000  // SnoopCtl
-    val TIMEOUT_RC      = 6000  // ReadCtl
-    val TIMEOUT_TXD     = 1000  // SnChiTxDat
+    val TIMEOUT_EXU     = 8000  // Pipe Execute
+    val TIMEOUT_COM     = 8000  // Pipe Commit
 
     // some requirements for CHI width
-    require(reqBufIdBits <= 12)
-    require(dbIdBits <= 16)
+    require(pcuIdBits <= djparam.txnidBits)
+    require(dbIdBits <= djparam.dbidBits)
 
     def getChipTypeByAddr(x: UInt): UInt = {
         val chipType = Wire(UInt(ChipType.width.W))

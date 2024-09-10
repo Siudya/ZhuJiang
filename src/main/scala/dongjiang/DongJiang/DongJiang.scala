@@ -2,18 +2,13 @@ package DONGJIANG
 
 import zhujiang.chi._
 import DONGJIANG.CHI._
-import DONGJIANG.RNSLAVE._
-import DONGJIANG.RNMASTER._
-import DONGJIANG.SNMASTER._
-import DONGJIANG.SLICE._
+import DONGJIANG.PCU._
+import DONGJIANG.CPU._
 import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config._
 import xs.utils.perf.{DebugOptions, DebugOptionsKey}
-import Utils.GenerateVerilog
-import Utils.IDConnector._
 import Utils.FastArb._
-import xijiang.NodeType
 import xijiang.router.{HnfIcn, RnIcn}
 import zhujiang.HasZJParams
 
@@ -23,26 +18,26 @@ abstract class DJBundle(implicit val p: Parameters) extends Bundle with HasDJPar
 
 class DongJiang()(implicit p: Parameters) extends DJModule {
 /*
- * System Architecture: (3 RNSLAVE, 1 RNMASTER and 2 bank)
+ * System Architecture: (2 RNSLAVE, 1 RNMASTER, 1 SNMASTER and 2 Slice)
  *
  *                                          ----------------------------------------------------------
- *                                  |       |                       |   Dir    |                     |        |
- *               ------------       |       |      -----------      ------------      ---------      |        |       ------------
+ *                                          |                       |   Dir    |                     |
+ *               ------------               |      -----------      ------------      ---------      |                ------------
  *     CSN <---> | RNSLAVE  | <---> | <---> | ---> |  MSHR   | ---> | MainPipe | ---> | Queue | ---> |  <---> | <---> | RNMASTER | <---> CSN
  *               ------------       |       |      -----------      ------------      ---------      |        |       ------------
- *                                  |       |                       |DataBuffer|                     |        |
+ *                                  |       |                            |                           |        |
  *                                  |       ----------------------------------------------------------        |
- *                                  |                                                                         |
- *                                  |                                                                         |
- *                                 XBar                                                                      XBar
- *                                  |                                                                         |
- *                                  |                                                                         |
+ *                                  |                                    |                                    |
+ *                                  |                              --------------                             |
+ *                                 XBar <------------------------> | DataBuffer | <------------------------> XBar
+ *                                  |                              --------------                             |
+ *                                  |                                    |                                    |
  *                                  |       ----------------------------------------------------------        |
- *                                  |       |                       |   Dir    |                     |        |
+ *                                  |       |                            |                           |        |
  *               ------------       |       |      -----------      ------------      ---------      |        |       ------------
  *   Local <---> | RNSLAVE  | <---> | <---> | ---> |  MSHR   | ---> | MainPipe | ---> | Queue | ---> |  <---> | <---> | SNMASTER | <---> Local
- *               ------------       |       |      -----------      ------------      ---------      |        |       ------------
- *                                  |       |                       |DataBuffer|                     |        |
+ *               ------------               |      -----------      ------------      ---------      |                ------------
+ *                                          |                       |   Dir    |                     |
  *                                          ----------------------------------------------------------
  *                                                      
  */
@@ -62,89 +57,6 @@ class DongJiang()(implicit p: Parameters) extends DJModule {
  */
 
 
-
-
-/*
- * System ID Map Table:
- * [Module]     |  [private ID]             |  [XBar ID]
- *
- * BASE Slice Ctrl Signals:
- * [req2Slice]  |  [hasAddr]                |  from: [idL0]   [idL1]    [idL2]       | to: [idL0]     [idL1]    [idL2]
- * [resp2Node]  |  [hasCHIChnl]             |  from: [idL0]   [idL1]    [idL2]       | to: [idL0]     [idL1]    [idL2]
- * [req2Node]   |  [hasAddr]                |  from: [idL0]   [idL1]    [idL2]       | to: [idL0]     [idL1]    [idL2]
- * [resp2Slice] |  [hasMSHRSet] [HasDBID]   |  from: [idL0]   [idL1]    [idL2]       | to: [idL0]     [idL1]    [idL2]
- *
- *
- * BASE Slice DB Signals:
- * [dbRCReq]    |  [hasMSHRSet] [hasDBID]   |  from: [idL0]   [idL1]    [idL2]       | to: [idL0]     [idL1]    [idL2]
- * [wReq]       |                           |  from: [idL0]   [idL1]    [idL2]       | to: [idL0]     [idL1]    [idL2]
- * [wResp]      |  [hasDBID]                |  from: [SLICE]  [sliceId] [DontCare]   | to: [idL0]     [idL1]    [idL2]
- * [dataFDB]    |                           |  from: None                            | to: [idL0]     [idL1]    [idL2]
- * [dataTDB]    |  [hasDBID]                |  from: None                            | to: [idL0]     [idL1]    [idL2]
- *
- * ****************************************************************************************************************************************************
- *
- * RnSlave <-> Slice Ctrl Signals:
- * [req2Slice]  |  [hasAddr]                |  from: [RNSLV]  [nodeId]  [reqBufId]   | to: [SLICE]    [sliceId] [DontCare]
- * [resp2Node]  |  [hasCHIChnl]             |  from: [SLICE]  [sliceId] [mshrWay]    | to: [RNSLV]    [nodeId]  [reqBufId]
- * [req2Node]   |  [hasAddr]                |  from: [SLICE]  [sliceId] [mshrWay]    | to: [RNSLV]    [nodeId]  [DontCare]
- * [resp2Slice] |  [hasMSHRSet] [HasDBID]   |  from: [RNSLV]  [nodeId]  [reqBufId]   | to: [SLICE]    [sliceId] [mshrWay]
- *
- *
- * RnSlave <-> Slice DB Signals:
- * [wReq]       |                           |  from: [RNSLV]  [nodeId]  [reqBufId]   | to: [SLICE]    [sliceId] [DontCare]
- * [wResp]      |  [hasDBID]                |  from: [SLICE]  [sliceId] [DontCare]   | to: [RNSLV]    [nodeId]  [reqBufId]
- * [dataFDB]    |                           |  from: None                            | to: [RNSLV]    [nodeId]  [reqBufId]
- * [dataTDB]    |  [hasDBID]                |  from: None                            | to: [SLICE]    [sliceId] [DontCare]
- *
- * ****************************************************************************************************************************************************
- *
- * RnMaster <-> Slice Ctrl Signals:
- * [req2Slice]  |  [hasAddr]                |  from: [RNMAS]  [nodeId]  [reqBufId]   | to: [SLICE]    [sliceId] [DontCare]
- * [resp2Node]  |  [hasCHIChnl]             |  from: [SLICE]  [sliceId] [mshrWay]    | to: [RNMAS]    [nodeId]  [reqBufId]
- * [req2Node]   |  [hasAddr]                |  from: [SLICE]  [sliceId] [mshrWay]    | to: [RNMAS]    [nodeId]  [DontCare]
- * [resp2Slice] |  [hasMSHRSet] [HasDBID]   |  from: [RNMAS]  [nodeId]  [reqBufId]   | to: [SLICE]    [sliceId] [mshrWay]
- *
- *
- * RnMaster <-> Slice DB Signals:
- * [dbRCReq]    |  [hasMSHRSet] [hasDBID]   |  from: [RNMAS]  [nodeId]  [reqBufId]   | to: [SLICE]    [sliceId] [mshrWay]    // When Data from DS use mshrId(Cat(Set, way))
- * [wReq]       |                           |  from: [RNMAS]  [nodeId]  [reqBufId]   | to: [SLICE]    [sliceId] [DontCare]
- * [wResp]      |  [hasDBID]                |  from: [SLICE]  [sliceId] [DontCare]   | to: [RNMAS]    [nodeId]  [reqBufId]
- * [dataFDB]    |                           |  from: None                            | to: [RNMAS]    [nodeId]  [reqBufId]
- * [dataTDB]    |  [hasDBID]                |  from: None                            | to: [SLICE]    [sliceId] [DontCare]
- *
- * ****************************************************************************************************************************************************
- *
- * Slice <-> SnMaster Ctrl Signals:
- * [req2Node]   |  [hasAddr]                |  from: [SLICE]  [sliceId] [mshrWay]    | to: [SNMAS]    [nodeId]  [DontCare]
- * [resp2Slice] |  [hasMSHRSet] [HasDBID]   |  from: [RNSLV]  [nodeId]  [reqBufId]   | to: [SLICE]    [sliceId] [mshrWay]
- *
- *
- * Slice <-> SnMaster DB Signals:
- * [dbRCReq]    |  [hasMSHRSet] [hasDBID]   |  from: [SNMAS]  [nodeId]  [reqBufId]   | to: [SLICE]    [sliceId] [mshrWay]   // When Data from DS use mshrId(Cat(Set, way))
- * [wReq]       |                           |  from: [SNMAS]  [nodeId]  [reqBufId]   | to: [SLICE]    [sliceId] [DontCare]
- * [wResp]      |  [hasDBID]                |  from: [SLICE]  [sliceId] [DontCare]   | to: [RNMAS]    [nodeId]  [reqBufId]  // Unuse from
- * [dataFDB]    |                           |  from: None                            | to: [RNMAS]    [nodeId]  [reqBufId]
- * [dataTDB]    |  [hasDBID]                |  from: None                            | to: [SLICE]    [sliceId] [DontCare]
- *
- * ****************************************************************************************************************************************************
- *
- * MainPipe S4 Commit <-> DB Signals:
- * [dbRCReq]    |  [hasMSHRSet] [hasDBID]   |  from: [SLICE]  [sliceId] [DontCare]   | to: [NODE]     [nodeId]  [reqBufId] // Unuse mshrSet
- *
- *
- * MainPipe S4 Commit <-> DS Signals:
- * [dsRWReq]    |  [hasMSHRSet] [hasDBID]   |  from: [SLICE]  [sliceId] [mshrWay]    | to: [NODE]     [nodeId]  [reqBufId]
- *
- *
- * DS <-> DB Signals:
- * [dbRCReq]    |  [hasMSHRSet] [hasDBID]   |  from: [SLICE]  [sliceId] [dsId]       | to: [NODE]     [nodeId]  [reqBufId]  // Unuse mshrSet
- * [wReq]       |                           |  from: [SLICE]  [sliceId] [dsId]       | to: [SLICE]    [sliceId] [DontCare]
- * [wResp]      |  [hasDBID]                |  from: [SLICE]  [sliceId] [DontCare]   | to: [SLICE]    [sliceId] [dsId]      // Unuse from
- * [dataFDB]    |                           |  from: None                            | to: [SLICE]    [sliceId] [dsId]
- * [dataTDB]    |  [hasDBID]                |  from: None                            | to: [SLICE]    [sliceId] [mshrWay]
- *
- */
 
 
 /*
@@ -241,13 +153,14 @@ class DongJiang()(implicit p: Parameters) extends DJModule {
 
     val localRnSlave    = Module(new RnSlavePCU(IdL1.LOCALSLV, djparam.localRnSlaveIntf))
     val localSnMaster   = Module(new SnMasterPCU(IdL1.LOCALMAS, djparam.localSnMasterIntf))
-    val csnRnSlaveOpt   = if (hasCSNIntf) Some(Module(new RnSlave(IdL1.CSNSLV, djparam.csnRnSlaveIntf.get))) else None
-    val csnRnMasterOpt  = if (hasCSNIntf) Some(Module(new RnMaster(IdL1.CSNMAS, djparam.csnRnMasterIntf.get))) else None
+    val csnRnSlaveOpt   = if (hasCSNIntf) Some(Module(new RnSlavePCU(IdL1.CSNSLV, djparam.csnRnSlaveIntf.get))) else None
+    val csnRnMasterOpt  = if (hasCSNIntf) Some(Module(new RnMasterPCU(IdL1.CSNMAS, djparam.csnRnMasterIntf.get))) else None
     val intfs           = if (hasCSNIntf) Seq(localRnSlave, localSnMaster, csnRnSlaveOpt.get, csnRnMasterOpt.get)
                           else            Seq(localRnSlave, localSnMaster)
+    val databuffer      = Module(new DataBuffer())
 
     val xbar            = Module(new Xbar())
-    val slices          = Seq.fill(djparam.nrBank) { Module(new Slice()) }
+    val slices          = Seq.fill(djparam.nrBank) { Module(new SliceWrapper()) }
     slices.zipWithIndex.foreach { case(s, i) => s.io.sliceId := i.U }
 
     // TODO:
@@ -329,14 +242,14 @@ class DongJiang()(implicit p: Parameters) extends DJModule {
             xbar.io.resp2Slice.in(i)                <> intf.io.resp2Slice
             // slice DataBuffer signals
             if (intf.io.dbSigs.dbRCReqOpt.nonEmpty) {
-                xbar.io.dbSigs.in(i).dbRCReqOpt.get <> intf.io.dbSigs.dbRCReqOpt.get
+                xbar.io.dbSigs.in0(i)               <> intf.io.dbSigs.dbRCReqOpt.get
             } else {
-                xbar.io.dbSigs.in(i).dbRCReqOpt.get <> DontCare
+                xbar.io.dbSigs.in0(i)               <> DontCare
             }
-            xbar.io.dbSigs.in(i).wReq               <> intf.io.dbSigs.wReq
-            xbar.io.dbSigs.in(i).wResp              <> intf.io.dbSigs.wResp
-            xbar.io.dbSigs.in(i).dataFDB            <> intf.io.dbSigs.dataFDB
-            xbar.io.dbSigs.in(i).dataTDB            <> intf.io.dbSigs.dataTDB
+            xbar.io.dbSigs.in1(i).wReq              <> intf.io.dbSigs.wReq
+            xbar.io.dbSigs.in1(i).wResp             <> intf.io.dbSigs.wResp
+            xbar.io.dbSigs.in1(i).dataFDB           <> intf.io.dbSigs.dataFDB
+            xbar.io.dbSigs.in1(i).dataTDB           <> intf.io.dbSigs.dataTDB
     }
 
     /*
@@ -345,11 +258,16 @@ class DongJiang()(implicit p: Parameters) extends DJModule {
     slices.zipWithIndex.foreach {
         case (slice, i) =>
             // slice ctrl signals
-            xbar.io.req2Slice.out(i)    <> slice.io.req2Slice
-            xbar.io.resp2Node.in(i)     <> slice.io.resp2Node
-            xbar.io.req2Node.in(i)      <> slice.io.req2Node
-            xbar.io.resp2Slice.out(i)   <> slice.io.resp2Slice
+            xbar.io.req2Slice.out(i)        <> slice.io.req2Slice
+            xbar.io.resp2Node.in(i)         <> slice.io.resp2Node
+            xbar.io.req2Node.in(i)          <> slice.io.req2Node
+            xbar.io.resp2Slice.out(i)       <> slice.io.resp2Slice
             // slice DataBuffer signals
-            xbar.io.dbSigs.out(i)       <> slice.io.nodeDBSigs
+            xbar.io.dbSigs.in0(i+nrIntf)    <> slice.io.dbRCReq
     }
+
+    /*
+     * Connect DataBuffer
+     */
+    databuffer.io <> xbar.io.dbSigs.out(0)
 }

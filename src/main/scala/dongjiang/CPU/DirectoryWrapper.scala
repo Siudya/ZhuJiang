@@ -1,4 +1,4 @@
-package DONGJIANG.SLICE
+package DONGJIANG.CPU
 
 import DONGJIANG._
 import _root_.DONGJIANG.CHI._

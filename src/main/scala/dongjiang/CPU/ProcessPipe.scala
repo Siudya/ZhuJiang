@@ -1,4 +1,4 @@
-package DONGJIANG.SLICE
+package DONGJIANG.CPU
 
 import DONGJIANG._
 import DONGJIANG.DECODE._
@@ -8,12 +8,12 @@ import chisel3.util._
 import org.chipsalliance.cde.config._
 import xs.utils.ParallelLookUp
 
-class SlicePipe()(implicit p: Parameters) extends DJModule {
+class ProcessPipe()(implicit p: Parameters) extends DJModule {
 // --------------------- IO declaration ------------------------//
   val io = IO(new Bundle {
     val sliceId     = Input(UInt(bankBits.W))
     // Req To DataBuffer
-    val mpDBRCReq   = Decoupled(new DBRCReq())
+    val dbRCReq   = Decoupled(new DBRCReq())
     // Resp From Directory
     val dirResp     = Flipped(Valid(new DirRespBundle()))
     // Write Req To Directory
@@ -170,19 +170,19 @@ class SlicePipe()(implicit p: Parameters) extends DJModule {
    * Send Read to SN(DDRC) / HN-F(CSN)
    */
   taskRD_s3             := DontCare
-  taskRD_s3.addr        := task_s3_g.bits.addr
+  taskRD_s3.addr        := Mux(decode_s3.readDCU, DontCare, task_s3_g.bits.addr) // TODO: Read DCU Addr
   taskRD_s3.mshrWay     := task_s3_g.bits.mshrWay
   taskRD_s3.useEvict    := task_s3_g.bits.useEvict
   taskRD_s3.tgtId       := Mux(taskChipType === ChipType.Local, ddrcNodeId.U, DontCare)
   taskRD_s3.srcId       := Mux(taskChipType === ChipType.Local, djparam.localNodeID.U, djparam.csnNodeID.U)
   taskRD_s3.opcode      := decode_s3.rdOp
   taskRD_s3.expCompAck  := Mux(taskChipType === ChipType.Local, false.B, true.B)
-  taskRD_s3.from.idL0   := IdL0.SLICE.U
   taskRD_s3.from.idL1   := io.sliceId
   taskRD_s3.from.idL2   := DontCare
-  taskRD_s3.to.idL0     := IdL0.INTF.U
   taskRD_s3.to.idL1     := Mux(taskChipType === ChipType.Local, IdL1.LOCALMAS.U, IdL1.CSNMAS.U)
   taskRD_s3.to.idL2     := DontCare
+  taskRD_s3.replace     := false.B
+  taskRD_s3.ReadDCU     := decode_s3.readDCU
 
 
   /*

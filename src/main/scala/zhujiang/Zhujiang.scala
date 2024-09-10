@@ -12,6 +12,7 @@ import sifive.enterprise.firrtl.NestedPrefixModulesAnnotation
 import org.chipsalliance.cde.config.Parameters
 import xijiang.{NodeType, Ring}
 import DONGJIANG._
+import DONGJIANG.DCU._
 import chisel3.util.{Decoupled, DecoupledIO}
 import xijiang.c2c.C2cLinkPort
 import zhujiang.chi.{DataFlit, ReqFlit, RespFlit}
@@ -96,10 +97,15 @@ class Zhujiang(implicit p: Parameters) extends ZJModule {
   /*
    * dongjiang
    */
+  val ddrcNode  = zjparam.localRing.filter(_.mainMemory).last
+  require(zjparam.localRing.count(_.mainMemory) == 1)
+
   val dongjiang = Module(new DongJiang())
+  val ddrc      = Module(new DCU(ddrcNode))
 
   dongjiang.io.toLocal <> localRing.io.get.hnf(0)
   if(nrCSNCn > 0) dongjiang.io.toCSNOpt.get.rn <> csnRing.io.get.rn(0)
   if(nrCSNCn > 0) dongjiang.io.toCSNOpt.get.hn <> csnRing.io.get.hnf(0)
 
+  localRing.io.get.sn.last <> ddrc.io.sn
 }

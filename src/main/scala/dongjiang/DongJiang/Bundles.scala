@@ -14,13 +14,6 @@ object ChipType {
 }
 
 // ---------------------------------------------------------------- Xbar Id Bundle ----------------------------------------------------------------------------- //
-
-object IdL0 {
-    val width      = 1
-    val SLICE      = 0
-    val INTF       = 1
-}
-
 object IdL1 {
     val width      = 2
     val LOCALSLV   = 0
@@ -30,16 +23,10 @@ object IdL1 {
 }
 
 class IDBundle(implicit p: Parameters) extends DJBundle {
-    val idL0 = UInt(IdL0.width.W)
     val idL1 = UInt(max(bankBits, nrIntfBits).W)
-    val idL2 = UInt(reqBufIdBits.W)
+    val idL2 = UInt(pcuIdBits.W)
 
-    def mshrWay  = idL2
-    def reqBufId = idL2
     def pcuId    = idL2
-
-    def isSLICE  = idL0 === IdL0.SLICE.U
-    def isINTF   = idL0 === IdL0.INTF.U
 
     def LOCALSLV = idL1 === IdL1.LOCALSLV.U
     def LOCALMAS = idL1 === IdL1.LOCALMAS.U
@@ -50,8 +37,6 @@ class IDBundle(implicit p: Parameters) extends DJBundle {
 trait HasFromIDBits extends DJBundle { this: Bundle => val from = new IDBundle() }
 
 trait HasToIDBits extends DJBundle { this: Bundle => val to = new IDBundle() }
-
-class ToIDBundle(implicit p: Parameters) extends DJBundle with HasToIDBits
 
 trait HasIDBits extends DJBundle with HasFromIDBits with HasToIDBits
 
@@ -71,8 +56,6 @@ class MSHRSetBundle(implicit p: Parameters) extends DJBundle with HasMSHRSet
 trait HasMSHRWay extends DJBundle { this: Bundle => val mshrWay = UInt(mshrWayBits.W); val useEvict = Bool(); def useMSHR = !useEvict } // UseEvictTable
 
 trait HasMHSRIndex extends DJBundle with HasMSHRSet with HasMSHRWay { def mshrMatch(set: UInt, way: UInt): Bool = mshrSet === set & mshrWay === way }
-
-class MSHRIndexBundle(implicit p: Parameters) extends DJBundle with HasMSHRSet with HasMSHRWay
 
 object PipeID { val width = 1; val REQ = "b0".U; val RESP = "b1".U }
 
@@ -138,6 +121,7 @@ trait HasReq2NodeBundle extends DJBundle with HasAddr with HasMSHRWay { this: Bu
     val expCompAck  = Bool()
     // Replace (Use In SnMaster)
     val replace     = Bool()
+    val ReadDCU     = Bool()
 }
 
 class Req2NodeBundleWitoutXbarId(implicit p: Parameters) extends DJBundle with HasReq2NodeBundle
@@ -178,11 +162,11 @@ trait HasDBData extends DJBundle { this: Bundle =>
 }
 
 // DataBuffer Read/Clean Req
-class DBRCReq(implicit p: Parameters)       extends DJBundle with HasDBRCOp with HasMSHRSet with HasDBID with HasIDBits { val useDBID = Bool()}
-class DBWReq(implicit p: Parameters)        extends DJBundle                                             with HasIDBits
-class DBWResp(implicit p: Parameters)       extends DJBundle                                with HasDBID with HasIDBits
+class DBRCReq(implicit p: Parameters)       extends DJBundle with HasDBRCOp with HasMSHRSet with HasDBID with HasToIDBits
+class DBWReq(implicit p: Parameters)        extends DJBundle                                             with HasFromIDBits
+class DBWResp(implicit p: Parameters)       extends DJBundle                                with HasDBID with HasToIDBits
 class NodeFDBData(implicit p: Parameters)   extends DJBundle with HasDBData                              with HasToIDBits
-class NodeTDBData(implicit p: Parameters)   extends DJBundle with HasDBData                 with HasDBID with HasToIDBits
+class NodeTDBData(implicit p: Parameters)   extends DJBundle with HasDBData                 with HasDBID
 
 class DBBundle(hasDBRCReq: Boolean = false)(implicit p: Parameters) extends DJBundle {
     val dbRCReqOpt  = if(hasDBRCReq) Some(Decoupled(new DBRCReq)) else None
@@ -193,70 +177,6 @@ class DBBundle(hasDBRCReq: Boolean = false)(implicit p: Parameters) extends DJBu
 
     def dbRCReq     = dbRCReqOpt.get
 }
-
-
-// ---------------------------------------------------------------- DataBuffer Base Bundle ----------------------------------------------------------------------------- //
-class PipeTaskBundle(implicit p: Parameters) extends DJBundle with HasAddr with HasPipeID with HasMSHRWay {
-    val readDir         = Bool()
-    val reqMes          = new ReqBaseMesBundle()
-    val respMes         = new Bundle {
-        val slvResp     = Valid(UInt(ChiResp.width.W))
-        val masResp     = Valid(UInt(ChiResp.width.W))
-        val fwdState    = Valid(UInt(ChiResp.width.W))
-        val slvDBID     = Valid(UInt(dbIdBits.W))
-        val masDBID     = Valid(UInt(dbIdBits.W))
-    }
-}
-
-object UpdMSHRType { val width = 2; val RETRY = "b00".U ; val UPD = "b01".U; val REPL = "b10".U; val EVICT = "b11".U }
-
-trait HasMSHRUpdBundle extends Bundle {
-    val updType     = UInt(UpdMSHRType.width.W)
-
-    def isRetry     = updType === UpdMSHRType.RETRY
-    def isUpdate    = updType === UpdMSHRType.UPD
-    def isRepl      = updType === UpdMSHRType.REPL
-    def isEvict     = updType === UpdMSHRType.EVICT
-    def isReq       = isRepl | isEvict
-}
-
-class UpdateMSHRReqBundle(implicit p: Parameters) extends DJBundle with HasAddr with HasPipeID with HasMSHRWay with HasMSHRUpdBundle {
-    val willUseWay      = UInt(2.W)
-    val waitSlvVec      = Vec(nrSlvIntf, Bool()) // Wait Snoop Resp
-    val waitMasVec      = Vec(nrMasIntf, Bool()) // Wait Req Resp
-}
-
-class UpdateMSHRRespBundle(implicit p: Parameters) extends DJBundle with HasPipeID with HasMSHRWay with HasMSHRUpdBundle {
-    val retry           = Bool()
-}
-
-class DirReadBundle(implicit p: Parameters) extends DJBundle with HasAddr with HasPipeID
-
-class DirRespBaseBundle(nrWays: Int, nrMetas: Int, replWayBits: Int)(implicit p: Parameters) extends DJBundle with HasAddr {
-    val hit         = Bool()
-    val wayOH       = UInt(nrWays.W)
-    val metaVec     = Vec(nrMetas, new CHIStateBundle())
-    val replMes     = UInt(replWayBits.W)
-    val replRetry   = Bool()
-}
-
-class DirRespBundle(implicit p: Parameters) extends DJBundle with HasPipeID {
-    val s   = new DirRespBaseBundle(djparam.selfWays, 1, sReplWayBits) // self
-    val sf  = new DirRespBaseBundle(djparam.sfDirWays, nrRnfNode, sfReplWayBits) // snoop filter
-}
-
-class DirWriteBaseBundle(nrWays: Int, nrMetas: Int, replWayBits: Int)(implicit p: Parameters) extends DJBundle with HasAddr {
-    val wayOH       = UInt(nrWays.W)
-    val metaVec     = Vec(nrMetas, new CHIStateBundle())
-    val replMes     = UInt(replWayBits.W)
-}
-
-class DirWriteBundle(implicit p: Parameters) extends DJBundle {
-    val s   = Decoupled(new DirWriteBaseBundle(djparam.selfWays, 1, sReplWayBits)) // self
-    val sf  = Decoupled(new DirWriteBaseBundle(djparam.sfDirWays, nrRnfNode, sfReplWayBits)) // snoop filter
-}
-
-
 
 
 

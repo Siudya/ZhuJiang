@@ -1,10 +1,9 @@
 package DONGJIANG
 
 import Utils.FastArb
-import chisel3.{Flipped, _}
+import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config._
-import Utils.IDConnector._
 import Utils.FastArb._
 import xs.utils.FastArbiter
 
@@ -69,20 +68,18 @@ class Xbar()(implicit p: Parameters) extends DJModule {
         }
         // slice DataBuffer signals
         val dbSigs = new Bundle {
-            val in = Vec(nrIntf, Flipped(new DBBundle(hasDBRCReq = true)))
-            val out = Vec(djparam.nrBank, new DBBundle(hasDBRCReq = true))
+            val in0 = Vec(djparam.nrBank + nrIntf, Flipped(Decoupled(new DBRCReq())))
+            val in1 = Vec(nrIntf, Flipped(new DBBundle(hasDBRCReq = false)))
+            val out = Vec(1, new DBBundle(hasDBRCReq = true))
         }
     })
 
 
 // ------------------------------------------ Modules declaration And Connection ----------------------------------------------//
     val req2SliceIdMaps     = Seq.fill(nrIntf) { Module(new IdMap()) }
-    val wReq2SliceIdMaps    = Seq.fill(nrIntf) { Module(new IdMap()) }
 
     // --------------------- Wire declaration ------------------------//
     val req2SliceReMap      = Wire(Vec(nrIntf, Decoupled(new Req2SliceBundle())))
-    val wReqRemap           = Wire(Vec(nrIntf, Decoupled(new DBWReq())))
-
 
     // --------------------- Connection ------------------------//
     // req2Slice bank ReMap
@@ -94,23 +91,31 @@ class Xbar()(implicit p: Parameters) extends DJModule {
             req2SliceReMap(i).bits.to.idL1 := m.io.outBank
     }
 
-    // wReqRemap bank reMap
-    wReqRemap.zip(io.dbSigs.in.map(_.wReq)).foreach { case(reMap, in) => reMap <> in }
-    wReq2SliceIdMaps.zipWithIndex.foreach {
-        case (m, i) =>
-            m.io.bankVal <> io.bankVal
-            m.io.inBank := io.dbSigs.in(i).wReq.bits.to.idL1
-            wReqRemap(i).bits.to.idL1 :=  m.io.outBank
+    def idSelDec2DecVec[T <: Bundle with HasToIDBits](in: DecoupledIO[T], out: Seq[DecoupledIO[T]]): Unit = {
+        in.ready := false.B
+        out.foreach(_.bits := in.bits)
+        out.zipWithIndex.foreach {
+            case (o, i) =>
+                o.bits := in.bits
+                val idMatch = WireInit(false.B)
+                idMatch := in.bits.to.idL1 === i.U
+                when(idMatch) {
+                    o.valid := in.valid
+                    in.ready := o.ready
+                }.otherwise {
+                    o.valid := false.B
+                }
+        }
     }
 
     // in ---> [queue0] ---> [idIndex] ---> [queue1] ---> [arbiter] ---> [queue2] ---> out
     def interConnect[T <: Bundle with HasToIDBits](in: Seq[DecoupledIO[T]], q0: Int, q1: Int, q2: Int, out: Seq[DecoupledIO[T]]): Unit = {
         val reDir = Seq.fill(in.size) { Seq.fill(out.size) { WireInit(0.U.asTypeOf(in(0))) }}
-        in.zipWithIndex.foreach { case (m, i) => idSelDec2DecVec(Queue(m, q0), reDir(i), level = 1) }
+        in.zipWithIndex.foreach { case (m, i) => idSelDec2DecVec(Queue(m, q0), reDir(i)) }
         out.zipWithIndex.foreach { case (m, i) => m <> Queue(fastArbDec(reDir.map { case a => Queue(a(i), entries = q1) }), q2) }
     }
 
-
+    // There is a lot of room for optimization of the connection
     interConnect(in = req2SliceReMap,                       q0 = 0, q1 = 0, q2 = 0, out = io.req2Slice.out)
 
     interConnect(in = io.resp2Node.in,                      q0 = 0, q1 = 0, q2 = 0, out = io.resp2Node.out)
@@ -119,14 +124,14 @@ class Xbar()(implicit p: Parameters) extends DJModule {
 
     interConnect(in = io.resp2Slice.in,                     q0 = 0, q1 = 0, q2 = 0, out = io.resp2Slice.out)
 
-    interConnect(in = io.dbSigs.in.map(_.dbRCReqOpt.get),   q0 = 0, q1 = 0, q2 = 0, out = io.dbSigs.out.map(_.dbRCReqOpt.get))
+    io.dbSigs.out(0).dbRCReq                                <> fastArbDec(io.dbSigs.in0)
 
-    interConnect(in = wReqRemap,                            q0 = 0, q1 = 0, q2 = 0, out = io.dbSigs.out.map(_.wReq))
+    io.dbSigs.out(0).wReq                                   <> fastArbDec(io.dbSigs.in1.map(_.wReq))
 
-    interConnect(in = io.dbSigs.out.map(_.wResp),           q0 = 0, q1 = 0, q2 = 0, out = io.dbSigs.in.map(_.wResp))
+    interConnect(in = io.dbSigs.out.map(_.wResp),           q0 = 0, q1 = 0, q2 = 0, out = io.dbSigs.in1.map(_.wResp))
 
-    interConnect(in = io.dbSigs.out.map(_.dataFDB),         q0 = 0, q1 = 0, q2 = 0, out = io.dbSigs.in.map(_.dataFDB))
+    interConnect(in = io.dbSigs.out.map(_.dataFDB),         q0 = 0, q1 = 0, q2 = 0, out = io.dbSigs.in1.map(_.dataFDB))
 
-    interConnect(in = io.dbSigs.in.map(_.dataTDB),          q0 = 0, q1 = 0, q2 = 0, out = io.dbSigs.out.map(_.dataTDB))
+    io.dbSigs.out(0).dataTDB                                <> fastArbDec(io.dbSigs.in1.map(_.dataTDB))
 
 }

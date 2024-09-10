@@ -19,7 +19,7 @@ class ZhujiangTopConfig extends Config((site, here, up) => {
       NodeParam(nodeType = NodeType.S),
       NodeParam(nodeType = NodeType.S),
       NodeParam(nodeType = NodeType.S),
-      NodeParam(nodeType = NodeType.S)
+      NodeParam(nodeType = NodeType.S, splitFlit = true, mainMemory = true)
     )
   )
 })

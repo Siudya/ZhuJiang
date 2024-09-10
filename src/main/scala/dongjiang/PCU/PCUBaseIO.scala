@@ -1,4 +1,4 @@
-package DONGJIANG
+package DONGJIANG.PCU
 
 import DONGJIANG._
 import DONGJIANG.CHI._
@@ -7,21 +7,6 @@ import chisel3.util._
 import org.chipsalliance.cde.config._
 import xs.utils._
 import Utils.FastArb._
-import Utils.IDConnector._
-
-class ReqBufSelector(param: InterfaceParam)(implicit p: Parameters) extends DJModule {
-  val io = IO(new Bundle() {
-    val idle = Input(Vec(param.nrReqBuf, Bool()))
-    val idleNum = Output(UInt((param.reqBufIdBits+1).W))
-    val out0 = UInt(param.reqBufIdBits.W)
-    val out1 = UInt(param.reqBufIdBits.W)
-  })
-  io.idleNum := PopCount(io.idle)
-  io.out0 := PriorityEncoder(io.idle)
-  val idle1 = WireInit(io.idle)
-  idle1(io.out0) := false.B
-  io.out1 := PriorityEncoder(idle1)
-}
 
 abstract class PCUBaseIO(isSlv:Boolean, hasFree: Boolean = false, hasReq2Slice: Boolean = false, hasDBRCReq: Boolean = false)(implicit p: Parameters) extends DJModule {
 // --------------------- IO declaration ------------------------//
