@@ -50,31 +50,11 @@ class Zhujiang(implicit p: Parameters) extends ZJModule {
    * xijiang
    */
   private val localRing = Module(new Ring(true))
-  private val csnRing = Module(new Ring(false))
-  private val (lrns, lhfs, lhis, lsns, lc2cs, lchip) = RingIO(true, p)
-  private val (crns, chfs, chis, csns, cc2cs, cchip) = RingIO(false, p)
+//  private val csnRing = Module(new Ring(false))
 
-  private def conn(a: Seq[BaseIcnBundle], b: Option[Seq[BaseIcnBundle]]) = {
-    if(b.isDefined) {
-      a.zip(b.get).foreach({ case (m, s) =>
-        m <> s
-      })
-    }
-  }
-  conn(lrns, localRing.icnRns)
-  conn(lhfs, localRing.icnHfs)
-  conn(lhis, localRing.icnHis)
-  conn(lsns, localRing.icnSns)
-
-  conn(crns, csnRing.icnRns)
-  conn(chfs, csnRing.icnHfs)
-  conn(chis, csnRing.icnHis)
-
-  if(csnRing.icnC2cs.isDefined) {
-    cc2cs.zip(csnRing.icnC2cs.get).foreach({ case (a, b) => a <> b })
-  }
-  localRing.ioChip.foreach(_ := lchip)
-  csnRing.ioChip.foreach(_ := cchip)
+  localRing.icnSns.get.foreach(_ <> DontCare)
+  localRing.icnHis.get.foreach(_ <> DontCare)
+  localRing.ioChip.get := 0.U
 
   /*
    * NHL2 CHI Bundle Param
@@ -91,7 +71,7 @@ class Zhujiang(implicit p: Parameters) extends ZJModule {
   /*
    *Connect NHL2 IO <> xijiang
    */
-  val nrLocalRn = lrns.length
+  val nrLocalRn = localRing.icnRns.get.length
   val io = IO(new Bundle { val fromNHL2 = Vec(nrLocalRn, Flipped(new CHIBundleDecoupled(params))) })
   val connectToNHL2s = Seq.fill(nrLocalRn) { Module(new ConnectToNHL2(params, zjparam.localRing.filter(_.nodeType == NodeType.R).last)) }
   connectToNHL2s.zipWithIndex.foreach {
