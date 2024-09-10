@@ -20,7 +20,9 @@ object NodeType {
 
 case class NodeParam(
   name: String = "",
-  nodeType: Int = NodeType.R
+  nodeType: Int = NodeType.R,
+  splitFlit: Boolean = false,
+  mainMemory: Boolean = false
 )
 
 case class Node(
@@ -30,7 +32,9 @@ case class Node(
   nodeNetBits: Int = 1,
   nodeNidBits: Int = 4,
   ringSize: Int = 3,
-  oddNode: Boolean = false
+  oddNode: Boolean = false,
+  splitFlit: Boolean = false,
+  mainMemory: Boolean = false
 ) {
   var nid: Int = 0
   var left: Node = null
@@ -88,8 +92,8 @@ case class Node(
     val csnStr = if(csnNode && nodeType != NodeType.C) "c" else ""
     val (res, nodeStr) = nodeType match {
       case NodeType.R => (Module(new RequestRouter(this)(p)), "rn")
-      case NodeType.HF => (Module(new HomeRouter(this)(p)), "hnf")
-      case NodeType.HI => (Module(new HomeRouter(this)(p)), "hni")
+      case NodeType.HF => (Module(new HomeFullRouter(this)(p)), "hnf")
+      case NodeType.HI => (Module(new HomeIoRouter(this)(p)), "hni")
       case NodeType.C => (Module(new ChipToChipRouter(this)(p)), "c2c")
       case NodeType.S => (Module(new SubordinateRouter(this)(p)), "sn")
       case _ => (Module(new PipelineRouter(this)(p)), "pip")

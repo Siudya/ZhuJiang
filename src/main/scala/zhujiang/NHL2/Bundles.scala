@@ -3,7 +3,8 @@ package zhujiang.nhl2
 import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config._
-import xijiang.router.{HnIcn, RnIcn, SnIcn}
+import xijiang.Node
+import xijiang.router.RnIcn
 import zhujiang.{ZJBundle, ZJModule}
 import zhujiang.chi._
 
@@ -298,10 +299,10 @@ class CHIBundleDecoupled(params: CHIBundleParameters)(implicit p: Parameters) ex
     val rxsnp = Flipped(Decoupled(UInt(new CHIBundleSNP(params).getWidth.W)))
 }
 
-class ConnectToNHL2(params: CHIBundleParameters)(implicit p: Parameters) extends ZJModule {
+class ConnectToNHL2(params: CHIBundleParameters, node: Node)(implicit p: Parameters) extends ZJModule {
     val io = IO(new Bundle {
         val fromNHL2    = Flipped(new CHIBundleDecoupled(params))
-        val toRnIcn     = Flipped(new RnIcn)
+        val toRnIcn     = Flipped(new RnIcn(node))
     })
 
     io.toRnIcn.rx.req.valid := io.fromNHL2.txreq.valid
@@ -317,15 +318,15 @@ class ConnectToNHL2(params: CHIBundleParameters)(implicit p: Parameters) extends
     io.fromNHL2.txdat.ready := io.toRnIcn.rx.data.ready
 
     io.fromNHL2.rxsnp.valid := io.toRnIcn.tx.snoop.valid
-    io.fromNHL2.rxsnp.bits := io.fromNHL2.rxsnp.bits.asTypeOf(new CHIBundleSNP(params)).fromSnoopFlit(io.toRnIcn.tx.snoop.bits).asUInt
+    io.fromNHL2.rxsnp.bits := io.fromNHL2.rxsnp.bits.asTypeOf(new CHIBundleSNP(params)).fromSnoopFlit(io.toRnIcn.tx.snoop.bits.asUInt).asUInt
     io.toRnIcn.tx.snoop.ready := io.fromNHL2.rxsnp.ready
 
     io.fromNHL2.rxrsp.valid := io.toRnIcn.tx.resp.valid
-    io.fromNHL2.rxrsp.bits := io.fromNHL2.rxrsp.bits.asTypeOf(new CHIBundleRSP(params)).fromRespFlit(io.toRnIcn.tx.resp.bits).asUInt
+    io.fromNHL2.rxrsp.bits := io.fromNHL2.rxrsp.bits.asTypeOf(new CHIBundleRSP(params)).fromRespFlit(io.toRnIcn.tx.resp.bits.asUInt).asUInt
     io.toRnIcn.tx.resp.ready := io.fromNHL2.rxrsp.ready
 
     io.fromNHL2.rxdat.valid := io.toRnIcn.tx.data.valid
-    io.fromNHL2.rxdat.bits := io.fromNHL2.rxdat.bits.asTypeOf(new CHIBundleDAT(params)).fromDataFlit(io.toRnIcn.tx.data.bits).asUInt
+    io.fromNHL2.rxdat.bits := io.fromNHL2.rxdat.bits.asTypeOf(new CHIBundleDAT(params)).fromDataFlit(io.toRnIcn.tx.data.bits.asUInt).asUInt
     io.toRnIcn.tx.data.ready := io.fromNHL2.rxdat.ready
 
 }

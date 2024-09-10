@@ -85,7 +85,7 @@ class Zhujiang(implicit p: Parameters) extends ZJModule {
   /*
    * NHL2 Interface transform
    */
-  val connectToNHL2s = Seq.fill(nrLocalRn) { Module(new ConnectToNHL2(params)) }
+  val connectToNHL2s = Seq.fill(nrLocalRn) { Module(new ConnectToNHL2(params, zjparam.localRing.filter(_.nodeType == NodeType.R).last)) }
 
   connectToNHL2s.zipWithIndex.foreach {
     case(connect, i) =>

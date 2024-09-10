@@ -6,36 +6,36 @@ import org.chipsalliance.cde.config.Parameters
 import xijiang.{Node, NodeType}
 import zhujiang.{ZJBundle, ZJParametersKey}
 import zhujiang.chi._
-import xijiang.router.base.BaseRouter
+import xijiang.router.base.{BaseIcnBundle, BaseRouter}
 
-class RnTx(implicit p: Parameters) extends ZJBundle {
-  val resp = Decoupled(UInt(respFlitBits.W))
-  val data = Decoupled(UInt(dataFlitBits.W))
-  val snoop = Decoupled(UInt(snoopFlitBits.W))
+class RnTx(node: Node)(implicit p: Parameters) extends ZJBundle {
+  val resp = if(node.splitFlit) Decoupled(new RespFlit) else Decoupled(UInt(respFlitBits.W))
+  val data = if(node.splitFlit) Decoupled(new DataFlit) else Decoupled(UInt(dataFlitBits.W))
+  val snoop = if(node.splitFlit) Decoupled(new SnoopFlit) else Decoupled(UInt(snoopFlitBits.W))
 }
 
-class RnRx(implicit p: Parameters) extends ZJBundle {
-  val req = Flipped(Decoupled(UInt(reqFlitBits.W)))
-  val resp = Flipped(Decoupled(UInt(respFlitBits.W)))
-  val data = Flipped(Decoupled(UInt(dataFlitBits.W)))
+class RnRx(node: Node)(implicit p: Parameters) extends ZJBundle {
+  val req = if(node.splitFlit) Flipped(Decoupled(new ReqFlit)) else Flipped(Decoupled(UInt(reqFlitBits.W)))
+  val resp = if(node.splitFlit) Flipped(Decoupled(new RespFlit)) else Flipped(Decoupled(UInt(respFlitBits.W)))
+  val data = if(node.splitFlit) Flipped(Decoupled(new DataFlit)) else Flipped(Decoupled(UInt(dataFlitBits.W)))
 }
 
-class RnIcn(implicit p: Parameters) extends ZJBundle {
-  val tx = new RnTx
-  val rx = new RnRx
+class RnIcn(node: Node)(implicit p: Parameters) extends BaseIcnBundle(node) {
+  val tx = new RnTx(node)
+  val rx = new RnRx(node)
 }
 
 class RequestRouter(node: Node)(implicit p: Parameters) extends BaseRouter(node,
   Seq("RSP", "DAT", "SNP"), Seq("REQ", "RSP", "DAT")
 ) {
-  val icn = IO(new RnIcn)
+  val icn = IO(new RnIcn(node))
 
-  icn.tx.resp <> ejectMap("RSP")
-  icn.tx.data <> ejectMap("DAT")
-  icn.tx.snoop <> ejectMap("SNP")
-  injectMap("REQ") <> icn.rx.req
-  injectMap("RSP") <> icn.rx.resp
-  injectMap("DAT") <> icn.rx.data
+  connEject(icn.tx.resp, "RSP")
+  connEject(icn.tx.data, "DAT")
+  connEject(icn.tx.snoop, "SNP")
+  connInject(icn.rx.req, "REQ")
+  connInject(icn.rx.resp, "RSP")
+  connInject(icn.rx.data, "DAT")
 
   private val injectReqFlit = WireInit(icn.rx.req.bits.asTypeOf(new ReqFlit))
   if(p(ZJParametersKey).tfsParams.isEmpty) {
@@ -45,7 +45,7 @@ class RequestRouter(node: Node)(implicit p: Parameters) extends BaseRouter(node,
       injectReqFlit.TgtID := Mux(injectReqFlit.mmioReq, node.tgtHomeI.U(niw.W), node.tgtHomeF.U(niw.W))
     }
   }
-  injectMap("REQ").bits := injectReqFlit.asUInt
+  injectMap("REQ").bits := injectReqFlit
 
   if(!node.csnNode) {
     print(

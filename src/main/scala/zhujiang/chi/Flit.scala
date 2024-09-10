@@ -18,6 +18,7 @@ object Flit {
 class Flit(implicit p: Parameters) extends ZJBundle {
   def src = elements("SrcID").asInstanceOf[UInt]
   def tgt = elements("TgtID").asInstanceOf[UInt]
+  def txn = elements("TxnID").asInstanceOf[UInt]
 }
 
 class ReqFlit(implicit p: Parameters) extends Flit {
@@ -160,7 +161,7 @@ object ChannelEncodings {
     "RSP" -> RSP,
     "DAT" -> DAT,
     "SNP" -> SNP,
-    "ERQ" -> SNP
+    "ERQ" -> ERQ
   )
 }
 
