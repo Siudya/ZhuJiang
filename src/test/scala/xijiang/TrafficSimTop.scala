@@ -14,19 +14,19 @@ import scala.annotation.tailrec
 class TfsTopConfig extends Config((site, here, up) => {
   case ZJParametersKey => ZJParameters(
     localNodeParams = Seq(
-      NodeParam(nodeType = NodeType.R, splitFlit = true),
-      NodeParam(nodeType = NodeType.R),
-      NodeParam(nodeType = NodeType.HF, splitFlit = true),
+      NodeParam(nodeType = NodeType.RF),
+      NodeParam(nodeType = NodeType.RF),
+      NodeParam(nodeType = NodeType.HF),
       NodeParam(nodeType = NodeType.S),
-      NodeParam(nodeType = NodeType.R),
-      NodeParam(nodeType = NodeType.R),
+      NodeParam(nodeType = NodeType.RF),
+      NodeParam(nodeType = NodeType.RI),
       NodeParam(nodeType = NodeType.HF),
       NodeParam(nodeType = NodeType.HI),
-      NodeParam(nodeType = NodeType.S, splitFlit = true),
+      NodeParam(nodeType = NodeType.S),
     ),
     csnNodeParams = Seq(
-      NodeParam(nodeType = NodeType.R),
-      NodeParam(nodeType = NodeType.HF, splitFlit = true),
+      NodeParam(nodeType = NodeType.RF),
+      NodeParam(nodeType = NodeType.HF),
       NodeParam(nodeType = NodeType.C),
       NodeParam(nodeType = NodeType.P),
     ),
@@ -65,8 +65,8 @@ class TrafficSimTop(implicit p: Parameters) extends ZJModule {
   require(p(ZJParametersKey).tfsParams.isDefined)
   private val localRing = Module(new Ring(true))
   private val csnRing = Module(new Ring(false))
-  localRing.tfsio.get.chip := 0.U
-  csnRing.tfsio.get.chip := 0.U
+  localRing.io_chip := 0.U
+  csnRing.io_chip := 0.U
   csnRing.tfsio.get.remoteChip.zipWithIndex.foreach({ case (c, i) => c := (i + 1).U })
 }
 

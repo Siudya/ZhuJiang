@@ -1,11 +1,11 @@
 package zhujiang
 
-import chisel3.Module
+import chisel3._
 import chisel3.experimental.{ChiselAnnotation, annotate}
 import org.chipsalliance.cde.config.Parameters
 import sifive.enterprise.firrtl.NestedPrefixModulesAnnotation
-import xijiang.router.base.BaseIcnBundle
-import xijiang.{Ring, RingIO}
+import xijiang.router.base.IcnBundle
+import xijiang.Ring
 
 class Zhujiang(implicit p: Parameters) extends ZJModule {
   require(p(ZJParametersKey).tfsParams.isEmpty)
@@ -17,29 +17,33 @@ class Zhujiang(implicit p: Parameters) extends ZJModule {
   }
   private val localRing = Module(new Ring(true))
   private val csnRing = Module(new Ring(false))
-  private val (lrns, lhfs, lhis, lsns, lc2cs, lchip) = RingIO(true, p)
-  private val (crns, chfs, chis, csns, cc2cs, cchip) = RingIO(false, p)
 
-  private def conn(a: Seq[BaseIcnBundle], b: Option[Seq[BaseIcnBundle]]) = {
-    if(b.isDefined) {
-      a.zip(b.get).foreach({ case (m, s) =>
-        m <> s
-      })
-    }
+  private def makeIOs(icns: Option[Seq[IcnBundle]], local: Boolean): Unit = {
+    icns.foreach(_.foreach(icn => {
+      val port = IO(icn.cloneType)
+      port.suggestName(icn.node.icnStr(local))
+      port <> icn
+    }))
   }
-  conn(lrns, localRing.icnRns)
-  conn(lhfs, localRing.icnHfs)
-  conn(lhis, localRing.icnHis)
-  conn(lsns, localRing.icnSns)
 
-  conn(crns, csnRing.icnRns)
-  conn(chfs, csnRing.icnHfs)
-  conn(chis, csnRing.icnHis)
-  conn(csns, csnRing.icnSns)
+  makeIOs(localRing.icnRfs, true)
+  makeIOs(localRing.icnRis, true)
+  makeIOs(localRing.icnHfs, true)
+  makeIOs(localRing.icnHis, true)
+  makeIOs(localRing.icnSns, true)
 
-  if(csnRing.icnC2cs.isDefined) {
-    cc2cs.zip(csnRing.icnC2cs.get).foreach({ case (a, b) => a <> b })
+  makeIOs(csnRing.icnRfs, false)
+  makeIOs(csnRing.icnHfs, false)
+
+  if(csnRing.c2cs.isDefined) {
+    csnRing.c2cs.foreach(_.zipWithIndex.foreach({ case (c2c, idx) =>
+      val port = IO(c2c.cloneType)
+      port <> c2c
+      port.suggestName(s"c2c_$idx")
+
+    }))
   }
-  localRing.ioChip.foreach(_ := lchip)
-  csnRing.ioChip.foreach(_ := cchip)
+  val io_chip = IO(Input(UInt(p(ZJParametersKey).chipAddrBits.W)))
+  localRing.io_chip := io_chip
+  csnRing.io_chip := io_chip
 }
