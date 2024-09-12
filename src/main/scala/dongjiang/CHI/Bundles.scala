@@ -91,36 +91,20 @@ trait HasChiStates { this: Bundle =>
 class CHIStateBundle extends Bundle with HasChiStates
 
 object CHIChannel {
-    val width = 3
+    val width = 2
 
-    /*
-     *  TXREQ   TXRSP   TXDAT
-     * -----------------------
-     * |     DongJiang       |
-     * -----------------------
-     *  RXSNP   RXRSP   RXDAR
-     */
-
-    def TXREQ = "b001".U(width.W)
-    def TXRSP = "b010".U(width.W)
-    def TXDAT = "b011".U(width.W)
-    def RXSNP = "b100".U(width.W)
-    def RXRSP = "b101".U(width.W)
-    def RXDAT = "b110".U(width.W)
-    def CHNLSELF = "b111".U(width.W)
+    val REQ = "b00".U
+    val DAT = "b00".U
+    val RSP = "b00".U
+    val SNP = "b00".U
 }
 
 trait HasCHIChannel {
     this: Bundle =>
     val channel = UInt(CHIChannel.width.W) // TODO: Del it because unuse
 
-    def isTxReq = channel === CHIChannel.TXREQ
-    def isTxRsp = channel === CHIChannel.TXRSP
-    def isTxDat = channel === CHIChannel.TXDAT
-    def isRxSnp = channel === CHIChannel.RXSNP
-    def isRxRsp = channel === CHIChannel.RXRSP
-    def isRxDat = channel === CHIChannel.RXDAT
-    def isChnlSelf = channel === CHIChannel.CHNLSELF
-
-    def isChnlError = !(isTxReq | isTxRsp | isTxDat | isRxSnp | isRxRsp | isRxDat | isChnlSelf)
+    def isReq = channel === CHIChannel.REQ
+    def isDat = channel === CHIChannel.DAT
+    def isRsp = channel === CHIChannel.RSP
+    def isSnp = channel === CHIChannel.SNP
 }
