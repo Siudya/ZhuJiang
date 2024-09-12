@@ -2,6 +2,7 @@ package DONGJIANG.DECODE
 
 import DONGJIANG._
 import DONGJIANG.CHI._
+import DONGJIANG.CHI.CHIChannel._
 import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config.Parameters
@@ -15,13 +16,17 @@ import DONGJIANG.CHI.ChiState._
 
 object RespType {
   val width         = 3
-  val NOTRESP       = 0.U((RespType.width + 1 + ChiResp.width * 3).W)
   val NotResp       = "b000".U
   val Snp           = "b001".U
   val SnpFwd        = "b010".U
   val RD            = "b100".U // Read Down
-  val Snp_RD        = Snp | RD
-  val SnpFwd_RD     = SnpFwd | RD
+
+  def Snp_RD        = Snp | RD
+  def SnpFwd_RD     = SnpFwd | RD
+  def NOTRESP       = 0.U((RespType.width + 1 + ChiResp.width * 3).W)
+
+  def RespNoData    = 0.U
+  def RespHasData   = 1.U
 }
 
 class InstBundle(implicit p: Parameters) extends DJBundle {
@@ -69,6 +74,7 @@ class OperationsBundle extends Bundle with HasOperationsBundle
 
 class DecodeBundle(chiRespWidth: Int = 3, chiStateWidth: Int = 3) extends Bundle with HasOperationsBundle {
   // Commit(Resp to Rn Node)
+  val respChnl    = UInt(CHIChannel.width.W)
   val respOp      = UInt(5.W)
   val resp        = UInt(chiRespWidth.W)
   val fwdState    = UInt(chiRespWidth.W)
@@ -80,19 +86,19 @@ class DecodeBundle(chiRespWidth: Int = 3, chiStateWidth: Int = 3) extends Bundle
 
   // Send Read or Write to Master Node
   val rdOp        = UInt(6.W)
-  val wdOp      = UInt(6.W)
+  val wdOp        = UInt(6.W)
 
   // Write New State to Directory
   val hnState     = UInt(chiStateWidth.W)
   val srcState    = UInt(chiStateWidth.W)
   val othState    = UInt(chiStateWidth.W)
 
-
   def decode(inst: InstBundle, table: Seq[(UInt, UInt)]): DecodeBundle = {
     this := ParallelLookUp(
       inst.asUInt,
       table
     ).asTypeOf(new DecodeBundle(chiRespWidth, chiStateWidth))
+//    this := Mux1H(table.map(_._1 === inst.asUInt), table.map(_._2)).asTypeOf(new DecodeBundle(chiRespWidth, chiStateWidth))
     this
   }
 }
@@ -111,6 +117,7 @@ object Code {
   def wSFDir           : UInt = { val temp = WireInit(0.U.asTypeOf(new DecodeBundle())); temp.wSFDir := true.B;     temp.asUInt }
 
   // other
+  def RespChnl(x: UInt): UInt = { val temp = WireInit(0.U.asTypeOf(new DecodeBundle())); temp.respChnl := x;        temp.asUInt }
   def RespOp  (x: UInt): UInt = { val temp = WireInit(0.U.asTypeOf(new DecodeBundle())); temp.respOp := x;          temp.asUInt }
   def Resp    (x: UInt): UInt = { val temp = WireInit(0.U.asTypeOf(new DecodeBundle())); temp.resp := x;            temp.asUInt }
   def FwdState(x: UInt): UInt = { val temp = WireInit(0.U.asTypeOf(new DecodeBundle())); temp.fwdState := x;        temp.asUInt }
