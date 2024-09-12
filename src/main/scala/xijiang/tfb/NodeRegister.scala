@@ -22,7 +22,7 @@ class NodeRegister(implicit val p: Parameters) extends BlackBox with HasBlackBox
        |  );
        |  wire [15:0] nid;
        |  assign nid = {${16 - niw}'h0, nodeId};
-       |  initial tfb_register_node(nid);
+       |  initial #1 tfb_register_node(nid);
        |`endif
        |endmodule""".stripMargin)
 }
