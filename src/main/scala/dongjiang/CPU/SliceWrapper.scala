@@ -45,22 +45,25 @@ class SliceWrapper()(implicit p: Parameters) extends DJModule {
   mshrCtl.io.updLockMSHR    <> fastPriorityArbDec(Seq(respPipe.io.updLockMSHR, reqPipe.io.updLockMSHR))
 
   reqPipe.io.sliceId        := io.sliceId
-  reqPipe.io.dirResp        := directory.io.dirResp
-  reqPipe.io.mshrResp       := mshrCtl.io.udpResp
-
-
   respPipe.io.sliceId       := io.sliceId
-  respPipe.io.dirResp       := directory.io.dirResp
-  respPipe.io.mshrResp      := mshrCtl.io.udpResp
 
+  object connectPipe {
+    def apply[T <: Bundle with HasPipeID](in: DecoupledIO[T], out: Seq[DecoupledIO[T]]): Unit = {
+      out.head.valid          := in.valid & in.bits.toReqPipe
+      out.last.valid          := in.valid & in.bits.toRespPipe
+      out.foreach(_.bits      := in.bits)
+      in.ready                := out.head.ready & in.bits.toReqPipe | out.last.ready & in.bits.toRespPipe
+    }
+    def apply[T <: Bundle with HasPipeID](in: ValidIO[T], out: Seq[ValidIO[T]]): Unit = {
+      out.head.valid          := in.valid & in.bits.toReqPipe
+      out.last.valid          := in.valid & in.bits.toRespPipe
+      out.foreach(_.bits      := in.bits)
+    }
+  }
 
-  reqPipe.io.task.valid     := mshrCtl.io.pipeTask.valid & mshrCtl.io.pipeTask.bits.toReqPipe
-  respPipe.io.task.valid    := mshrCtl.io.pipeTask.valid & mshrCtl.io.pipeTask.bits.toRespPipe
-  reqPipe.io.task.bits      := mshrCtl.io.pipeTask.bits
-  respPipe.io.task.bits     := mshrCtl.io.pipeTask.bits
-  mshrCtl.io.pipeTask.ready := reqPipe.io.task.ready & mshrCtl.io.pipeTask.bits.toReqPipe |
-                               respPipe.io.task.ready & mshrCtl.io.pipeTask.bits.toRespPipe
-
+  connectPipe(mshrCtl.io.pipeTask,  Seq(reqPipe.io.task, respPipe.io.task))
+  connectPipe(mshrCtl.io.udpResp,   Seq(reqPipe.io.mshrResp, respPipe.io.mshrResp))
+  connectPipe(directory.io.dirResp, Seq(reqPipe.io.dirResp, respPipe.io.dirResp))
 
   mpReqQueue.io.enq         <> fastPriorityArbDec(Seq(respPipe.io.req2Node, reqPipe.io.req2Node))
   mpRespQueue.io.enq        <> fastPriorityArbDec(Seq(respPipe.io.resp2Node, reqPipe.io.resp2Node))
