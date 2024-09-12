@@ -31,8 +31,7 @@ class MSHREntry(useAddr: Boolean = false)(implicit p: Parameters) extends DJBund
   // req mes
   val reqMes          = new ReqBaseMesBundle() // TODO: Evict not need from
   // resp mes
-  val waitSlvVec      = Vec(nrSlvIntf, Bool()) // Wait Snoop Resp
-  val waitMasVec      = Vec(nrMasIntf, Bool()) // Wait Req Resp
+  val waitIntfVec     = Vec(nrIntf, Bool()) // Wait Snoop Resp or Req Resp
   val respMes         = new Bundle {
     val slvResp       = Valid(UInt(ChiResp.width.W))
     val masResp       = Valid(UInt(ChiResp.width.W))
@@ -207,10 +206,9 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
            * Pipe Update mshrTable value
            */
           when(io.udpMSHR.valid & io.udpMSHR.bits.isUpdate & io.udpMSHR.bits.useMSHR & io.udpMSHR.bits.mSet === i.U & io.udpMSHR.bits.mshrWay === j.U) {
-            m.waitSlvVec := io.udpMSHR.bits.waitSlvVec
-            m.waitMasVec := io.udpMSHR.bits.waitMasVec
-            assert(PopCount(m.waitSlvVec) === 0.U)
-            assert(PopCount(m.waitMasVec) === 0.U)
+            m.waitIntfVec := io.udpMSHR.bits.waitIntfVec
+            assert(PopCount(m.waitIntfVec) === 0.U)
+            assert(m.isAlreadySend)
           /*
            * Receive Pipe Req
            */
@@ -221,13 +219,28 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
            * Resp Update mshrTable value
            */
           }.elsewhen(io.resp2Slice.valid & io.resp2Slice.bits.useMSHR & io.resp2Slice.bits.mshrMatch(i.U, j.U)) {
-            // TODO
-            assert(false.B)
+            // Recovery of pending intf identifiers
+            m.waitIntfVec(io.resp2Slice.bits.from.intfId) := false.B
+            // Record Resp Mes
+            when(io.resp2Slice.bits.isSnpResp) {
+              // TODO
+            }.elsewhen(io.resp2Slice.bits.isReqResp) {
+              m.respMes.masResp.valid := true.B
+              m.respMes.masResp.bits  := io.resp2Slice.bits.resp
+              m.respMes.masDBID.valid := io.resp2Slice.bits.hasData
+              m.respMes.masDBID.bits  := io.resp2Slice.bits.dbid
+            }
+            assert(!(io.resp2Slice.bits.isSnpResp & io.resp2Slice.bits.isReqResp))
+            assert(m.waitIntfVec(io.resp2Slice.bits.from.intfId))
+            assert(m.isWaitResp)
           /*
            * Receive Node Req
            */
           }.elsewhen(io.req2Slice.fire & canReceiveNode & i.U === io.req2Slice.bits.mSet & j.U === nodeReqInvWay) {
             m := mshrAlloc_s0
+            assert(m.isFree)
+          }.elsewhen(m.isFree) {
+            m := 0.U.asTypeOf(m)
           }
       }
   }
@@ -293,20 +306,20 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
             is(MSHRState.Free) {
               val nodeHit = io.req2Slice.valid & canReceiveNode & i.U === io.req2Slice.bits.mSet & j.U === nodeReqInvWay
               val pipeHit = io.udpMSHR.valid & io.udpMSHR.bits.isReq & mshrCanReceivePipe & io.udpMSHR.bits.mSet === i.U & pipeReqInvWay === j.U
-              m.state := Mux(nodeHit | pipeHit, MSHRState.BeSend, MSHRState.Free)
+              m.state     := Mux(nodeHit | pipeHit, MSHRState.BeSend, MSHRState.Free)
             }
             is(MSHRState.BeSend) {
-              val hit = task_s0.valid & canGo_s0 & task_s0.bits.mSet === i.U & task_s0.bits.mshrWay === j.U & task_s0.bits.useMSHR
-              m.state := Mux(hit, MSHRState.AlreadySend, MSHRState.BeSend)
+              val hit     = task_s0.valid & canGo_s0 & task_s0.bits.mSet === i.U & task_s0.bits.mshrWay === j.U & task_s0.bits.useMSHR
+              m.state     := Mux(hit, MSHRState.AlreadySend, MSHRState.BeSend)
             }
             is(MSHRState.AlreadySend) {
-              val hit = io.udpMSHR.valid & io.resp2Slice.bits.useMSHR & io.resp2Slice.bits.mshrMatch(i.U, j.U)
-              val isClean = !(io.udpMSHR.bits.waitSlvVec.reduce(_ | _) | io.udpMSHR.bits.waitMasVec.reduce(_ | _))
-              m.state := Mux(hit, Mux(isClean, MSHRState.Free, MSHRState.WaitResp), MSHRState.AlreadySend)
+              val hit     = io.udpMSHR.valid & io.udpMSHR.bits.mSet === i.U & io.udpMSHR.bits.mshrWay === j.U
+              val isClean = !io.udpMSHR.bits.waitIntfVec.reduce(_ | _)
+              m.state     := Mux(hit, Mux(isClean, MSHRState.Free, MSHRState.WaitResp), MSHRState.AlreadySend)
             }
             is(MSHRState.WaitResp) {
-              val hit = !m.waitSlvVec.reduce(_ | _) & !m.waitMasVec.reduce(_ | _)
-              m.state := Mux(hit, Mux(m.isResp, MSHRState.BeSend, MSHRState.Free), MSHRState.WaitResp)
+              val hit     = !m.waitIntfVec.reduce(_ | _)
+              m.state     := Mux(hit, Mux(m.isResp, MSHRState.BeSend, MSHRState.Free), MSHRState.WaitResp)
             }
           }
       }
