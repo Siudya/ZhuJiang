@@ -6,6 +6,7 @@ import DONGJIANG.DECODE.RespType._
 import DONGJIANG.ChipType._
 import DONGJIANG.DECODE.Code._
 import DONGJIANG.CHI._
+import DONGJIANG.CHI.CHIChannel._
 import DONGJIANG.CHI.CHIOp.REQ._
 import DONGJIANG.CHI.CHIOp.RSP._
 import DONGJIANG.CHI.CHIOp.DAT._
@@ -62,7 +63,10 @@ import chisel3.util._
 
 object LocalReadDecode {
   def readNotSharedDirty: Seq[(UInt, UInt)] = Seq(
-    Cat(Local, ReadNotSharedDirty, I, I , I, NOTRESP) -> (ReadDown | RDOp(ReadNoSnp))
+    // LOCAL REQ
+    Cat(Local, ReadNotSharedDirty, I, I, I, NOTRESP) -> (ReadDown | RDOp(ReadNoSnp)),
+    // LOCAL RESP
+    Cat(Local, ReadNotSharedDirty, I, I, I, RD, RespHasData, ChiResp.I, ChiResp.I, ChiResp.UC) -> (Commit | RDB2Src | wSFDir | RespOp(CompData) | RespChnl(DAT) | Resp(UC) | SrcState(UC) | OthState(I))
   )
 
   def table: Seq[(UInt, UInt)] = readNotSharedDirty
