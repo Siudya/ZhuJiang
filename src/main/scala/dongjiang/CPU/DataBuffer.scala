@@ -37,6 +37,7 @@ class DBEntry(implicit p: Parameters) extends DJBundle with HasToIDBits {
   }
 
   def isFree      = state === DBState.FREE
+  def isAlloc     = state === DBState.ALLOC
 }
 
 
@@ -71,6 +72,11 @@ class DataBuffer()(implicit p: Parameters) extends DJModule {
   io.wResp                <> wRespQ.io.deq
 
 
+// ---------------------------------------------------------------------------------------------------------------------- //
+// ----------------------------------------------------- DATA TO DB ----------------------------------------------------- //
+// ---------------------------------------------------------------------------------------------------------------------- //
+  when(io.dataTDB.valid){ entrys(io.dataTDB.bits.dbid).beats(toBeatNum(io.dataTDB.bits.dataID)) := io.dataTDB.bits.data }
+  io.dataTDB.ready := true.B
 
 
 
@@ -82,10 +88,14 @@ class DataBuffer()(implicit p: Parameters) extends DJModule {
       switch(s) {
         is(DBState.FREE) {
           val hit = wRespQ.io.enq.fire & wReqId === i.U
-          s := Mux(hit, DBState.WRITTING, s)
+          s := Mux(hit, DBState.ALLOC, s)
         }
       }
   }
+
+
+// ----------------------------------------------------- Assertion ---------------------------------------------------------- //
+  when(io.dataTDB.valid){ assert(entrys(io.dataTDB.bits.dbid).isAlloc) }
 
 
 }
