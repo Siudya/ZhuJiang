@@ -36,8 +36,7 @@ trait HasMSHRUpdBundle extends Bundle {
 
 class UpdateMSHRReqBundle(implicit p: Parameters) extends DJBundle with HasAddr with HasPipeID with HasMSHRWay with HasMSHRUpdBundle {
     val willUseWay      = UInt(2.W)
-    val waitSlvVec      = Vec(nrSlvIntf, Bool()) // Wait Snoop Resp
-    val waitMasVec      = Vec(nrMasIntf, Bool()) // Wait Req Resp
+    val waitIntfVec     = Vec(nrIntf, Bool())
 }
 
 class UpdateMSHRRespBundle(implicit p: Parameters) extends DJBundle with HasPipeID with HasMSHRWay with HasMSHRUpdBundle {
