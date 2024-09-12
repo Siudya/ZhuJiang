@@ -216,8 +216,8 @@ trait HasDJParam extends HasParseZJParam {
     val TIMEOUT_RMPCU   = 8000 // Rn Master PCU
     val TIMEOUT_DB      = 8000  // DataBuffer
     val TIMEOUT_BT      = 8000  // BlockTable
-    val TIMEOUT_EXU     = 8000  // Pipe Execute
-    val TIMEOUT_COM     = 8000  // Pipe Commit
+    val TIMEOUT_EXU     = 2000  // Pipe Execute
+    val TIMEOUT_COM     = 2000  // Pipe Commit
 
     // some requirements for CHI width
     require(pcuIdBits <= djparam.chiTxnidBits)
