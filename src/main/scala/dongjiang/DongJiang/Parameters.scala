@@ -42,9 +42,9 @@ case class DJParam(
                     localSnMasterIntf:  InterfaceParam =              InterfaceParam( name = "SnMaster_LOCAL", isRn = false,  isSlave = false, chipId = Some(0)),
                     csnRnSlaveIntf:     Option[InterfaceParam] = None, // Some(InterfaceParam( name = "RnSalve_CSN",    isRn = true,   isSlave = true)),
                     csnRnMasterIntf:    Option[InterfaceParam] = None, // Some(InterfaceParam( name = "RnMaster_CSN",   isRn = true,   isSlave = false, chipId = Some(1) )),
-                    nodeIdBits: Int = 12,
-                    txnidBits: Int = 12,
-                    dbidBits: Int = 16,
+                    chiNodeIdBits: Int = 12,
+                    chiTxnidBits: Int = 12,
+                    chiDBIDBits: Int = 16,
                     // ------------------------ DCU Base Mes ------------------ //
                     nrDSBank: Int = 2,
                     nrDCUWBuf: Int = 4,
@@ -86,7 +86,7 @@ case class DJParam(
     require(nrMSHRWays <= min(selfWays, sfDirWays))
     require(selfReplacementPolicy == "random" || selfReplacementPolicy == "plru")
     require(sfReplacementPolicy == "random" || sfReplacementPolicy == "plru")
-    require(log2Ceil(nrDCUWBuf) <= dbidBits)
+    require(log2Ceil(nrDCUWBuf) <= chiDBIDBits)
 }
 
 
@@ -139,11 +139,13 @@ trait HasDJParam extends HasParseZJParam {
 
     // Base Mes Parameters
     val nrBeat          = djparam.blockBytes / djparam.beatBytes
+    val beatNumBits     = log2Ceil(nrBeat)
     val addressBits     = djparam.addressBits
     val dataBits        = djparam.blockBytes * 8
     val beatBits        = djparam.beatBytes * 8
     val localChipId     = 0 // TODO
     val csnChipId       = 1 // TODO
+    require(isPow2(nrBeat))
 
     // Base Interface Mes
     val hasCSNIntf      = djparam.csnRnSlaveIntf.nonEmpty & djparam.csnRnMasterIntf.nonEmpty
@@ -218,8 +220,8 @@ trait HasDJParam extends HasParseZJParam {
     val TIMEOUT_COM     = 8000  // Pipe Commit
 
     // some requirements for CHI width
-    require(pcuIdBits <= djparam.txnidBits)
-    require(dbIdBits <= djparam.dbidBits)
+    require(pcuIdBits <= djparam.chiTxnidBits)
+    require(dbIdBits <= djparam.chiDBIDBits)
 
     def getChipTypeByAddr(x: UInt): UInt = {
         val chipType = Wire(UInt(ChipType.width.W))
@@ -248,6 +250,25 @@ trait HasDJParam extends HasParseZJParam {
         // return: [1:mshrTag] [2:mshrSet] [3:bank]
         (tag, set, bank)
     }
+
+     def parseDCUAddress(x: UInt): (UInt, UInt, UInt, UInt) = {
+         val (tag, set, modBank, bank, offset) = parseAddress(x, modBankBits = 0, setBits = sSetBits, tagBits = 0)
+         val sWay = offset(sWayBits-1, 0); require(sWayBits <= offsetBits)
+         val index = Cat(set, sWay)
+         // dsIndex = Cat(selfSet, selfWay)
+         // return: [1:dsIndex] [2:selfSet] [3:sliceBank] [4:selfWay]
+         (index, set, bank, sWay)
+     }
+
+
+    def getDCUAddress(addr:UInt, sWay:UInt): UInt = {
+        val (index, set, bank, noWay) = parseDCUAddress(addr)
+        val dcuAddr = Cat(set, bank, 0.U((offsetBits-sWayBits).W), sWay)
+        require(dcuAddr.getWidth == sSetBits + bankBits + offsetBits)
+        dcuAddr
+    }
+
+
 
     def toDataID(x: UInt): UInt = {
         require(nrBeat == 1 | nrBeat == 2 | nrBeat == 4)

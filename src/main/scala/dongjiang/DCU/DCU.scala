@@ -31,13 +31,8 @@ class DCUWEntry(implicit p: Parameters) extends DJBundle {
     val data            = Vec(nrBeat, UInt(beatBits.W))
     val dsIndex         = UInt(dsIndexBits.W)
     val dsBank          = UInt(dsBankBits.W)
-    val srcID           = UInt(djparam.nodeIdBits.W)
-    val txnID           = UInt(djparam.txnidBits.W)
-
-    def getDSIndex(x: UInt) = {
-        this.dsIndex    := x(dsIndexBits + dsBankBits - 1, dsBankBits)
-        this.dsBank     := x(dsBankBits - 1, 0)
-    }
+    val srcID           = UInt(djparam.chiNodeIdBits.W)
+    val txnID           = UInt(djparam.chiTxnidBits.W)
 }
 
 class SramReqBundle(implicit p: Parameters) extends DJBundle {
@@ -88,7 +83,7 @@ class DCU(node: Node)(implicit p: Parameters) extends DJModule {
     val rDatQ           = Module(new Queue(Vec(nrBeat, UInt(beatBits.W)), entries = djparam.nrDCURespQ, flow = false, pipe = true))
     val respBankReg     = Reg(UInt(bankBits.W))
     val respVec         = Wire(Vec(djparam.nrDSBank, Vec(nrBeat, UInt(beatBits.W))))
-    val sendBeatNumReg  = RegInit(0.U(log2Ceil(nrBeat).W))
+    val sendBeatNumReg  = RegInit(0.U(beatNumBits.W))
 
     // DataStorage
     val ds              = Seq.fill(djparam.nrDSBank) { Module(new SRAMTemplate(Vec(nrBeat, UInt(beatBits.W)), nrDSEntry, singlePort = true, multicycle = djparam.dcuMulticycle, holdMcp = djparam.dcuHoldMcp)) }
@@ -134,10 +129,10 @@ class DCU(node: Node)(implicit p: Parameters) extends DJModule {
                 is(DCUWState.Free) {
                     val hit = io.sn.tx.req.fire & reqIsW & selRecWID === i.U
                     when(hit) {
-                        w.state := DCUWState.SendDBIDResp
-                        w.getDSIndex(txReq.Addr)
-                        w.srcID := txReq.SrcID
-                        w.txnID := txReq.TxnID
+                        w.state     := DCUWState.SendDBIDResp
+                        w.dsIndex   := parseDCUAddress(txReq.Addr)._1
+                        w.srcID     := txReq.SrcID
+                        w.txnID     := txReq.TxnID
                     }
                 }
                 is(DCUWState.SendDBIDResp) {
@@ -181,11 +176,11 @@ class DCU(node: Node)(implicit p: Parameters) extends DJModule {
     earlyReq.zipWithIndex.foreach {
         case(req, i) =>
             val wenHit      = wBufWenVec.reduce(_ | _)  & wBufRegVec(selWenID).dsBank === i.U
-            val renHit      = rReqQ.io.deq.valid        & rReqQ.io.deq.bits.Addr(dsBankBits-1, 0) === i.U
+            val renHit      = rReqQ.io.deq.valid        & parseDCUAddress(rReqQ.io.deq.bits.Addr)._2(dsBankBits-1, 0) === i.U
             req.valid       := Mux(sramReqReg(i).valid, false.B, Mux(canRecEarly(i), wenHit | renHit, false.B))
             req.bits.wen    := wenHit
             req.bits.wBufID := selWenID
-            req.bits.index  := Mux(wenHit, wBufRegVec(selWenID).dsIndex, rReqQ.io.deq.bits.Addr(dsIndexBits+dsBankBits-1, dsBankBits))
+            req.bits.index  := Mux(wenHit, wBufRegVec(selWenID).dsIndex, parseDCUAddress(rReqQ.io.deq.bits.Addr)._1)
     }
     sramReqReg.zip(earlyReq).foreach {
         case(reg, early) =>
@@ -268,7 +263,7 @@ class DCU(node: Node)(implicit p: Parameters) extends DJModule {
             assert(Mux(d.io.w.req.valid, d.io.w.req.ready, true.B))
     }
 
-    assert(Mux(io.sn.tx.req.valid, txReq.Addr <= nrPerDCUEntry.U, true.B))
+    assert(Mux(io.sn.tx.req.valid, txReq.Addr(addressBits - 1, addressBits - sTagBits) === 0.U, true.B))
 
     assert(Mux(io.sn.tx.req.valid, txReq.Size === log2Ceil(djparam.blockBytes).U, true.B))
 

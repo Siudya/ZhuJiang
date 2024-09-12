@@ -65,8 +65,8 @@ trait HasPipeID extends Bundle { this: Bundle => val pipeId = UInt(PipeID.width.
 // TODO: Rename it
 trait HasReqBaseMesBundle extends DJBundle { this: Bundle =>
     // CHI Id(Use in RnSlave)
-    val srcID       = UInt(djparam.nodeIdBits.W)
-    val txnID       = UInt(djparam.nodeIdBits.W)
+    val srcID       = UInt(djparam.chiNodeIdBits.W)
+    val txnID       = UInt(djparam.chiNodeIdBits.W)
     // Snp Mes(Use in RnMaster)
     val isSnp       = Bool()
     val doNotGoToSD = Bool()
@@ -88,8 +88,8 @@ class Req2SliceBundle(implicit p: Parameters) extends DJBundle with HasReq2Slice
 
 trait HasResp2NodeBundle extends DJBundle with HasCHIChannel with HasMSHRWay { this: Bundle =>
     // CHI Id
-    val srcID       = UInt(djparam.nodeIdBits.W)
-    val txnID       = UInt(djparam.nodeIdBits.W)
+    val srcID       = UInt(djparam.chiNodeIdBits.W)
+    val txnID       = UInt(djparam.chiNodeIdBits.W)
     // CHI Mes
     val opcode      = UInt(6.W)
     // Indicate Snoopee final state
@@ -108,9 +108,9 @@ class Resp2NodeBundle(implicit p: Parameters) extends DJBundle with HasResp2Node
 // ---------------------------------------------------------------- Req To Node Bundle ----------------------------------------------------------------------------- //
 trait HasReq2NodeBundle extends DJBundle with HasAddr with HasMSHRWay { this: Bundle =>
     // CHI Id
-    val tgtId       = UInt(djparam.nodeIdBits.W)
-    val srcId       = UInt(djparam.nodeIdBits.W)
-    val txnId       = UInt(djparam.nodeIdBits.W)
+    val tgtId       = UInt(djparam.chiNodeIdBits.W)
+    val srcId       = UInt(djparam.chiNodeIdBits.W)
+    val txnId       = UInt(djparam.chiNodeIdBits.W)
     // Snp Mes (Use in RnSlave)
     val retToSrc    = Bool()
     val doNotGoToSD = Bool()

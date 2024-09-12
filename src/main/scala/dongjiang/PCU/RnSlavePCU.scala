@@ -68,9 +68,9 @@ class PCURSEntry(param: InterfaceParam)(implicit p: Parameters) extends DJBundle
   }
   val reqMes        = new DJBundle with HasFromIDBits with HasMSHRWay {
     val opcode      = UInt(6.W)
-    val txnId       = UInt(djparam.txnidBits.W)
-    val tgtId       = UInt(djparam.nodeIdBits.W)
-    val srcId       = UInt(djparam.nodeIdBits.W)
+    val txnId       = UInt(djparam.chiTxnidBits.W)
+    val tgtId       = UInt(djparam.chiNodeIdBits.W)
+    val srcId       = UInt(djparam.chiNodeIdBits.W)
     val snpRetToSrc    = Bool()
     val snpDoNotGoToSD = Bool()
   }
