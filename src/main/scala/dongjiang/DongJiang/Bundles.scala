@@ -26,6 +26,7 @@ class IDBundle(implicit p: Parameters) extends DJBundle {
     val idL1 = UInt(max(bankBits, nrIntfBits).W)
     val idL2 = UInt(pcuIdBits.W)
 
+    def intfId   = idL1
     def pcuId    = idL2
 
     def LOCALSLV = idL1 === IdL1.LOCALSLV.U
@@ -132,11 +133,15 @@ class Req2NodeBundle(implicit p: Parameters) extends DJBundle with HasReq2NodeBu
 // ---------------------------------------------------------------- Resp To Slice Bundle ----------------------------------------------------------------------------- //
 trait HasResp2SliceBundle extends DJBundle with HasDBID with HasMHSRIndex { this: Bundle =>
     val isSnpResp   = Bool()
+    val isReqResp   = Bool()
     val hasData     = Bool()
     // Indicate Snoopee final state
     val resp        = UInt(ChiResp.width.W)
     // Indicate Requster final state in DCT
     val fwdState    = Valid(UInt(ChiResp.width.W))
+
+    def isResp      = isSnpResp | isReqResp
+    def isUpdate    = !isResp
 }
 
 class Resp2SliceBundleWitoutXbarId(implicit p: Parameters) extends DJBundle with HasResp2SliceBundle
@@ -162,11 +167,11 @@ trait HasDBData extends DJBundle { this: Bundle =>
 }
 
 // DataBuffer Read/Clean Req
-class DBRCReq(implicit p: Parameters)       extends DJBundle with HasDBRCOp with HasMSHRSet with HasDBID with HasToIDBits
-class DBWReq(implicit p: Parameters)        extends DJBundle                                             with HasFromIDBits
-class DBWResp(implicit p: Parameters)       extends DJBundle                                with HasDBID with HasToIDBits
-class NodeFDBData(implicit p: Parameters)   extends DJBundle with HasDBData                              with HasToIDBits
-class NodeTDBData(implicit p: Parameters)   extends DJBundle with HasDBData                 with HasDBID
+class DBRCReq(implicit p: Parameters)       extends DJBundle with HasDBRCOp with HasDBID with HasToIDBits
+class DBWReq(implicit p: Parameters)        extends DJBundle                             with HasFromIDBits
+class DBWResp(implicit p: Parameters)       extends DJBundle                with HasDBID with HasToIDBits
+class NodeFDBData(implicit p: Parameters)   extends DJBundle with HasDBData              with HasToIDBits
+class NodeTDBData(implicit p: Parameters)   extends DJBundle with HasDBData with HasDBID
 
 class DBBundle(hasDBRCReq: Boolean = false)(implicit p: Parameters) extends DJBundle {
     val dbRCReqOpt  = if(hasDBRCReq) Some(Decoupled(new DBRCReq)) else None
