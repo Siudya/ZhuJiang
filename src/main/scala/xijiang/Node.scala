@@ -5,6 +5,7 @@ import chisel3.util._
 import org.chipsalliance.cde.config.Parameters
 import xijiang.router._
 import xijiang.router.base.BaseRouter
+import zhujiang.chi.NodeIdBundle
 
 object NodeType {
   val RF: Int = 0
@@ -43,52 +44,33 @@ case class Node(
   var left: Node = null
   var right: Node = null
 
-  val net = if(csnNode) 1 else 0
-  private val netOff = NodeType.width + nodeNidBits
-  private val typeOff = nodeNidBits
+  lazy val net = if(csnNode) 1 else 0
+  lazy private val netOff = NodeType.width + nodeNidBits
+  lazy private val typeOff = nodeNidBits
   require(NodeType.min <= nodeType && nodeType <= NodeType.max)
   lazy val nodeId = (net << netOff) | (nodeType << typeOff) | nid
 
   lazy val (leftNodes, rightNodes) = getLeftAndRight
-  private def getLeftAndRight: (Seq[Int], Seq[Int]) = {
+  private def getLeftAndRight: (Seq[Node], Seq[Node]) = {
     require(left != null)
     require(right != null)
-    require(!csnNode)
     val otherNodesNum = ringSize - 1
     val leftNum = if(oddNode) otherNodesNum / 2 else (otherNodesNum + 1) / 2
     var leftNow: Node = this
-    val leftNodesId = for(i <- 0 until leftNum) yield {
+    val leftNodes = for(i <- 0 until leftNum) yield {
       leftNow = leftNow.left
       require(leftNow != null)
-      leftNow.nodeId
+      leftNow
     }
 
     val rightNum = otherNodesNum - leftNum
     var rightNow: Node = this
-    val rightlNodesId = for(i <- 0 until rightNum) yield {
+    val rightNodes = for(i <- 0 until rightNum) yield {
       rightNow = rightNow.right
       require(rightNow != null)
-      rightNow.nodeId
+      rightNow
     }
-    (leftNodesId, rightlNodesId)
-  }
-
-  lazy val tgtHomeF = getPreferHome(true)
-  lazy val tgtHomeI = getPreferHome(false)
-  private def getPreferHome(full: Boolean): Int = {
-    def cond(id: Int): Boolean = {
-      val nt = (id >> typeOff) & ((1 << NodeType.width) - 1)
-      if(full) nt == NodeType.HF else nt == NodeType.HI
-    }
-
-    val leftPos = if(leftNodes.count(cond) != 0) leftNodes.indexOf(leftNodes.filter(cond).head) else Int.MaxValue
-    val rightPos = if(rightNodes.count(cond) != 0) rightNodes.indexOf(rightNodes.filter(cond).head) else Int.MaxValue
-    require(leftPos != Int.MaxValue || rightPos != Int.MaxValue)
-    if(leftPos < rightPos) {
-      leftNodes(leftPos)
-    } else {
-      rightNodes(rightPos)
-    }
+    (leftNodes, rightNodes)
   }
 
   def genRouter(p: Parameters): BaseRouter = {
@@ -106,27 +88,25 @@ case class Node(
     res
   }
 
+  lazy val routerPrefixStr: String = if(csnNode) "Csn" else ""
   lazy val routerStr: String = nodeType match {
-    case NodeType.RF => "RequestFullRouter"
-    case NodeType.RI => "RequestIoRouter"
-    case NodeType.HF => "HomeFullFullRouter"
-    case NodeType.HI => "HomeIoRouter"
-    case NodeType.C => "C2cRouter"
-    case NodeType.S => "SubordinateRouter"
-    case _ => "PipelineRouter"
+    case NodeType.RF => s"${routerPrefixStr}RequestFullRouter"
+    case NodeType.RI => s"${routerPrefixStr}RequestIoRouter"
+    case NodeType.HF => s"${routerPrefixStr}HomeFullFullRouter"
+    case NodeType.HI => s"${routerPrefixStr}HomeIoRouter"
+    case NodeType.C => s"${routerPrefixStr}C2cRouter"
+    case NodeType.S => s"${routerPrefixStr}SubordinateRouter"
+    case _ => s"${routerPrefixStr}PipelineRouter"
   }
 
-  def icnStr(local: Boolean): String = nodeType match {
-    case NodeType.RF => if(local) s"rnf_id_${nodeId.toHexString}" else "rnf"
-    case NodeType.RI => if(local) s"rni_id_${nodeId.toHexString}" else "rni"
-    case NodeType.HF => if(local) s"hnf_id_${nodeId.toHexString}" else "hnf"
-    case NodeType.HI => if(local) s"hni_id_${nodeId.toHexString}" else "hni"
-    case NodeType.C => if(local) s"c2c_id_${nodeId.toHexString}" else "c2c"
-    case NodeType.S => if(local) {
-      if(mainMemory) s"mem_sn_id_${nodeId.toHexString}" else s"dcu_sn_id_${nodeId.toHexString}"
-    } else {
-      "sn"
-    }
+  lazy val icnPrefixStr: String = if(csnNode) "csn_" else ""
+  lazy val icnStr: String = nodeType match {
+    case NodeType.RF => s"${icnPrefixStr}rnf_id_${nodeId.toHexString}"
+    case NodeType.RI => s"${icnPrefixStr}rni_id_${nodeId.toHexString}"
+    case NodeType.HF => s"${icnPrefixStr}hnf_id_${nodeId.toHexString}"
+    case NodeType.HI => s"${icnPrefixStr}hni_id_${nodeId.toHexString}"
+    case NodeType.C => s"${icnPrefixStr}c2c_id_${nodeId.toHexString}"
+    case NodeType.S => if(mainMemory) s"${icnPrefixStr}mem_sn_id_${nodeId.toHexString}" else s"${icnPrefixStr}dcu_sn_id_${nodeId.toHexString}"
     case _ => ""
   }
 
@@ -170,7 +150,7 @@ case class Node(
     res
   }
 
-  def getLegalTarget(ring: Seq[Node]): Map[String, Seq[Int]] = {
+  private def getLocalLegalTarget(ring: Seq[Node]): Map[String, Seq[Int]] = {
     nodeType match {
       case NodeType.RF => Map[String, Seq[Int]](
         "REQ" -> ring.filter(n => n.nodeType == NodeType.HF || n.nodeType == NodeType.HI).map(_.nodeId).filterNot(_ == nodeId),
@@ -198,6 +178,49 @@ case class Node(
         "DAT" -> ring.filter(n => n.nodeType == NodeType.RF || n.nodeType == NodeType.RI || n.nodeType == NodeType.HF || n.nodeType == NodeType.HI).map(_.nodeId).filterNot(_ == nodeId),
       )
       case _ => Map[String, Seq[Int]]()
+    }
+  }
+
+  private def getCsnLegalTarget(ring: Seq[Node]): Map[String, Seq[Int]] = {
+    nodeType match {
+      case NodeType.RF => Map[String, Seq[Int]](
+        "REQ" -> ring.filter(n => n.nodeType == NodeType.C).map(_.nodeId),
+        "RSP" -> ring.filter(n => n.nodeType == NodeType.C).map(_.nodeId),
+        "DAT" -> ring.filter(n => n.nodeType == NodeType.C).map(_.nodeId),
+      )
+      case NodeType.HF => Map[String, Seq[Int]](
+        "RSP" -> ring.filter(n => n.nodeType == NodeType.C).map(_.nodeId).filterNot(_ == nodeId),
+        "DAT" -> ring.filter(n => n.nodeType == NodeType.C).map(_.nodeId).filterNot(_ == nodeId),
+        "SNP" -> ring.filter(n => n.nodeType == NodeType.C).map(_.nodeId).filterNot(_ == nodeId)
+      )
+      case NodeType.C => Map[String, Seq[Int]](
+        "REQ" -> ring.filter(n => n.nodeType == NodeType.HF).map(_.nodeId).filterNot(_ == nodeId),
+        "RSP" -> ring.filter(n => n.nodeType == NodeType.HF || n.nodeType == NodeType.RF).map(_.nodeId).filterNot(_ == nodeId),
+        "DAT" -> ring.filter(n => n.nodeType == NodeType.HF || n.nodeType == NodeType.RF).map(_.nodeId).filterNot(_ == nodeId),
+        "SNP" -> ring.filter(n => n.nodeType == NodeType.RF).map(_.nodeId).filterNot(_ == nodeId),
+      )
+      case _ => Map[String, Seq[Int]]()
+    }
+  }
+
+  private def checkTarget(n: Int, tgt: NodeIdBundle, localChip: Option[UInt]): Bool = {
+    if(csnNode && nodeType == NodeType.C) {
+      (n.U(tgt.getWidth.W) | localChip.get) === tgt.asUInt
+    } else if(csnNode && nodeType != NodeType.C) {
+      n.U(tgt.getWidth.W).asTypeOf(tgt).nodeCsnChip === tgt.nodeCsnChip
+    } else {
+      n.U(tgt.getWidth.W) === tgt.asUInt
+    }
+  }
+
+  def checkLegalStaticInjectTarget(ring: Seq[Node], chn: String, tgt: NodeIdBundle, valid: Bool, nid: UInt, localChip: Option[UInt]): Unit = {
+    val targetsSeq = if(csnNode) getCsnLegalTarget(ring)(chn) else getLocalLegalTarget(ring)(chn)
+    require(targetsSeq.nonEmpty, s"targets are empty when making node 0x${nodeId.toHexString} of $chn")
+    val targetHits = targetsSeq.map(checkTarget(_, tgt, localChip))
+    val legalStr = targetsSeq.map(i => s"0x${i.toHexString} ").reduce(_ + _)
+    val legal = Cat(targetHits).orR
+    when(valid) {
+      assert(legal, cf"Illegal target id 0x${tgt.asUInt}%x of $chn flit @ node 0x${nid}%x legal target_id: $legalStr")
     }
   }
 }

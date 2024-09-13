@@ -25,6 +25,9 @@ class TfsTopConfig extends Config((site, here, up) => {
       NodeParam(nodeType = NodeType.S),
     ),
     csnNodeParams = Seq(
+      NodeParam(nodeType = NodeType.C),
+      NodeParam(nodeType = NodeType.RF),
+      NodeParam(nodeType = NodeType.HF),
       NodeParam(nodeType = NodeType.RF),
       NodeParam(nodeType = NodeType.HF),
       NodeParam(nodeType = NodeType.C),

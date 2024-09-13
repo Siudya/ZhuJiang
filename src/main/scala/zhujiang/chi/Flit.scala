@@ -4,17 +4,6 @@ import chisel3._
 import org.chipsalliance.cde.config.Parameters
 import zhujiang.{ZJBundle, ZJParametersKey}
 
-object Flit {
-  def getTgt(flit: UInt)(p: Parameters): UInt = {
-    val niw = p(ZJParametersKey).nodeIdBits
-    flit(niw + 3, 4)
-  }
-  def getSrc(flit: UInt)(p: Parameters): UInt = {
-    val niw = p(ZJParametersKey).nodeIdBits
-    flit(2 * niw + 3, 4 + niw)
-  }
-}
-
 class Flit(implicit p: Parameters) extends ZJBundle {
   def src = elements("SrcID").asInstanceOf[UInt]
   def tgt = elements("TgtID").asInstanceOf[UInt]
@@ -176,4 +165,29 @@ object Credit {
   def apply[T <: Flit](gen: T): Credit[T] = {
     new Credit(gen)
   }
+}
+
+class ReqAddrBundle(implicit p: Parameters) extends ZJBundle {
+  val mmio = Bool()
+  val chip = UInt(chipAddrBits.W)
+  val tag = UInt((raw - 1 - chipAddrBits - 6).W)
+  val offset = UInt(6.W)
+  def csnNid: UInt = tag(nodeNidBits - chipAddrBits - 1, 0)
+}
+
+class SnpAddrBundle(implicit p: Parameters) extends ZJBundle {
+  val mmio = Bool()
+  val chip = UInt(chipAddrBits.W)
+  val tag = UInt((raw - 1 - chipAddrBits - 3).W)
+  val offset = UInt(3.W)
+  def csnNid: UInt = tag(nodeNidBits - chipAddrBits - 1, 0)
+}
+
+class NodeIdBundle(implicit p: Parameters) extends ZJBundle {
+  val csn = Bool()
+  val nodeType = UInt(nodeTypeBits.W)
+  val nodeCsnNid = UInt((nodeNidBits - chipAddrBits).W)
+  val nodeCsnChip = UInt(chipAddrBits.W)
+
+  def nodeNid: UInt = chisel3.util.Cat(nodeCsnNid, nodeCsnChip)
 }

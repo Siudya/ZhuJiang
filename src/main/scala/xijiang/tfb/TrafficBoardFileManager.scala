@@ -173,7 +173,7 @@ object TrafficBoardFileManager {
        |    scb_lock.unlock();
        |    return;
        |  }
-       |  uint8_t type = get_field(node_id, NODE_TYPE_OFF, NODE_TYPE_BITS + NODE_NET_BITS);
+       |  uint16_t type = get_field(node_id, NODE_TYPE_OFF, NODE_TYPE_BITS + NODE_NET_BITS);
        |  scoreboard[node_id] = unordered_map<uint8_t, list<unique_ptr<TrafficBoardEntry>>>();
        |  scoreboard[node_id][REQ] = list<unique_ptr<TrafficBoardEntry>>();
        |  scoreboard[node_id][RSP] = list<unique_ptr<TrafficBoardEntry>>();

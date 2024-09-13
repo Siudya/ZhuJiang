@@ -20,13 +20,13 @@ class TrafficSimTx(implicit val p: Parameters) extends BlackBox with HasBlackBox
   setInline(s"$modName.sv",
     s"""
        |module $modName (
-       |  input \t\t\t\t\tclock,
-       |  input \t\t\t\t\treset,
-       |  input  [7:0] \t\tchn,
-       |  input  [${niw - 1}:0] \t\tnodeId,
-       |  output \t\t\t\t\ttx_valid,
-       |  input \t\t\t\t\ttx_ready,
-       |  output [${maxFlitBits - 1}:0] \ttx_bits
+       |  input \t\t\t\t\t\tclock,
+       |  input \t\t\t\t\t\treset,
+       |  input  [7:0] \t\t\tchn,
+       |  input  [${niw - 1}:0] \t\t\tnodeId,
+       |  output reg\t\t\t\ttx_valid,
+       |  input \t\t\t\t\t\ttx_ready,
+       |  output reg [${maxFlitBits - 1}:0] tx_bits
        |);
        |  import "DPI-C" function void tfs_get_tx_flit(
        |    input shortint \t\tnode_id,

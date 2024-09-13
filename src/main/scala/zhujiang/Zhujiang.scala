@@ -6,6 +6,7 @@ import org.chipsalliance.cde.config.Parameters
 import sifive.enterprise.firrtl.NestedPrefixModulesAnnotation
 import xijiang.router.base.IcnBundle
 import xijiang.Ring
+import xijiang.c2c.C2cLinkPort
 
 class Zhujiang(implicit p: Parameters) extends ZJModule {
   require(p(ZJParametersKey).tfsParams.isEmpty)
@@ -21,7 +22,7 @@ class Zhujiang(implicit p: Parameters) extends ZJModule {
   private def makeIOs(icns: Option[Seq[IcnBundle]], local: Boolean): Unit = {
     icns.foreach(_.foreach(icn => {
       val port = IO(icn.cloneType)
-      port.suggestName(icn.node.icnStr(local))
+      port.suggestName(icn.node.icnStr)
       port <> icn
     }))
   }
@@ -37,10 +38,9 @@ class Zhujiang(implicit p: Parameters) extends ZJModule {
 
   if(csnRing.c2cs.isDefined) {
     csnRing.c2cs.foreach(_.zipWithIndex.foreach({ case (c2c, idx) =>
-      val port = IO(c2c.cloneType)
+      val port = IO(new C2cLinkPort)
+      port.suggestName(s"c2c_link_$idx")
       port <> c2c
-      port.suggestName(s"c2c_$idx")
-
     }))
   }
   val io_chip = IO(Input(UInt(p(ZJParametersKey).chipAddrBits.W)))

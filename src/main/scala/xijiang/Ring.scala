@@ -1,10 +1,8 @@
 package xijiang
 
 import chisel3._
-import chisel3.util._
 import org.chipsalliance.cde.config.Parameters
 import xijiang.c2c.{C2cLinkPort, C2cPackLayer}
-import xijiang.router._
 import xijiang.router.base.IcnBundle
 import zhujiang.{ZJBundle, ZJModule, ZJParametersKey}
 import xijiang.tfs._
@@ -24,16 +22,17 @@ class Ring(local: Boolean)(implicit p: Parameters) extends ZJModule {
 
   tfsio.foreach(dontTouch(_))
   dontTouch(io_chip)
-
+  if(local) print("Local Ring Node Info {") else print("CSN Ring Node Info {")
   private val ring = if(local) p(ZJParametersKey).localRing else p(ZJParametersKey).csnRing
   private val routersAndNodes = ring.map(n => (n.genRouter(p), n))
   for(((r, n), i) <- routersAndNodes.zipWithIndex) {
     val left = if(i == 0) routersAndNodes.last else routersAndNodes(i - 1)
     val right = if(i == routersAndNodes.size - 1) routersAndNodes.head else routersAndNodes(i + 1)
     r.router.rings.head.rx := left._1.router.rings.head.tx
+    r.router.rings.last.rx := right._1.router.rings.last.tx
     r.router.chip := io_chip
-    if(local) r.router.rings.last.rx := right._1.router.rings.last.tx
   }
+  println("}\n")
 
   private val chiRoutersAndNodes = routersAndNodes.filterNot(_._2.nodeType == NodeType.C).filterNot(_._2.nodeType == NodeType.P)
   private val c2cRoutersAndNodes = routersAndNodes.filter(_._2.nodeType == NodeType.C)
@@ -43,11 +42,18 @@ class Ring(local: Boolean)(implicit p: Parameters) extends ZJModule {
       val m = Module(new TrafficGen(n))
       m.icn <> r.icn
       m.nodeId := r.router.nodeId
+      if(r.router.remoteChipIds.isDefined) {
+        r.router.remoteChipIds.get.zip(c2cRoutersAndNodes).foreach({ case (r, (c, _)) => r := c.router.chip })
+      }
+      m.suggestName(s"${n.routerStr}TrafficGen")
       (None, n)
     } else {
       val port = IO(new IcnBundle(n)(p))
-      port.suggestName(n.icnStr(local))
+      port.suggestName(n.icnStr)
       port <> r.icn
+      if(r.router.remoteChipIds.isDefined) {
+        r.router.remoteChipIds.get.zip(c2cRoutersAndNodes).foreach({ case (r, (c, _)) => r := c.router.chip })
+      }
       (Some(port), n)
     }
   }
@@ -58,15 +64,18 @@ class Ring(local: Boolean)(implicit p: Parameters) extends ZJModule {
       m.icn <> r.icn
       m.nodeId := r.router.nodeId
       r.router.chip := tfsio.get.remoteChip(i)
+      r.router.localChip.get := io_chip
+      m.suggestName(s"${n.routerStr}TrafficGen")
       (None, n)
     } else {
       val c2cPacker = Module(new C2cPackLayer(n))
       c2cPacker.io.local.icn <> r.icn
       r.router.chip := c2cPacker.io.local.chip
+      r.router.localChip.get := io_chip
       c2cPacker.suggestName("c2cPackLayer")
       val port = IO(new C2cLinkPort)
-      port.suggestName(s"c2c_$i")
-      port <> r.icn
+      port.suggestName(s"c2c_link_$i")
+      port <> c2cPacker.io.remote
       (Some(port), n)
     }
   }
