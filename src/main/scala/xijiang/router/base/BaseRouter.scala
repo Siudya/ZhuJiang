@@ -174,13 +174,13 @@ trait BaseRouterUtils {
 
       val src = WireInit(tap.get.io.eject.bits.src.asTypeOf(new NodeIdBundle))
       if(!local && !c2c && m.p(ZJParametersKey).tfsParams.isEmpty) {
-        val chipTgt = tap.get.io.eject.bits.src.asTypeOf(new NodeIdBundle).nodeCsnChip
-        val c2cHits = router.remoteChipIds.get.map(_ === chipTgt)
+        val chipSrc = tap.get.io.eject.bits.src.asTypeOf(new NodeIdBundle).nodeCsnChip
+        val c2cHits = router.remoteChipIds.get.map(_ === chipSrc)
         when(tap.get.io.eject.valid) {
-          assert(PopCount(c2cHits) === 1.U, cf"Invalid eject chip target $chipTgt of node 0x${nid}%x on $chn")
+          assert(PopCount(c2cHits) === 1.U, cf"Invalid eject chip target $chipSrc of node 0x${nid}%x on $chn")
         }
         src.nodeCsnChip := PriorityEncoder(c2cHits)
-        buf.io.enq.bits.tgt := src.asUInt
+        buf.io.enq.bits.src := src.asUInt
       }
 
       mon.foreach(m => {
