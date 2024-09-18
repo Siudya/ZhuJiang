@@ -64,6 +64,7 @@ object TrafficSimFileManager {
        |#define FLIT_SIZE ${params.maxFlitBits}
        |#define TIME_OUT ${params.tfbParams.get.timeOut}
        |#define NODE_NID_BITS ${params.nodeNidBits}
+       |#define CHIP_ID_BITS ${params.chipAddrBits}
        |#define NODE_TYPE_BITS ${params.nodeTypeBits}
        |#define NODE_NET_BITS ${params.nodeNetBits}
        |#define FLIT_BUF_SIZE ${(params.maxFlitBits + 7) / 8}
@@ -333,9 +334,8 @@ object TrafficSimFileManager {
        |    legal_tgt_pool[2][DAT].push_back(chf_id_arr[i]);
        |  }
        |  for(uint8_t i = 0; i < c2c_id_num; i++) {
-       |    uint8_t chip_id = get_field(c2c_id_arr[i], 0, NODE_NID_BITS);
-       |    uint16_t csn_remote_requester = (CRF_TYPE << NODE_TYPE_OFF) | chip_id;
-       |    uint16_t csn_remote_home = (CHF_TYPE << NODE_TYPE_OFF) | chip_id;
+       |    uint16_t csn_remote_requester = (CRF_TYPE << NODE_TYPE_OFF) | i;
+       |    uint16_t csn_remote_home = (CHF_TYPE << NODE_TYPE_OFF) | i;
        |
        |    legal_tgt_pool[1][RSP].push_back(csn_remote_requester);
        |    legal_tgt_pool[1][DAT].push_back(csn_remote_requester);
@@ -517,7 +517,7 @@ object TrafficSimFileManager {
        |  argparser.add_argument("-c", "--cycle").help("Simulation cycles").default_value(10000).scan<'i', int>();
        |  argparser.add_argument("-r", "--reset").help("Reset cycles").default_value(100).scan<'i', int>();
        |  argparser.add_argument("-d", "--dump-wave").help("Do dump wave").flag();
-       |  argparser.add_argument("-v", "--verbose").help("Do dump wave").flag();
+       |  argparser.add_argument("-v", "--verbose").help("Print verbose information").flag();
        |}
        |
        |void SimMain::parse(int argc, char *argv[]) {

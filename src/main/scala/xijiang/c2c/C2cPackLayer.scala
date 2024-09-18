@@ -104,6 +104,15 @@ class C2cPackLayer(node: Node)(implicit p: Parameters) extends ZJModule {
   })
   private val transmitter = Module(new C2cPackLayerTx(node))
   private val receiver = Module(new C2cPackLayerRx(node))
+  private val txBufs = Seq.fill(p(ZJParametersKey).c2cParams.externalBuffers)(Module(new Queue(new C2cPayload, 2)))
+  private val rxBufs = Seq.fill(p(ZJParametersKey).c2cParams.externalBuffers)(Module(new Queue(new C2cPayload, 2)))
+
+  private val txDst = txBufs.map(_.io.enq) ++ Seq(io.remote.tx)
+  private val txSrc = Seq(transmitter.io.toLink) ++ txBufs.map(_.io.deq)
+  private val rxDst = Seq(receiver.io.fromLink) ++ rxBufs.map(_.io.enq)
+  private val rxSrc = rxBufs.map(_.io.deq) ++ Seq(io.remote.rx)
+  for((dst, src) <- (txDst ++ rxDst).zip(txSrc ++ rxSrc)) dst <> src
+
   transmitter.io.fromRing <> io.local.icn.tx
   io.remote.tx <> transmitter.io.toLink
   receiver.io.fromLink <> io.remote.rx

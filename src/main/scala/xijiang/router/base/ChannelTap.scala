@@ -76,7 +76,7 @@ class SingleChannelTap[T <: Flit](gen: T, channel: String, c2c: Boolean)(implici
   io.out.rsvd := Pipe(rsvdNext)
 
   if(c2c) {
-    io.eject.valid := io.in.flit.bits.tgt(nodeNidBits - 1, 0) === io.nid(nodeNidBits - 1, 0) && io.in.flit.valid
+    io.eject.valid := io.in.flit.bits.tgt(chipAddrBits - 1, 0) === io.nid(chipAddrBits - 1, 0) && io.in.flit.valid
   } else {
     io.eject.valid := io.in.flit.bits.tgt === io.nid && io.in.flit.valid
   }
@@ -84,25 +84,20 @@ class SingleChannelTap[T <: Flit](gen: T, channel: String, c2c: Boolean)(implici
 }
 
 class ChannelTap[T <: Flit](
-  val gen: T, channel: String, ringNum: Int,
+  val gen: T, channel: String,
   ejectBuf: Int = 0, c2c: Boolean = false
 )(implicit p: Parameters) extends ZJModule {
   val io = IO(new Bundle {
-    val rx = Input(Vec(ringNum, new ChannelBundle(gen)))
-    val tx = Output(Vec(ringNum, new ChannelBundle(gen)))
+    val rx = Input(Vec(2, new ChannelBundle(gen)))
+    val tx = Output(Vec(2, new ChannelBundle(gen)))
     val inject = Flipped(Decoupled(gen))
     val eject = Decoupled(gen)
     val nid = Input(UInt(niw.W))
-    val injectTapSelOH = Input(Vec(ringNum, Bool()))
+    val injectTapSelOH = Input(Vec(2, Bool()))
   })
   override val desiredName = if(c2c) s"C2cChannelTap$channel" else s"ChannelTap$channel"
-
-  when(io.inject.valid) {
-    assert(PopCount(io.injectTapSelOH) === 1.U, "Only one side can be picked!")
-  }
-
-  private val taps = Seq.fill(ringNum)(Module(new SingleChannelTap(gen, channel, c2c)))
-  private val ejectArb = Module(new RRArbiter(gen, ringNum))
+  private val taps = Seq.fill(2)(Module(new SingleChannelTap(gen, channel, c2c)))
+  private val ejectArb = Module(new RRArbiter(gen, 2))
   for(idx <- taps.indices) {
     taps(idx).io.in := io.rx(idx)
     io.tx(idx) := taps(idx).io.out

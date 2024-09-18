@@ -25,7 +25,7 @@ class TrafficSimRx(implicit val p: Parameters) extends BlackBox with HasBlackBox
        |  input  [7:0] \t\tchn,
        |  input  [${niw - 1}:0] \t\tnodeId,
        |  input \t\t\t\t\trx_valid,
-       |  output \t\t\t\t\trx_ready,
+       |  output reg\t\t\trx_ready,
        |  input [${maxFlitBits - 1}:0] \trx_bits
        |);
        |  import "DPI-C" function void tfs_get_rx_ready(
