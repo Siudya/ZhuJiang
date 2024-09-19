@@ -233,6 +233,11 @@ class DongJiang()(implicit p: Parameters) extends DJModule {
             } else {
                 xbar.io.req2Slice.in(i)             <> DontCare
             }
+            if (intf.io.reqAck2NodeOpt.nonEmpty) {
+                xbar.io.reqAck2Node.out(i)          <> intf.io.reqAck2NodeOpt.get
+            } else {
+                xbar.io.reqAck2Node.out(i)          <> DontCare
+            }
             if (intf.io.resp2NodeOpt.nonEmpty) {
                 xbar.io.resp2Node.out(i)            <> intf.io.resp2NodeOpt.get
             } else {
@@ -259,6 +264,7 @@ class DongJiang()(implicit p: Parameters) extends DJModule {
         case (slice, i) =>
             // slice ctrl signals
             xbar.io.req2Slice.out(i)        <> slice.io.req2Slice
+            xbar.io.reqAck2Node.in(i)       <> slice.io.reqAck2Node
             xbar.io.resp2Node.in(i)         <> slice.io.resp2Node
             xbar.io.req2Node.in(i)          <> slice.io.req2Node
             xbar.io.resp2Slice.out(i)       <> slice.io.resp2Slice

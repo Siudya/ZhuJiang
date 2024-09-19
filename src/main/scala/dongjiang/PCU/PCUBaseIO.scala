@@ -11,20 +11,22 @@ import Utils.FastArb._
 abstract class PCUBaseIO(isSlv:Boolean, hasFree: Boolean = false, hasReq2Slice: Boolean = false, hasDBRCReq: Boolean = false)(implicit p: Parameters) extends DJModule {
 // --------------------- IO declaration ------------------------//
   val io = IO(new Bundle {
-    val freeOpt       = if(hasFree) Some(Output(Bool())) else None
+    val freeOpt         = if(hasFree) Some(Output(Bool())) else None
     // CHI
-    val chiOpt        = if(isSlv) Some(Flipped(new CHIBundleDecoupled)) else Some(new CHIBundleDecoupled)
+    val chiOpt          = if(isSlv) Some(Flipped(new CHIBundleDecoupled)) else Some(new CHIBundleDecoupled)
     // slice ctrl signals
-    val req2SliceOpt  = if(hasReq2Slice) Some(Decoupled(new Req2SliceBundle())) else None
-    val resp2NodeOpt  = if(hasReq2Slice) Some(Flipped(Decoupled(new Resp2NodeBundle()))) else None
-    val req2Node      = Flipped(Decoupled(new Req2NodeBundle()))
-    val resp2Slice    = Decoupled(new Resp2SliceBundle())
+    val req2SliceOpt    = if(hasReq2Slice) Some(Decoupled(new Req2SliceBundle())) else None
+    val reqAck2NodeOpt  = if(hasReq2Slice) Some(Flipped(Decoupled(new ReqAck2NodeBundle()))) else None
+    val resp2NodeOpt    = if(hasReq2Slice) Some(Flipped(Decoupled(new Resp2NodeBundle()))) else None
+    val req2Node        = Flipped(Decoupled(new Req2NodeBundle()))
+    val resp2Slice      = Decoupled(new Resp2SliceBundle())
     // slice DataBuffer signals
-    val dbSigs        = new DBBundle(hasDBRCReq)
+    val dbSigs          = new DBBundle(hasDBRCReq)
 
-    def free          = freeOpt.get
-    def chi           = chiOpt.get
-    def req2Slice     = req2SliceOpt.get
-    def resp2Node     = resp2NodeOpt.get
+    def free            = freeOpt.get
+    def chi             = chiOpt.get
+    def req2Slice       = req2SliceOpt.get
+    def reqAck2Node     = reqAck2NodeOpt.get
+    def resp2Node       = resp2NodeOpt.get
   })
 }

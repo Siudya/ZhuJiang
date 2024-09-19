@@ -35,11 +35,11 @@ class IDBundle(implicit p: Parameters) extends DJBundle {
     def CSNMAS      = IncoId === IncoID.CSNMAS.U
 }
 
-trait HasFromIDBits extends DJBundle { this: Bundle => val from = new IDBundle() }
+trait HasFromIncoID extends DJBundle { this: Bundle => val from = new IDBundle() }
 
-trait HasToIDBits extends DJBundle { this: Bundle => val to = new IDBundle() }
+trait HasToIncoID extends DJBundle { this: Bundle => val to = new IDBundle() }
 
-trait HasIDBits extends DJBundle with HasFromIDBits with HasToIDBits
+trait HasIncoID extends DJBundle with HasFromIncoID with HasToIncoID
 
 trait HasDBID extends DJBundle { this: Bundle => val dbid = UInt(dbIdBits.W) }
 
@@ -79,19 +79,21 @@ trait HasReqBaseMesBundle extends DJBundle { this: Bundle =>
     val opcode      = UInt(6.W)
 }
 
-class ReqBaseMesBundle(implicit p: Parameters) extends DJBundle with HasReqBaseMesBundle with HasFromIDBits
+class ReqBaseMesBundle(implicit p: Parameters) extends DJBundle with HasReqBaseMesBundle with HasFromIncoID
 
 trait HasReq2SliceBundle extends DJBundle with HasReqBaseMesBundle with HasAddr
 
 class Req2SliceBundleWitoutXbarId(implicit p: Parameters) extends DJBundle with HasReq2SliceBundle
 
-class Req2SliceBundle(implicit p: Parameters) extends DJBundle with HasReq2SliceBundle with HasIDBits
+class Req2SliceBundle(implicit p: Parameters) extends DJBundle with HasReq2SliceBundle with HasIncoID with HasPCUID
 
+// -------------------------------------------------------------- Req Ack To Node Bundle ---------------------------------------------------------------------------- //
+class ReqAck2NodeBundle(implicit p: Parameters) extends DJBundle with HasToIncoID with HasPCUID { val retry = Bool(); def receive = !retry }
 
 // ---------------------------------------------------------------- Resp To Node Bundle ----------------------------------------------------------------------------- //
-
 trait HasResp2NodeBundle extends DJBundle with HasCHIChannel with HasMSHRWay with HasDBID { this: Bundle =>
     // CHI Id
+    val tgtID       = UInt(djparam.chiNodeIdBits.W)
     val srcID       = UInt(djparam.chiNodeIdBits.W)
     val txnID       = UInt(djparam.chiNodeIdBits.W)
     // CHI Mes
@@ -100,15 +102,13 @@ trait HasResp2NodeBundle extends DJBundle with HasCHIChannel with HasMSHRWay wit
     val resp        = UInt(ChiResp.width.W)
     // Indicate Requster final state in DCT
     val fwdState    = UInt(ChiResp.width.W)
-    // Let ReqBuf Req Send To Slice Retry
-    val reqRetry    = Bool()
     // Need Read DataBuffer
     val needReadDB  = Bool()
 }
 
 class Resp2NodeBundleWitoutXbarId(implicit p: Parameters) extends DJBundle with HasResp2NodeBundle
 
-class Resp2NodeBundle(implicit p: Parameters) extends DJBundle with HasResp2NodeBundle with HasIDBits
+class Resp2NodeBundle(implicit p: Parameters) extends DJBundle with HasResp2NodeBundle with HasIncoID
 
 
 // ---------------------------------------------------------------- Req To Node Bundle ----------------------------------------------------------------------------- //
@@ -132,7 +132,7 @@ trait HasReq2NodeBundle extends DJBundle with HasAddr with HasMSHRWay { this: Bu
 
 class Req2NodeBundleWitoutXbarId(implicit p: Parameters) extends DJBundle with HasReq2NodeBundle
 
-class Req2NodeBundle(implicit p: Parameters) extends DJBundle with HasReq2NodeBundle with HasIDBits
+class Req2NodeBundle(implicit p: Parameters) extends DJBundle with HasReq2NodeBundle with HasIncoID
 
 
 // ---------------------------------------------------------------- Resp To Slice Bundle ----------------------------------------------------------------------------- //
@@ -151,7 +151,7 @@ trait HasResp2SliceBundle extends DJBundle with HasDBID with HasMHSRIndex { this
 
 class Resp2SliceBundleWitoutXbarId(implicit p: Parameters) extends DJBundle with HasResp2SliceBundle
 
-class Resp2SliceBundle(implicit p: Parameters) extends DJBundle with HasResp2SliceBundle with HasIDBits
+class Resp2SliceBundle(implicit p: Parameters) extends DJBundle with HasResp2SliceBundle with HasIncoID
 
 
 // ---------------------------------------------------------------- DataBuffer Base Bundle ----------------------------------------------------------------------------- //
@@ -172,10 +172,10 @@ trait HasDBData extends DJBundle { this: Bundle =>
 }
 
 // DataBuffer Read/Clean Req
-class DBRCReq(implicit p: Parameters)       extends DJBundle with HasDBRCOp with HasDBID with HasToIDBits
-class DBWReq(implicit p: Parameters)        extends DJBundle                             with HasFromIDBits with HasPCUID
-class DBWResp(implicit p: Parameters)       extends DJBundle                with HasDBID with HasToIDBits   with HasPCUID
-class NodeFDBData(implicit p: Parameters)   extends DJBundle with HasDBData              with HasToIDBits
+class DBRCReq(implicit p: Parameters)       extends DJBundle with HasDBRCOp with HasDBID with HasToIncoID
+class DBWReq(implicit p: Parameters)        extends DJBundle                             with HasFromIncoID with HasPCUID
+class DBWResp(implicit p: Parameters)       extends DJBundle                with HasDBID with HasToIncoID   with HasPCUID
+class NodeFDBData(implicit p: Parameters)   extends DJBundle with HasDBData              with HasToIncoID
 class NodeTDBData(implicit p: Parameters)   extends DJBundle with HasDBData with HasDBID
 
 class DBBundle(hasDBRCReq: Boolean = false)(implicit p: Parameters) extends DJBundle {

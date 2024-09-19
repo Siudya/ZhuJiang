@@ -58,8 +58,11 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
 // --------------------- IO declaration ------------------------//
   val io = IO(new Bundle {
     val sliceId       = Input(UInt(bankBits.W))
-    // Req and Resp To Slice
+    // Req To Slice
     val req2Slice     = Flipped(Decoupled(new Req2SliceBundle()))
+    // Ack To Node
+    val reqAck2node   = Decoupled(new ReqAck2NodeBundle())
+    // Resp To Slice
     val resp2Slice    = Flipped(Decoupled(new Resp2SliceBundle()))
     // Task To MainPipe
     val pipeTask      = Vec(2, Decoupled(new PipeTaskBundle()))
@@ -73,25 +76,23 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
     // Directory Read MSHR Set Mes
     val dirReadMshr   = Vec(2, Flipped(Valid(new DirReadMSHRBundle())))
     val mshrResp2Dir  = Vec(2, Valid(new MSHRRespDirBundle()))
-    // Req Retry: Resp To Rn Node
-    val retry2Node    = Decoupled(new Resp2NodeBundle())
   })
 
   // TODO: Delete the following code when the coding is complete
   io <> DontCare
   dontTouch(io)
 
+// ------------------------ Module declaration ------------------------- //
+  val reqAck_s0_q       = Module(new Queue(new ReqAck2NodeBundle(), entries = 4, flow = false, pipe = true))
 
-
-// --------------------- Reg / Wire declaration ------------------------//
+// --------------------- Reg / Wire declaration ------------------------ //
   // mshrTable
   val mshrTableReg      = RegInit(VecInit(Seq.fill(djparam.nrMSHRSets) { VecInit(Seq.fill(djparam.nrMSHRWays) { 0.U.asTypeOf(new MSHREntry()) }) }))
   val evictTableReg     = RegInit(VecInit(Seq.fill(djparam.nrEvictWays) { 0.U.asTypeOf(new MSHREntry(useAddr = true)) })) // Use to save snp evict / evict req from resp process // TODO: Setting the right number of entries
   val mshrLockVecReg    = RegInit(VecInit(Seq.fill(djparam.nrMSHRSets) { false.B }))
   // Transfer Req From Node To MSHREntry
   val mshrAlloc_s0      = WireInit(0.U.asTypeOf(new MSHREntry()))
-  // retry mes
-  val retryTo_s0_g      = RegInit(0.U.asTypeOf(Valid(new IDBundle())))
+  // MSHR Update Resp
   val udpResp_s0_g      = RegInit(0.U.asTypeOf(Valid(new UpdateMSHRRespBundle())))
   // will receive pipe req number
   val mshrWillUseVecReg =  RegInit(VecInit(Seq.fill(djparam.nrMSHRSets) { 0.U(mshrWayBits.W) }))
@@ -149,21 +150,12 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
    * Receive Req From Node and Determine if it needs retry
    * TODO: Setting blocking timer
    */
-  io.req2Slice.ready    := !retryTo_s0_g.valid
-  retryTo_s0_g.valid    := Mux(retryTo_s0_g.valid, !io.retry2Node.fire, io.req2Slice.fire & !canReceiveNode)
-  retryTo_s0_g.bits     := Mux(io.req2Slice.fire, io.req2Slice.bits.from, retryTo_s0_g.bits)
-
-
-  /*
-   * Retry Resp To Rn Node
-   * TODO: Complete Retry Logic In ReqBuf
-   */
-  assert(!io.retry2Node.valid)
-  io.retry2Node.valid         := retryTo_s0_g.valid
-  io.retry2Node.bits          := DontCare
-  io.retry2Node.bits.reqRetry := true.B
-  io.retry2Node.bits.to       := retryTo_s0_g.bits
-
+  io.req2Slice.ready            := reqAck_s0_q.io.enq.ready
+  reqAck_s0_q.io.enq.valid      := io.req2Slice.valid
+  reqAck_s0_q.io.enq.bits.retry := !canReceiveNode
+  reqAck_s0_q.io.enq.bits.to    := io.req2Slice.bits.from
+  reqAck_s0_q.io.enq.bits.pcuId := io.req2Slice.bits.pcuId
+  io.reqAck2node                <> reqAck_s0_q.io.deq
 
 // ---------------------------------------------------------------------------------------------------------------------- //
 // --------------------------------------- S0: Receive Update MSHR Req From Pipe  --------------------------------------- //

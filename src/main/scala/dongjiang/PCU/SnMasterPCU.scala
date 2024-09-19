@@ -50,7 +50,7 @@ trait HasSMType extends Bundle { this: Bundle =>
 
 class PCUSMEntry(param: InterfaceParam)(implicit p: Parameters) extends DJBundle with HasAddr with HasMSHRWay with HasSMType {
   val state         = UInt(PCUSM.width.W)
-  val reqMes        = new DJBundle with HasFromIDBits with HasMSHRWay {
+  val reqMes        = new DJBundle with HasFromIncoID with HasMSHRWay {
     val opcode      = UInt(6.W)
   }
   val respMes       = new DJBundle {

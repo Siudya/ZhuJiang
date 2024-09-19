@@ -14,6 +14,7 @@ class SliceWrapper()(implicit p: Parameters) extends DJModule {
     val sliceId         = Input(UInt(bankBits.W))
     // slice ctrl signals: RnNode <> Slice
     val req2Slice       = Flipped(Decoupled(new Req2SliceBundle()))
+    val reqAck2Node     = Decoupled(new ReqAck2NodeBundle())
     val resp2Node       = Decoupled(new Resp2NodeBundle())
     val req2Node        = Decoupled(new Req2NodeBundle())
     val resp2Slice      = Flipped(Decoupled(new Resp2SliceBundle()))
@@ -42,6 +43,7 @@ class SliceWrapper()(implicit p: Parameters) extends DJModule {
 
   mshrCtl.io.sliceId        := io.sliceId
   mshrCtl.io.req2Slice      <> io.req2Slice
+  mshrCtl.io.reqAck2node    <> io.reqAck2Node
   mshrCtl.io.resp2Slice     <> io.resp2Slice
   mshrCtl.io.pipeTask(0)    <> respPipe.io.task;  assert(!mshrCtl.io.pipeTask(PipeID.RESP).valid | mshrCtl.io.pipeTask(PipeID.RESP).bits.pipeId === PipeID.RESP)
   mshrCtl.io.pipeTask(1)    <> reqPipe.io.task;   assert(!mshrCtl.io.pipeTask(PipeID.REQ).valid  | mshrCtl.io.pipeTask(PipeID.REQ).bits.pipeId === PipeID.REQ)
@@ -69,6 +71,6 @@ class SliceWrapper()(implicit p: Parameters) extends DJModule {
   mpReqQueue.io.enq         <> fastPriorityArbDec(Seq(respPipe.io.req2Node, reqPipe.io.req2Node))
   mpRespQueue.io.enq        <> fastPriorityArbDec(Seq(respPipe.io.resp2Node, reqPipe.io.resp2Node))
   io.req2Node               <> mpReqQueue.io.deq
-  io.resp2Node              <> fastPriorityArbDec(Seq(mshrCtl.io.retry2Node, mpRespQueue.io.deq))
+  io.resp2Node              <> mpRespQueue.io.deq
   io.dbRCReq                <> fastPriorityArbDec(Seq(respPipe.io.dbRCReq, reqPipe.io.dbRCReq))
 }

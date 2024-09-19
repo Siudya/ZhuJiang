@@ -54,6 +54,10 @@ class Xbar()(implicit p: Parameters) extends DJModule {
             val in = Vec(nrIntf, Flipped(Decoupled(new Req2SliceBundle()))) // expect SNMaster
             val out = Vec(djparam.nrBank, Decoupled(new Req2SliceBundle()))
         }
+        val reqAck2Node = new Bundle {
+            val in = Vec(djparam.nrBank, Flipped(Decoupled(new ReqAck2NodeBundle()))) // expect SNMaster
+            val out = Vec(nrIntf, Decoupled(new ReqAck2NodeBundle()))
+        }
         val resp2Node = new Bundle {
             val in = Vec(djparam.nrBank, Flipped(Decoupled(new Resp2NodeBundle())))
             val out = Vec(nrIntf, Decoupled(new Resp2NodeBundle()))
@@ -91,7 +95,7 @@ class Xbar()(implicit p: Parameters) extends DJModule {
             req2SliceReMap(i).bits.to.IncoId := m.io.outBank
     }
 
-    def idSelDec2DecVec[T <: Bundle with HasToIDBits](in: DecoupledIO[T], out: Seq[DecoupledIO[T]]): Unit = {
+    def idSelDec2DecVec[T <: Bundle with HasToIncoID](in: DecoupledIO[T], out: Seq[DecoupledIO[T]]): Unit = {
         in.ready := false.B
         out.foreach(_.bits := in.bits)
         out.zipWithIndex.foreach {
@@ -109,7 +113,7 @@ class Xbar()(implicit p: Parameters) extends DJModule {
     }
 
     // in ---> [queue0] ---> [idIndex] ---> [queue1] ---> [arbiter] ---> [queue2] ---> out
-    def interConnect[T <: Bundle with HasToIDBits](in: Seq[DecoupledIO[T]], q0: Int, q1: Int, q2: Int, out: Seq[DecoupledIO[T]]): Unit = {
+    def interConnect[T <: Bundle with HasToIncoID](in: Seq[DecoupledIO[T]], q0: Int, q1: Int, q2: Int, out: Seq[DecoupledIO[T]]): Unit = {
         val reDir = Seq.fill(in.size) { Seq.fill(out.size) { WireInit(0.U.asTypeOf(in(0))) }}
         in.zipWithIndex.foreach { case (m, i) => idSelDec2DecVec(Queue(m, q0), reDir(i)) }
         out.zipWithIndex.foreach { case (m, i) => m <> Queue(fastArbDec(reDir.map { case a => Queue(a(i), entries = q1) }), q2) }
@@ -117,6 +121,8 @@ class Xbar()(implicit p: Parameters) extends DJModule {
 
     // There is a lot of room for optimization of the connection
     interConnect(in = req2SliceReMap,                       q0 = 0, q1 = 0, q2 = 0, out = io.req2Slice.out)
+
+    interConnect(in = io.reqAck2Node.in,                    q0 = 0, q1 = 0, q2 = 0, out = io.reqAck2Node.out)
 
     interConnect(in = io.resp2Node.in,                      q0 = 0, q1 = 0, q2 = 0, out = io.resp2Node.out)
 

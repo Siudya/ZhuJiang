@@ -253,7 +253,6 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
   commit_s3.dbid            := rcDBID
   commit_s3.needReadDB      := !decode_s3.rDB2Src & decode_s3.respChnl === CHIChannel.DAT
   commit_s3.fwdState        := DontCare
-  commit_s3.reqRetry        := false.B
 
 
 

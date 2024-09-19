@@ -20,7 +20,7 @@ object DBState {
 }
 
 
-class DBEntry(implicit p: Parameters) extends DJBundle with HasToIDBits {
+class DBEntry(implicit p: Parameters) extends DJBundle with HasToIncoID {
   val state       = UInt(DBState.width.W)
   val beatRNum    = UInt(log2Ceil(nrBeat).W)
   val needClean   = Bool()

@@ -21,6 +21,7 @@ case class InterfaceParam
     isSlave: Boolean,
     chipId: Option[Int] = None, // Use In MASTER
     nrPCUEntry: Int = 16,
+    nrPCUEvictEntry: Int = 4
 ) {
     val pcuIdBits = log2Ceil(nrPCUEntry)
     val isSn = !isRn
