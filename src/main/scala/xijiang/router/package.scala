@@ -30,8 +30,8 @@ package object router {
         val hniCnt = p(ZJParametersKey).localRing.count(_.nodeType == NodeType.HI)
         val hnfId = if(hnfCnt > 1) injectAddr.tag(log2Ceil(hnfCnt) - 1, 0).asTypeOf(UInt(nodeNidBits.W)) else 0.U(nodeNidBits.W)
         val hniId = if(hniCnt > 1) injectAddr.tag(log2Ceil(hniCnt) - 1, 0).asTypeOf(UInt(nodeNidBits.W)) else 0.U(nodeNidBits.W)
-        val tgtHnfId = Cat(0.U(nodeNetBits), NodeType.HF.U(nodeTypeBits), hnfId)
-        val tgtHniId = Cat(0.U(nodeNetBits), NodeType.HI.U(nodeTypeBits), hniId)
+        val tgtHnfId = Cat(0.U(nodeNetBits.W), NodeType.HF.U(nodeTypeBits.W), hnfId)
+        val tgtHniId = Cat(0.U(nodeNetBits.W), NodeType.HI.U(nodeTypeBits.W), hniId)
         injectsMap("REQ").bits.tgt := Mux(injectAddr.mmio, tgtHniId, tgtHnfId)
       }
     }
