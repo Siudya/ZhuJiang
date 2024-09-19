@@ -36,7 +36,6 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
 // --------------------- Modules declaration ------------------------//
   val taskQ   = Module(new Queue(new PipeTaskBundle(), entries = djparam.nrMpTaskQueue, pipe = false, flow = false))
   val dirResQ = Module(new Queue(new DirRespBundle(), entries = djparam.nrMpTaskQueue + 2, pipe = true, flow = true)) // one for mp_s1 read Dir before send task to mp_2, one for mp_s3
-  val commitQ = Module(new Queue(new Resp2NodeBundle(), entries = 1, pipe = true, flow = true))
 
 // --------------------- Reg/Wire declaration ------------------------//
   // s2 signals
@@ -204,11 +203,12 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
   /*
    * Send Read / Clean to DataBuffer
    */
+  val rcDBID            = Mux(task_s3_g.bits.respMes.slvDBID.valid, task_s3_g.bits.respMes.slvDBID.bits, task_s3_g.bits.respMes.masDBID.bits)
   assert(!(task_s3_g.bits.respMes.slvDBID.valid & task_s3_g.bits.respMes.masDBID.valid))
   rcDBReq_s3.to         := task_s3_g.bits.reqMes.from
   rcDBReq_s3.isRead     := decode_s3.rDB2Src
   rcDBReq_s3.isClean    := decode_s3.cleanDB
-  rcDBReq_s3.dbid       := Mux(task_s3_g.bits.respMes.slvDBID.valid, task_s3_g.bits.respMes.slvDBID.bits, task_s3_g.bits.respMes.masDBID.bits)
+  rcDBReq_s3.dbid       := rcDBID
 
 
   /*
@@ -252,6 +252,8 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
   commit_s3.srcID           := task_s3_g.bits.reqMes.srcID
   commit_s3.txnID           := task_s3_g.bits.reqMes.txnID
   commit_s3.resp            := decode_s3.resp
+  commit_s3.dbid            := rcDBID
+  commit_s3.needReadDB      := !decode_s3.rDB2Src & decode_s3.respChnl === CHIChannel.DAT
   commit_s3.fwdState        := DontCare
   commit_s3.reqRetry        := false.B
 
@@ -377,9 +379,10 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
   /*
    * Send Commit to S4
    */
-  val comVal_s3         = valid_s3 & todo_s3.commit & !done_s3_g.commit
-  done_s3_g.commit      := Mux(rstDone, false.B, Mux(done_s3_g.commit, !canGo_s3, commitQ.io.enq.fire))
-  val comDone           = !(todo_s3.commit & !done_s3_g.commit & !commitQ.io.enq.fire)
+  io.resp2Node.valid    := valid_s3 & todo_s3.commit & !done_s3_g.commit
+  io.resp2Node.bits     := commit_s3
+  done_s3_g.commit      := Mux(rstDone, false.B, Mux(done_s3_g.commit, !canGo_s3, io.resp2Node.fire))
+  val comDone           = !(todo_s3.commit & !done_s3_g.commit & !io.resp2Node.fire)
 
   /*
    * Set Can Go S3 Value
@@ -390,27 +393,13 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
 
 
 // ---------------------------------------------------------------------------------------------------------------------- //
-// ------------------------ S3_Execute: Execute specific tasks value based on decode results -----------------------------//
-// ---------------------------------------------------------------------------------------------------------------------- //
-  /*
-   * Receive S3 Commit Mes
-   */
-  commitQ.io.enq.valid  := comVal_s3
-  commitQ.io.enq.bits   := commit_s3
-
-  commitQ.io.deq        <> DontCare
-
-
-
-// ---------------------------------------------------------------------------------------------------------------------- //
-// ------------------------------------- External Component: UnLock MshrLockVec ----------------------------------------- //
+// ------------------------------------------- S3_Execute: UnLock MshrLockVec ------------------------------------------- //
 // ---------------------------------------------------------------------------------------------------------------------- //
   /*
    * Update MshrLockVec:
    * 1. S3 done but task dont need to commit
-   * 2. S4 done // TODO
    */
-  io.updLockMSHR.valid        := canGo_s3
+  io.updLockMSHR.valid        := valid_s3 & canGo_s3 & task_s3_g.bits.readDir
   io.updLockMSHR.bits.mshrSet := task_s3_g.bits.mSet
 
 
@@ -419,11 +408,6 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
   val cnt_s3_g  = RegInit(0.U(64.W))
   cnt_s3_g      := Mux(!valid_s3 | canGo_s3, 0.U, cnt_s3_g + 1.U)
   assert(cnt_s3_g < TIMEOUT_EXU.U, "ProcessPipe[0x%x] EXECUTE ADDR[0x%x] OP[0x%x] TIMEOUT", task_s3_g.bits.pipeId, task_s3_g.bits.addr, task_s3_g.bits.reqMes.opcode)
-
-  // S4
-  val cnt_s4_g = RegInit(0.U(64.W))
-  cnt_s4_g := Mux(!commitQ.io.deq.valid | commitQ.io.deq.fire, 0.U, cnt_s4_g + 1.U)
-  assert(cnt_s4_g < TIMEOUT_COM.U, "ProcessPipe COMMIT TIMEOUT")
 
   // Other
   assert(!valid_s3 | !todo_s3.asUInt.asBools.zip(done_s3_g.asUInt.asBools).map { case(todo, done) => !todo & done }.reduce(_ | _))

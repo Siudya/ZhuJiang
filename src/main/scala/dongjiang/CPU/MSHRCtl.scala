@@ -299,8 +299,8 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
     case(lock, i) =>
       when(io.updLockMSHR.valid & io.updLockMSHR.bits.mshrSet === i.U) {
         lock := false.B
-      }.elsewhen((taskReq_s0.valid & canGoReq_s0 & taskReq_s0.bits.mSet === i.U) | // Req Fire
-                 (taskResp_s0.valid & canGoResp_s0 & taskResp_s0.bits.mSet === i.U)) { // Resp Fire
+      }.elsewhen((taskReq_s0.valid & canGoReq_s0 & taskReq_s0.bits.readDir & taskReq_s0.bits.mSet === i.U) | // Req Fire
+                 (taskResp_s0.valid & canGoResp_s0 & taskResp_s0.bits.readDir & taskResp_s0.bits.mSet === i.U)) { // Resp Fire
         lock := true.B
       }
   }

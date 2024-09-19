@@ -88,7 +88,7 @@ class Req2SliceBundle(implicit p: Parameters) extends DJBundle with HasReq2Slice
 
 // ---------------------------------------------------------------- Resp To Node Bundle ----------------------------------------------------------------------------- //
 
-trait HasResp2NodeBundle extends DJBundle with HasCHIChannel with HasMSHRWay { this: Bundle =>
+trait HasResp2NodeBundle extends DJBundle with HasCHIChannel with HasMSHRWay with HasDBID { this: Bundle =>
     // CHI Id
     val srcID       = UInt(djparam.chiNodeIdBits.W)
     val txnID       = UInt(djparam.chiNodeIdBits.W)
@@ -100,6 +100,8 @@ trait HasResp2NodeBundle extends DJBundle with HasCHIChannel with HasMSHRWay { t
     val fwdState    = UInt(ChiResp.width.W)
     // Let ReqBuf Req Send To Slice Retry
     val reqRetry    = Bool()
+    // Need Read DataBuffer
+    val needReadDB  = Bool()
 }
 
 class Resp2NodeBundleWitoutXbarId(implicit p: Parameters) extends DJBundle with HasResp2NodeBundle
