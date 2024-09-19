@@ -58,15 +58,16 @@ class DataBuffer()(implicit p: Parameters) extends DJModule {
 // ---------------------------------------------------------------------------------------------------------------------- //
 // ----------------------------------------------------- WREQ & WRESP --------------------------------------------------- //
 // ---------------------------------------------------------------------------------------------------------------------- //
-  val dbFreeVec           = entrys.map(_.isFree)
-  val wReqId              = PriorityEncoder(dbFreeVec)
+  val dbFreeVec             = entrys.map(_.isFree)
+  val wReqId                = PriorityEncoder(dbFreeVec)
 
-  io.wReq.ready           := wRespQ.io.enq.ready & dbFreeVec.reduce(_ | _)
-  wRespQ.io.enq.valid     := io.wReq.valid & dbFreeVec.reduce(_ | _)
-  wRespQ.io.enq.bits.dbid := wReqId
-  wRespQ.io.enq.bits.to   := io.wReq.bits.from
+  io.wReq.ready             := wRespQ.io.enq.ready & dbFreeVec.reduce(_ | _)
+  wRespQ.io.enq.valid       := io.wReq.valid & dbFreeVec.reduce(_ | _)
+  wRespQ.io.enq.bits.dbid   := wReqId
+  wRespQ.io.enq.bits.to     := io.wReq.bits.from
+  wRespQ.io.enq.bits.pcuId  := io.wReq.bits.pcuId
 
-  io.wResp                <> wRespQ.io.deq
+  io.wResp                  <> wRespQ.io.deq
 
 
 // ---------------------------------------------------------------------------------------------------------------------- //

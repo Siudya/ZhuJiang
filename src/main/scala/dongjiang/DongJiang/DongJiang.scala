@@ -151,10 +151,10 @@ class DongJiang()(implicit p: Parameters) extends DJModule {
 
 // ------------------------------------------ Modules declaration ----------------------------------------------//
 
-    val localRnSlave    = Module(new RnSlavePCU(IdL1.LOCALSLV, djparam.localRnSlaveIntf))
-    val localSnMaster   = Module(new SnMasterPCU(IdL1.LOCALMAS, djparam.localSnMasterIntf))
-    val csnRnSlaveOpt   = if (hasCSNIntf) Some(Module(new RnSlavePCU(IdL1.CSNSLV, djparam.csnRnSlaveIntf.get))) else None
-    val csnRnMasterOpt  = if (hasCSNIntf) Some(Module(new RnMasterPCU(IdL1.CSNMAS, djparam.csnRnMasterIntf.get))) else None
+    val localRnSlave    = Module(new RnSlavePCU(IncoID.LOCALSLV, djparam.localRnSlaveIntf))
+    val localSnMaster   = Module(new SnMasterPCU(IncoID.LOCALMAS, djparam.localSnMasterIntf))
+    val csnRnSlaveOpt   = if (hasCSNIntf) Some(Module(new RnSlavePCU(IncoID.CSNSLV, djparam.csnRnSlaveIntf.get))) else None
+    val csnRnMasterOpt  = if (hasCSNIntf) Some(Module(new RnMasterPCU(IncoID.CSNMAS, djparam.csnRnMasterIntf.get))) else None
     val intfs           = if (hasCSNIntf) Seq(localRnSlave, localSnMaster, csnRnSlaveOpt.get, csnRnMasterOpt.get)
                           else            Seq(localRnSlave, localSnMaster)
     val databuffer      = Module(new DataBuffer())

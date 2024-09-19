@@ -209,14 +209,14 @@ class SnMasterPCU(snMasId: Int, param: InterfaceParam)(implicit p: Parameters) e
   /*
    * Set DataBuffer Req Value
    */
-  io.dbSigs.wReq.valid          := pcuGetDBIDVec.reduce(_ | _)
-  io.dbSigs.wReq.bits.from.idL1 := snMasId.U
-  io.dbSigs.wReq.bits.from.idL2 := pcuGetDBID
+  io.dbSigs.wReq.valid            := pcuGetDBIDVec.reduce(_ | _)
+  io.dbSigs.wReq.bits.from.IncoId := snMasId.U
+  io.dbSigs.wReq.bits.pcuId       := pcuGetDBID
 
   /*
    * Receive DBID From DataBuffer
    */
-  pcuRecDBID := io.dbSigs.wResp.bits.to.pcuId
+  pcuRecDBID := io.dbSigs.wResp.bits.pcuId
   io.dbSigs.wResp.ready := true.B
 
 
@@ -255,20 +255,19 @@ class SnMasterPCU(snMasId: Int, param: InterfaceParam)(implicit p: Parameters) e
 // ---------------------------------------------------------------------------------------------------------------------- //
 // --------------------------------- Receive Data From CHI DAT And Send It To DataBuffer -------------------------------- //
 // ---------------------------------------------------------------------------------------------------------------------- //
-  val pcuResp2SliceVec          = pcus.map(_.isResp2Slice)
-  pcuResp2SliceID               := PriorityEncoder(pcuResp2SliceVec)
+  val pcuResp2SliceVec            = pcus.map(_.isResp2Slice)
+  pcuResp2SliceID                 := PriorityEncoder(pcuResp2SliceVec)
 
-  io.resp2Slice.valid           := pcuResp2SliceVec.reduce(_ | _)
-  io.resp2Slice.bits            := DontCare
-  io.resp2Slice.bits.isReqResp  := true.B
-  io.resp2Slice.bits.mshrSet    := pcus(pcuResp2SliceID).mSet
-  io.resp2Slice.bits.mshrWay    := pcus(pcuResp2SliceID).mshrWay
-  io.resp2Slice.bits.useEvict   := pcus(pcuResp2SliceID).useEvict
-  io.resp2Slice.bits.from.idL1  := snMasId.U
-  io.resp2Slice.bits.from.idL2  := pcuResp2SliceID
-  io.resp2Slice.bits.hasData    := pcus(pcuResp2SliceID).dbid.valid
-  io.resp2Slice.bits.dbid       := pcus(pcuResp2SliceID).dbid.bits
-  io.resp2Slice.bits.resp       := pcus(pcuResp2SliceID).respMes.resp
+  io.resp2Slice.valid             := pcuResp2SliceVec.reduce(_ | _)
+  io.resp2Slice.bits              := DontCare
+  io.resp2Slice.bits.isReqResp    := true.B
+  io.resp2Slice.bits.mshrSet      := pcus(pcuResp2SliceID).mSet
+  io.resp2Slice.bits.mshrWay      := pcus(pcuResp2SliceID).mshrWay
+  io.resp2Slice.bits.useEvict     := pcus(pcuResp2SliceID).useEvict
+  io.resp2Slice.bits.from.IncoId  := snMasId.U
+  io.resp2Slice.bits.hasData      := pcus(pcuResp2SliceID).dbid.valid
+  io.resp2Slice.bits.dbid         := pcus(pcuResp2SliceID).dbid.bits
+  io.resp2Slice.bits.resp         := pcus(pcuResp2SliceID).respMes.resp
 
 
 

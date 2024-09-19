@@ -187,10 +187,8 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
   taskRD_s3.srcId       := Mux(taskChipType === ChipType.Local, hnfNodeId.U, csnHnfNodeId.U)
   taskRD_s3.opcode      := decode_s3.rdOp
   taskRD_s3.expCompAck  := Mux(taskChipType === ChipType.Local, false.B, true.B)
-  taskRD_s3.from.idL1   := io.sliceId
-  taskRD_s3.from.idL2   := DontCare
-  taskRD_s3.to.idL1     := Mux(taskChipType === ChipType.Local, IdL1.LOCALMAS.U, IdL1.CSNMAS.U)
-  taskRD_s3.to.idL2     := DontCare
+  taskRD_s3.from.IncoId := io.sliceId
+  taskRD_s3.to.IncoId   := Mux(taskChipType === ChipType.Local, IncoID.LOCALMAS.U, IncoID.CSNMAS.U)
   taskRD_s3.replace     := false.B
   taskRD_s3.ReadDCU     := decode_s3.readDCU
 
@@ -292,8 +290,8 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
   io.udpMSHR.bits.useEvict    := task_s3_g.bits.useEvict
   // Use In Update // TODO: Complete hasCSNIntf
   io.udpMSHR.bits.willUseWay  := replace_s3.asUInt + evictSF_s3.asUInt
-  io.udpMSHR.bits.waitIntfVec := (Mux(todo_s3.reqToSlv | evictSF_s3, UIntToOH(IdL1.LOCALSLV.U), 0.U) |
-                                  Mux(todo_s3.reqToMas | replace_s3, UIntToOH(IdL1.LOCALMAS.U), 0.U)).asBools
+  io.udpMSHR.bits.waitIntfVec := (Mux(todo_s3.reqToSlv | evictSF_s3, UIntToOH(IncoID.LOCALSLV.U), 0.U) |
+                                  Mux(todo_s3.reqToMas | replace_s3, UIntToOH(IncoID.LOCALMAS.U), 0.U)).asBools
   require(!hasCSNIntf)
   // Common
   io.udpMSHR.bits.pipeId      := task_s3_g.bits.pipeId

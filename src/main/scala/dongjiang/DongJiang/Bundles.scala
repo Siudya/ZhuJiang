@@ -14,25 +14,25 @@ object ChipType {
 }
 
 // ---------------------------------------------------------------- Xbar Id Bundle ----------------------------------------------------------------------------- //
-object IdL1 {
-    val width      = 2
-    val LOCALSLV   = 0
-    val LOCALMAS   = 1
-    val CSNSLV     = 2
-    val CSNMAS     = 3
+// Interconnect ID
+object IncoID {
+    val width       = 2
+    val LOCALSLV    = 0
+    val LOCALMAS    = 1
+    val CSNSLV      = 2
+    val CSNMAS      = 3
 }
 
 class IDBundle(implicit p: Parameters) extends DJBundle {
-    val idL1 = UInt(max(bankBits, nrIntfBits).W)
-    val idL2 = UInt(pcuIdBits.W)
+    val IncoId      = UInt(max(bankBits, nrIntfBits).W)
 
-    def intfId   = idL1
-    def pcuId    = idL2
+    def intfId      = IncoId
+    def bankId      = IncoId
 
-    def LOCALSLV = idL1 === IdL1.LOCALSLV.U
-    def LOCALMAS = idL1 === IdL1.LOCALMAS.U
-    def CSNSLV   = idL1 === IdL1.CSNSLV.U
-    def CSNMAS   = idL1 === IdL1.CSNMAS.U
+    def LOCALSLV    = IncoId === IncoID.LOCALSLV.U
+    def LOCALMAS    = IncoId === IncoID.LOCALMAS.U
+    def CSNSLV      = IncoId === IncoID.CSNSLV.U
+    def CSNMAS      = IncoId === IncoID.CSNMAS.U
 }
 
 trait HasFromIDBits extends DJBundle { this: Bundle => val from = new IDBundle() }
@@ -62,6 +62,8 @@ trait HasMHSRIndex extends DJBundle with HasMSHRSet with HasMSHRWay { def mshrMa
 object PipeID { val width = 1; val RESP = "b0".U; val REQ = "b1".U }
 
 trait HasPipeID extends Bundle { this: Bundle => val pipeId = UInt(PipeID.width.W); def toReqPipe = pipeId === PipeID.REQ; def toRespPipe = pipeId === PipeID.RESP }
+
+trait HasPCUID extends DJBundle { this: Bundle => val pcuId = UInt(pcuIdBits.W) }
 
 // ---------------------------------------------------------------- Req To Slice Bundle ----------------------------------------------------------------------------- //
 // TODO: Rename it
@@ -171,8 +173,8 @@ trait HasDBData extends DJBundle { this: Bundle =>
 
 // DataBuffer Read/Clean Req
 class DBRCReq(implicit p: Parameters)       extends DJBundle with HasDBRCOp with HasDBID with HasToIDBits
-class DBWReq(implicit p: Parameters)        extends DJBundle                             with HasFromIDBits
-class DBWResp(implicit p: Parameters)       extends DJBundle                with HasDBID with HasToIDBits
+class DBWReq(implicit p: Parameters)        extends DJBundle                             with HasFromIDBits with HasPCUID
+class DBWResp(implicit p: Parameters)       extends DJBundle                with HasDBID with HasToIDBits   with HasPCUID
 class NodeFDBData(implicit p: Parameters)   extends DJBundle with HasDBData              with HasToIDBits
 class NodeTDBData(implicit p: Parameters)   extends DJBundle with HasDBData with HasDBID
 

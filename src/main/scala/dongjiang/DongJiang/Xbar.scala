@@ -87,8 +87,8 @@ class Xbar()(implicit p: Parameters) extends DJModule {
     req2SliceIdMaps.zipWithIndex.foreach {
         case(m, i) =>
             m.io.bankVal <> io.bankVal
-            m.io.inBank := io.req2Slice.in(i).bits.to.idL1
-            req2SliceReMap(i).bits.to.idL1 := m.io.outBank
+            m.io.inBank := io.req2Slice.in(i).bits.to.IncoId
+            req2SliceReMap(i).bits.to.IncoId := m.io.outBank
     }
 
     def idSelDec2DecVec[T <: Bundle with HasToIDBits](in: DecoupledIO[T], out: Seq[DecoupledIO[T]]): Unit = {
@@ -98,7 +98,7 @@ class Xbar()(implicit p: Parameters) extends DJModule {
             case (o, i) =>
                 o.bits := in.bits
                 val idMatch = WireInit(false.B)
-                idMatch := in.bits.to.idL1 === i.U
+                idMatch := in.bits.to.IncoId === i.U
                 when(idMatch) {
                     o.valid := in.valid
                     in.ready := o.ready
