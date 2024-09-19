@@ -9,22 +9,19 @@ import Utils.Encoder.RREncoder
 
 object DBState {
   val width       = 3
-  // FREE -> ALLOC -> WRITING -> WRITE_DONE -> FREE
-  // FREE -> ALLOC -> WRITING -> WRITE_DONE -> READING(needClean) -> READ(needClean) -> FREE
-  // FREE -> ALLOC -> WRITING -> WRITE_DONE -> READING(!needClean) -> READ(!needClean) -> READ_DONE -> READING(needClean) -> READ(needClean) -> FREE
+  // FREE -> ALLOC -> FREE
+  // FREE -> ALLOC -> READING(needClean) -> READ(needClean) -> FREE
+  // FREE -> ALLOC -> READING(!needClean) -> READ(!needClean) -> READ_DONE -> READING(needClean) -> READ(needClean) -> FREE
   val FREE        = "b000".U
   val ALLOC       = "b001".U
-  val WRITTING    = "b010".U // Has been written some beats
-  val WRITE_DONE  = "b011".U // Has been written all beats
-  val READ        = "b100".U // Ready to read
-  val READING     = "b101".U // Already partially read
-  val READ_DONE   = "b110".U // Has been read all beat
+  val READ        = "b010".U // Ready to read
+  val READING     = "b011".U // Already partially read
+  val READ_DONE   = "b100".U // Has been read all beat
 }
 
 
 class DBEntry(implicit p: Parameters) extends DJBundle with HasToIDBits {
   val state       = UInt(DBState.width.W)
-  val beatVals    = Vec(nrBeat, Bool())
   val beatRNum    = UInt(log2Ceil(nrBeat).W)
   val needClean   = Bool()
   val beats       = Vec(nrBeat, UInt(beatBits.W))
@@ -79,6 +76,15 @@ class DataBuffer()(implicit p: Parameters) extends DJModule {
   io.dataTDB.ready := true.B
 
 
+// ---------------------------------------------------------------------------------------------------------------------- //
+// ---------------------------------------------------- RC REQ TO DB ---------------------------------------------------- //
+// ---------------------------------------------------------------------------------------------------------------------- //
+  when(io.dbRCReqOpt.get.valid) {
+    entrys(io.dbRCReqOpt.get.bits.dbid).needClean := io.dbRCReqOpt.get.bits.isClean
+    entrys(io.dbRCReqOpt.get.bits.dbid).to        := io.dbRCReqOpt.get.bits.to
+  }
+  io.dbRCReqOpt.get.ready := true.B
+
 
 // ---------------------------------------------------------------------------------------------------------------------- //
 // ----------------------------------------------------- State Transfer ------------------------------------------------- //
@@ -86,9 +92,17 @@ class DataBuffer()(implicit p: Parameters) extends DJModule {
   entrys.map(_.state).zipWithIndex.foreach {
     case (s, i) =>
       switch(s) {
+        // FREE
         is(DBState.FREE) {
           val hit = wRespQ.io.enq.fire & wReqId === i.U
           s := Mux(hit, DBState.ALLOC, s)
+        }
+        // ALLOC
+        is(DBState.ALLOC) {
+          val hit   = io.dbRCReqOpt.get.fire & io.dbRCReqOpt.get.bits.dbid === i.U
+          val read  = io.dbRCReqOpt.get.bits.isRead
+          val clean = io.dbRCReqOpt.get.bits.isClean
+          s := Mux(read, DBState.READ, Mux(clean, DBState.FREE, s))
         }
       }
   }
