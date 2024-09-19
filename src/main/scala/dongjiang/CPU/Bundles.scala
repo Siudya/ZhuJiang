@@ -43,9 +43,9 @@ class UpdateMSHRRespBundle(implicit p: Parameters) extends DJBundle with HasPipe
     val retry           = Bool()
 }
 
-class DirReadBundle(implicit p: Parameters) extends DJBundle with HasAddr with HasPipeID
+class DirReadBundle(implicit p: Parameters) extends DJBundle with HasAddr with HasMSHRWay with HasPipeID
 
-class DirRespBaseBundle(nrWays: Int, nrMetas: Int, replWayBits: Int)(implicit p: Parameters) extends DJBundle with HasAddr {
+class DirRespBaseBundle(nrWays: Int, nrMetas: Int, replWayBits: Int)(implicit p: Parameters) extends DJBundle with HasAddr with HasPipeID {
     val hit         = Bool()
     val wayOH       = UInt(nrWays.W)
     val metaVec     = Vec(nrMetas, new CHIStateBundle())
@@ -65,11 +65,17 @@ class DirWriteBaseBundle(nrWays: Int, nrMetas: Int, replWayBits: Int)(implicit p
 }
 
 class DirWriteBundle(implicit p: Parameters) extends DJBundle {
-    val s   = Decoupled(new DirWriteBaseBundle(djparam.selfWays, 1, sReplWayBits)) // self
-    val sf  = Decoupled(new DirWriteBaseBundle(djparam.sfDirWays, nrRnfNode, sfReplWayBits)) // snoop filter
+    val s           = Decoupled(new DirWriteBaseBundle(djparam.selfWays, 1, sReplWayBits)) // self
+    val sf          = Decoupled(new DirWriteBaseBundle(djparam.sfDirWays, nrRnfNode, sfReplWayBits)) // snoop filter
 }
 
+trait HasDirBankID extends DJBundle { val dirBankId = UInt(dirBankBits.W) }
 
+class DirReadMSHRBundle(implicit p: Parameters) extends DJBundle with HasPipeID with HasDirBankID with HasMSHRSet
+
+class MSHRRespDirBundle(implicit p: Parameters) extends DJBundle with HasPipeID with HasDirBankID {
+    val addrs       = Vec(djparam.nrMSHRWays + djparam.nrEvictWays, Valid(UInt(addressBits.W)))
+}
 
 
 

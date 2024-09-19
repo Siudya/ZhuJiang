@@ -268,7 +268,7 @@ trait HasDJParam extends HasParseZJParam {
         dcuAddr
     }
 
-
+    def getDirBank(x: UInt): UInt = parseAddress(x, dirBankBits, 0, 0)._3
 
     def toDataID(x: UInt): UInt = {
         require(nrBeat == 1 | nrBeat == 2 | nrBeat == 4)

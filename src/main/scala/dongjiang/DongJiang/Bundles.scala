@@ -48,6 +48,7 @@ trait HasAddr extends DJBundle {this: Bundle =>
     def mTag    = parseMSHRAddress(addr)._1
     def mSet    = parseMSHRAddress(addr)._2
     def mBank   = parseMSHRAddress(addr)._3
+    def dirBank = getDirBank(addr)
 }
 
 trait HasMSHRSet extends DJBundle { this: Bundle => val mshrSet = UInt(mshrSetBits.W) }
@@ -58,7 +59,7 @@ trait HasMSHRWay extends DJBundle { this: Bundle => val mshrWay = UInt(mshrWayBi
 
 trait HasMHSRIndex extends DJBundle with HasMSHRSet with HasMSHRWay { def mshrMatch(set: UInt, way: UInt): Bool = mshrSet === set & mshrWay === way }
 
-object PipeID { val width = 1; val REQ = "b0".U; val RESP = "b1".U }
+object PipeID { val width = 1; val RESP = "b0".U; val REQ = "b1".U }
 
 trait HasPipeID extends Bundle { this: Bundle => val pipeId = UInt(PipeID.width.W); def toReqPipe = pipeId === PipeID.REQ; def toRespPipe = pipeId === PipeID.RESP }
 

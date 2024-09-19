@@ -30,17 +30,21 @@ class SliceWrapper()(implicit p: Parameters) extends DJModule {
   val mpRespQueue   = Module(new Queue(gen = new Resp2NodeBundle(),entries = djparam.nrMpRespQueue, pipe = true, flow = true))
 
 // --------------------------- Connection ---------------------------//
-  directory.io.sliceId      := io.sliceId
+  directory.io.earlyRReqVec <> mshrCtl.io.earlyRReqVec
   directory.io.dirRead      <> mshrCtl.io.dirRead
-  directory.io.dirWrite.s   <> fastPriorityArbDec(Seq(respPipe.io.dirWrite.s, reqPipe.io.dirWrite.s))
-  directory.io.dirWrite.sf  <> fastPriorityArbDec(Seq(respPipe.io.dirWrite.sf, reqPipe.io.dirWrite.sf))
+  directory.io.dirWrite(0)  <> respPipe.io.dirWrite // Low bit is high priority
+  directory.io.dirWrite(1)  <> reqPipe.io.dirWrite
+  directory.io.dirResp(0)   <> respPipe.io.dirResp
+  directory.io.dirResp(1)   <> reqPipe.io.dirResp
   directory.io.readMshr     <> mshrCtl.io.dirReadMshr
-  directory.io.mshrResp     := mshrCtl.io.mshrResp2Dir
+  directory.io.mshrResp     <> mshrCtl.io.mshrResp2Dir
 
 
   mshrCtl.io.sliceId        := io.sliceId
   mshrCtl.io.req2Slice      <> io.req2Slice
   mshrCtl.io.resp2Slice     <> io.resp2Slice
+  mshrCtl.io.pipeTask(0)    <> respPipe.io.task;  assert(!mshrCtl.io.pipeTask(PipeID.RESP).valid | mshrCtl.io.pipeTask(PipeID.RESP).bits.pipeId === PipeID.RESP)
+  mshrCtl.io.pipeTask(1)    <> reqPipe.io.task;   assert(!mshrCtl.io.pipeTask(PipeID.REQ).valid  | mshrCtl.io.pipeTask(PipeID.REQ).bits.pipeId === PipeID.REQ)
   mshrCtl.io.udpMSHR        <> fastPriorityArbDec(Seq(respPipe.io.udpMSHR, reqPipe.io.udpMSHR))
   mshrCtl.io.updLockMSHR    <> fastPriorityArbDec(Seq(respPipe.io.updLockMSHR, reqPipe.io.updLockMSHR))
 
@@ -60,10 +64,7 @@ class SliceWrapper()(implicit p: Parameters) extends DJModule {
       out.foreach(_.bits      := in.bits)
     }
   }
-
-  connectPipe(mshrCtl.io.pipeTask,  Seq(reqPipe.io.task, respPipe.io.task))
   connectPipe(mshrCtl.io.udpResp,   Seq(reqPipe.io.mshrResp, respPipe.io.mshrResp))
-  connectPipe(directory.io.dirResp, Seq(reqPipe.io.dirResp, respPipe.io.dirResp))
 
   mpReqQueue.io.enq         <> fastPriorityArbDec(Seq(respPipe.io.req2Node, reqPipe.io.req2Node))
   mpRespQueue.io.enq        <> fastPriorityArbDec(Seq(respPipe.io.resp2Node, reqPipe.io.resp2Node))

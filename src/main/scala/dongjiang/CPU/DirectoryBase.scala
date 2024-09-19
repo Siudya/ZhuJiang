@@ -10,8 +10,49 @@ import chisel3.util.random.LFSR
 import freechips.rocketchip.util.ReplacementPolicy
 import Utils.SramWrapper
 
-class DirEntry(nrMetas: Int = 1)(implicit p: Parameters) extends DJBundle {
-  val tag         = UInt(sTagBits.W)
+object DirCtrlState {
+  // [Free] ---> [ReqFire] ---> [WaitMcp]  ---> [GetResp]
+  //   ReplSram: [writeRepl]    [readRepl]      [getRepl]
+  //                      MSHR: [readMSHR]      [mshrResp]
+  //
+  //
+  // [Free] ---> [ReqFire] ---> [WaitMcp]  ---> [GetResp]
+  //                            [EarlyReq] ---> [ReqFire] --->  [WaitMcp] ---> [GetResp] ---> [Free]
+  //
+  // [Free] ---> [ReqFire] ---> [WaitMcp]  ---> [GetResp]
+  //                                            [EarlyReq] ---> [ReqFire] ---> [WaitMcp]  ---> [GetResp] ---> [Free]
+  val width               = 3
+  val Free                = "b000".U
+  val ReqFire             = "b100".U
+  val WaitMcp             = "b010".U
+  val GetResp             = "b001".U
+  val GetResp_ReqFire     = "b101".U
+
+}
+
+trait HasDirCtrlState {
+  val shift = UInt(DirCtrlState.width.W)
+
+  def canRecReq = shift === DirCtrlState.Free    | shift === DirCtrlState.WaitMcp         | shift === DirCtrlState.GetResp
+  def isReqFire = shift === DirCtrlState.ReqFire | shift === DirCtrlState.GetResp_ReqFire
+  def isWaitMcp = shift === DirCtrlState.WaitMcp
+  def isGetResp = shift === DirCtrlState.GetResp | shift === DirCtrlState.GetResp_ReqFire
+
+}
+
+class DirCtrlBundle(setBits: Int)(implicit p: Parameters) extends DJBundle with HasDirCtrlState with HasMSHRWay with HasPipeID {
+  val ren   = Bool()
+  val set   = UInt(setBits.W)
+
+  def wen   = !ren
+  def way   = Mux(useEvict, djparam.nrMSHRWays.U + mshrWay, mshrWay)
+  def mSet  = set(mshrSetBits-1, 0)
+  require(setBits >= mshrSetBits)
+}
+
+
+class DirEntry(tagBits: Int, nrMetas: Int = 1)(implicit p: Parameters) extends DJBundle {
+  val tag         = UInt(tagBits.W)
   val bank        = UInt(bankBits.W)
   val metaVec     = Vec(nrMetas, new CHIStateBundle())
 }
@@ -23,55 +64,54 @@ class DirectoryBase(
                       ways: Int = 4,
                       nrMetas: Int = 1,
                       replPolicy: String = "plru",
-                      mcp: Int = 1,
-                      holdMcp: Boolean = false,
-//                      nrSramBank: Int = 1 // TODO
+                      mcp: Int = 2, // TODO
+                      holdMcp: Boolean = true, // TODO
                    )
   (implicit p: Parameters) extends DJModule {
+
+  require(mcp == 2 & holdMcp)
 
   val repl        = ReplacementPolicy.fromString(replPolicy, ways)
   val useRepl     = replPolicy != "random"
   val replWayBits = if(useRepl) repl.nBits else 0
   val setBits     = log2Ceil(sets)
   val wayBits     = log2Ceil(ways)
-  val holdMcpVal  = holdMcp match { case true => 1; case false => 0 }
 
-  def parseDirAddress(x: UInt): (UInt, UInt, UInt, UInt, UInt) = parseAddress(x, modBankBits, setBits, tagBits)
+  def parseDirAddress(x: UInt): (UInt, UInt, UInt, UInt, UInt) = parseAddress(x, 0, setBits, tagBits) // TODO: SRAM Tag dont need to store modBank
 
 // --------------------- IO declaration ------------------------//
   val io = IO(new Bundle {
-    val id        = Input(UInt(modBankBits.W))
-    // TODO: Design a control link to control ready
-    val dirRead   = Flipped(Decoupled(new DirReadBundle))
-    val dirWrite  = Flipped(Decoupled(new DirWriteBaseBundle(ways, nrMetas, replWayBits)))
-    val dirResp   = Decoupled(new DirRespBaseBundle(ways, nrMetas, replWayBits))
-    val readMshr  = Valid(UInt(mshrSetBits.W))
-    val mshrResp  = Input(Vec(djparam.nrMSHRWays + djparam.nrEvictWays, Valid(UInt(addressBits.W))))
+    val earlyRReq = Flipped(Decoupled())
+    val earlyWReq = Flipped(Decoupled())
+    val dirRead   = Input(new DirReadBundle)
+    val dirWrite  = Input(new DirWriteBaseBundle(ways, nrMetas, replWayBits))
+    val dirResp   = Valid(new DirRespBaseBundle(ways, nrMetas, replWayBits))
+    val readMshr  = Valid(new DirReadMSHRBundle())
+    val mshrResp  = Input(new MSHRRespDirBundle())
   })
 
 // --------------------- Modules declaration ------------------------//
-  val metaArray     = Module(new SramWrapper(new DirEntry(nrMetas), sets, ways, singlePort = true, shouldReset = true, multicycle = mcp, holdMcp = holdMcp))
+  val metaArray     = Module(new SRAMTemplate(new DirEntry(tagBits, nrMetas), sets, ways, singlePort = true, shouldReset = true, multicycle = mcp, holdMcp = holdMcp))
 
   val replArrayOpt  = if(!useRepl) None else Some(Module(new SRAMTemplate(UInt(repl.nBits.W), sets, way = 1, singlePort = true, shouldReset = true)))
 
-  val readPipe      = Module(new Pipe(UInt(addressBits.W), latency = mcp + holdMcpVal))
-
-  val replPipeOpt   = if(!useRepl) None else Some(Module(new Pipe(UInt(repl.nBits.W), latency = mcp + holdMcpVal - 1)))
-
 
 //// ----------------------- Reg/Wire declaration --------------------------//
+  // Base
+  val sramCtrlReg     = RegInit(0.U.asTypeOf(new DirCtrlBundle(setBits)))
   // s2
   val valid_s2        = WireInit(false.B)
-  val metaResp_s2     = Wire(Vec(ways, new DirEntry(nrMetas)))
+  val metaResp_s2     = Wire(Vec(ways, new DirEntry(tagBits, nrMetas)))
   val replResp_s2     = WireInit(0.U(repl.nBits.W))
   val addr_s2         = WireInit(0.U(addressBits.W))
   val mshrMes_s2      = Wire(Vec(djparam.nrMSHRWays, Valid(new Bundle {
     val tag           = UInt(tagBits.W)
     val bank          = UInt(bankBits.W)
   })))
+  val pipeId_s2       = Wire(UInt(PipeID.width.W))
   // s3
   val valid_s3_g      = RegInit(false.B)
-  val metaResp_s3_g   = Reg(Vec(ways, new DirEntry(nrMetas)))
+  val metaResp_s3_g   = Reg(Vec(ways, new DirEntry(tagBits, nrMetas)))
   val addr_s3_g       = RegInit(0.U(addressBits.W))
   val mshrMes_s3_g    = Reg(Vec(djparam.nrMSHRWays, Valid(new Bundle{
     val tag           = UInt(tagBits.W)
@@ -85,84 +125,112 @@ class DirectoryBase(
   val set_s3          = WireInit(0.U(setBits.W))
   val bank_s3         = WireInit(0.U(bankBits.W))
   val useWayVec       = Wire(Vec(ways, Bool()))
+  val pipeId_s3_g     = Reg(UInt(PipeID.width.W))
 
 
-// ------------------------------ S1: Read / Write SRAM -----------------------------------//
+
+// ---------------------------------------------------------------------------------------------------------------------- //
+// -------------------------------------------------- S1: Read / Write SRAM --------------------------------------------- //
+// ---------------------------------------------------------------------------------------------------------------------- //
+  /*
+   * Parse Req Addr
+   */
+  val (rTag, rSet, rModBank, rBank, rOffset) = parseDirAddress(io.dirRead.addr)
+  val (wTag, wSet, wModBank, wBank, wOffset) = parseDirAddress(io.dirWrite.addr)
+
+
+  /*
+   * Set SramCtrl Value
+   */
+  sramCtrlReg.shift       := Cat(io.earlyRReq.fire | io.earlyWReq.fire, sramCtrlReg.shift(DirCtrlState.width-1, 1))
+  sramCtrlReg.ren         := Mux(io.earlyRReq.fire, true.B, Mux(io.earlyWReq.fire, false.B, sramCtrlReg.ren))
+  when(sramCtrlReg.isReqFire) {
+    sramCtrlReg.set       := rSet
+    sramCtrlReg.mshrWay   := io.dirRead.mshrWay
+    sramCtrlReg.useEvict  := io.dirRead.useEvict
+    sramCtrlReg.pipeId    := io.dirRead.pipeId
+  }
+  assert(!(io.earlyRReq.fire & io.earlyWReq.fire))
+
+
+  /*
+   * Get Req Form MSHR or ProcessPipe_S3 EXU
+   */
+  io.earlyRReq.ready        := sramCtrlReg.canRecReq & !io.earlyWReq.valid
+  io.earlyWReq.ready        := sramCtrlReg.canRecReq
+
+
   /*
    * Read / Write Req SRAM
    */
-  metaArray.io.req.valid      := io.dirRead.valid | io.dirWrite.valid
-  metaArray.io.req.bits.index := parseDirAddress(Mux(io.dirWrite.valid, io.dirWrite.bits.addr, io.dirRead.bits.addr))._2
-  metaArray.io.req.bits.wmode := io.dirWrite.valid
-  metaArray.io.req.bits.wayMaskOpt.get := io.dirWrite.bits.wayOH
+  // early
+  metaArray.io.earlyRen.get       := io.earlyRReq.fire
+  metaArray.io.earlyWen.get       := io.earlyWReq.fire
+  // ren
+  metaArray.io.r.req.valid        := sramCtrlReg.isReqFire & sramCtrlReg.ren
+  metaArray.io.r.req.bits.setIdx  := rSet
+  // wen
+  metaArray.io.w.req.valid        := sramCtrlReg.isReqFire & sramCtrlReg.wen
+  metaArray.io.w.req.bits.setIdx  := wSet
+  metaArray.io.w.req.bits.data.foreach(_.tag      := wTag)
+  metaArray.io.w.req.bits.data.foreach(_.bank     := wBank)
+  metaArray.io.w.req.bits.data.foreach(_.metaVec  := io.dirWrite.metaVec)
+  metaArray.io.w.req.bits.waymask.get := io.dirWrite.wayOH
 
-  io.dirRead.ready            := !io.dirWrite.valid & metaArray.io.req.ready
-  io.dirWrite.ready           := metaArray.io.req.ready
 
-  /*
-   * Write Data To SRAM
-   */
-  metaArray.io.data.valid     := io.dirWrite.valid
-  metaArray.io.data.bits.tag  := parseDirAddress(io.dirWrite.bits.addr)._1
-  metaArray.io.data.bits.bank := parseDirAddress(io.dirWrite.bits.addr)._4
-  metaArray.io.data.bits.metaVec := io.dirWrite.bits.metaVec
-
+// ---------------------------------------------------------------------------------------------------------------------- //
+// ------------------------------------------------- S2: Receive SRAM Resp ---------------------------------------------- //
+// ---------------------------------------------------------------------------------------------------------------------- //
   /*
    * Read Repl SRAM
    */
   if(useRepl) {
-    replArrayOpt.get.io.r.req.valid       := io.dirRead.fire
-    replArrayOpt.get.io.r.req.bits.setIdx := parseDirAddress(io.dirRead.bits.addr)._2
+    replArrayOpt.get.io.r.req.valid       := sramCtrlReg.isWaitMcp & sramCtrlReg.ren
+    replArrayOpt.get.io.r.req.bits.setIdx := sramCtrlReg.set
   }
-
-  /*
-   * enter pipe
-   */
-  readPipe.io.enq.valid := io.dirRead.fire
-  readPipe.io.enq.bits  := io.dirRead.bits.addr
-
-// ------------------------------ S2: Wait SRAM Resp and Read MSHR -----------------------------------//
-  /*
-   * Receive SRAM resp
-   */
-  valid_s2        := metaArray.io.resp.valid
-  metaResp_s2     := metaArray.io.resp.bits
-
-  /*
-   * Receive sRepl resp
-   */
-  if (useRepl) {
-    replPipeOpt.get.io.enq.valid  := RegNext(replArrayOpt.get.io.r.req.fire)
-    replPipeOpt.get.io.enq.bits   := replArrayOpt.get.io.r.resp.data(0)
-  }
-
-  /*
-   * Receive sRepl pipe deq
-   */
-  if (useRepl) {
-    replResp_s2     := replPipeOpt.get.io.deq.bits
-  }
-
-  /*
-   * Receive pipe deq
-   */
-  addr_s2           := readPipe.io.deq.bits
 
   /*
    * Read MSHR Set Mes
    */
-  io.readMshr.valid := valid_s2
-  io.readMshr.bits  := parseMSHRAddress(addr_s2)._2
-  mshrMes_s2.zip(io.mshrResp).foreach {
-    case (a, b) =>
-      a.valid       := b.valid
-      a.bits.tag    := parseDirAddress(b.bits)._1
-      a.bits.bank   := parseDirAddress(b.bits)._4
+  io.readMshr.valid           := sramCtrlReg.isWaitMcp & sramCtrlReg.ren
+  io.readMshr.bits.mshrSet    := sramCtrlReg.mSet
+  io.readMshr.bits.pipeId     := sramCtrlReg.pipeId
+  io.readMshr.bits.dirBankId  := DontCare
+
+  /*
+   * Receive Pipe Id
+   */
+  pipeId_s2       := sramCtrlReg.pipeId
+
+  /*
+   * Receive Meta SRAM resp
+   */
+  valid_s2        := sramCtrlReg.isGetResp & sramCtrlReg.ren
+  metaResp_s2     := metaArray.io.r.resp.data
+
+  /*
+   * Receive Repl SRAM resp
+   */
+  if (useRepl) {
+    replResp_s2   := replArrayOpt.get.io.r.resp.data(0)
   }
 
+  /*
+   * Receive MSHR Repl
+   */
+  mshrMes_s2.zip(io.mshrResp.addrs).foreach {
+    case (a, b) =>
+      a.valid     := b.valid
+      a.bits.tag  := parseDirAddress(b.bits)._1
+      a.bits.bank := parseDirAddress(b.bits)._4
+  }
+  addr_s2         := io.mshrResp.addrs(sramCtrlReg.way).bits
+  assert(Mux(sramCtrlReg.isGetResp & sramCtrlReg.ren, io.mshrResp.addrs(sramCtrlReg.way).valid, true.B))
 
 
-// ------------------------------ S3: Output DirResp -----------------------------------//
+// ---------------------------------------------------------------------------------------------------------------------- //
+// -------------------------------------------------- S3: Output DirResp  ----------------------------------------------- //
+// ---------------------------------------------------------------------------------------------------------------------- //
   /*
    * Receive S2
    */
@@ -171,6 +239,7 @@ class DirectoryBase(
   addr_s3_g       := addr_s2
   mshrMes_s3_g.zip(mshrMes_s2).foreach { case(a, b) => a := b }
   replResp_s3_g   := replResp_s3_g
+  pipeId_s3_g     := pipeId_s2
 
   tag_s3          := parseDirAddress(addr_s3_g)._1
   set_s3          := parseDirAddress(addr_s3_g)._2
@@ -186,6 +255,7 @@ class DirectoryBase(
   val hitMetaVec  = metaResp_s3_g(OHToUInt(hitWayVec)).metaVec
   val hit         = hitWayVec.asUInt.orR
   hitWayVec       := tagHitVec.zip(bankHitVec.zip(stateHitVec)).map{ case(t, (b, s)) => t & b & s }
+  assert(PopCount(hitWayVec) <= 1.U)
 
 
   /*
@@ -226,38 +296,26 @@ class DirectoryBase(
   io.dirResp.bits.addr      := Mux(hit, addr_s3_g,          Mux(hasInvWay, 0.U,                 Mux(replWayIsUsing, metaResp_s3_g(selUnuseWay).tag,     metaResp_s3_g(replWay).tag)))
   io.dirResp.bits.metaVec   := Mux(hit, hitMetaVec,         Mux(hasInvWay, invMetasVec,         Mux(replWayIsUsing, metaResp_s3_g(selUnuseWay).metaVec, metaResp_s3_g(replWay).metaVec)))
   io.dirResp.bits.replRetry := replRetry
+  io.dirResp.bits.pipeId    := pipeId_s3_g
   if(useRepl) { io.dirResp.bits.replMes := replResp_s3_g }
 
 
-
-// ------------------------------ Update Replace SRAM Mes -----------------------------------//
+// ---------------------------------------------------------------------------------------------------------------------- //
+// ----------------------------------------------- Update Replace SRAM Mes  --------------------------------------------- //
+// ---------------------------------------------------------------------------------------------------------------------- //
   /*
    * PLRU: update replacer only when read hit or write Dir
    */
   if (replPolicy == "plru") {
-    replArrayOpt.get.io.w.req.valid               := io.dirWrite.fire | (io.dirResp.fire & hit)
-    replArrayOpt.get.io.w.req.bits.setIdx         := parseDirAddress(Mux(io.dirWrite.fire, io.dirWrite.bits.addr, addr_s3_g))._2
-    replArrayOpt.get.io.w.req.bits.data.foreach(_ := Mux(io.dirWrite.fire,
-                                                       repl.get_next_state(io.dirWrite.bits.replMes,  OHToUInt(io.dirWrite.bits.wayOH)),
-                                                       repl.get_next_state(replResp_s3_g,             OHToUInt(io.dirResp.bits.wayOH))))
+    replArrayOpt.get.io.w.req.valid               := metaArray.io.w.req.fire | (io.dirResp.fire & hit)
+    replArrayOpt.get.io.w.req.bits.setIdx         := Mux(metaArray.io.w.req.fire, wSet, set_s3)
+    replArrayOpt.get.io.w.req.bits.data.foreach(_ := Mux(metaArray.io.w.req.fire,
+                                                       repl.get_next_state(io.dirWrite.replMes, OHToUInt(io.dirWrite.wayOH)),
+                                                       repl.get_next_state(replResp_s3_g, OHToUInt(io.dirResp.bits.wayOH))))
   } else if(replPolicy == "random") {
     // nothing to do
   } else {
     assert(false.B, "Dont support replacementPolicy except plru or random")
   }
 
-
-// ------------------------------ Assertion -----------------------------------//
-  // s1
-  if(useRepl) {
-    assert(!((metaArray.io.req.fire & !metaArray.io.req.bits.wmode) ^ replArrayOpt.get.io.r.req.fire), "Must read meta and repl at the same time in S1")
-  }
-  // s2
-  if (useRepl) {
-    assert(!(readPipe.io.deq.valid ^ replPipeOpt.get.io.deq.valid), "Must get meta and repl at the same time in S2")
-  }
-  assert(!(readPipe.io.deq.valid ^ valid_s2))
-  // s3
-  assert(PopCount(hitWayVec) <= 1.U)
-  assert(Mux(io.dirResp.valid, io.dirResp.ready, true.B))
 }
