@@ -218,6 +218,7 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
            * Resp Update mshrTable value
            */
           }.elsewhen(io.resp2Slice.valid & io.resp2Slice.bits.useMSHR & io.resp2Slice.bits.mshrMatch(i.U, j.U)) {
+            assert(!io.resp2Slice.bits.isUpdate, "TODO")
             // Recovery of pending intf identifiers
             m.waitIntfVec(io.resp2Slice.bits.from.intfId) := false.B
             // Record Resp Mes

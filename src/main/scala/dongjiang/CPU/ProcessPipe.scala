@@ -161,6 +161,7 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
   inst_s3.fwdState  := task_s3_g.bits.respMes.fwdState.bits
   inst_s3.rdResp    := task_s3_g.bits.respMes.masResp.bits
   inst_s3.respHasData := task_s3_g.bits.respMes.masDBID.valid | task_s3_g.bits.respMes.slvDBID.valid
+  assert(Mux(valid_s3, !inst_s3.chipType === ChipType.CSN, true.B), "TODO")
 
   /*
    * Get Decode Result
@@ -176,28 +177,29 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
    * Send Snoop to RN-F
    */
   // taskSnp_s3
+  assert(Mux(valid_s3, !decode_s3.snoop, true.B), "TODO")
 
   /*
    * Send Read to SN(DDRC) / HN-F(CSN)
    */
   taskRD_s3             := DontCare
-  taskRD_s3.addr        := Mux(decode_s3.readDCU, DontCare, task_s3_g.bits.addr) // TODO: Read DCU Addr
+  taskRD_s3.addr        := task_s3_g.bits.addr
   taskRD_s3.mshrWay     := task_s3_g.bits.mshrWay
   taskRD_s3.useEvict    := task_s3_g.bits.useEvict
-  taskRD_s3.tgtID       := Mux(taskChipType === ChipType.Local, ddrcNodeId.U, DontCare)
+  taskRD_s3.tgtID       := Mux(taskChipType === ChipType.Local, ddrcNodeId.U, DontCare); assert(Mux(valid_s3, !inst_s3.chipType === ChipType.CSN, true.B), "TODO")
   taskRD_s3.srcID       := Mux(taskChipType === ChipType.Local, hnfNodeId.U, csnHnfNodeId.U)
   taskRD_s3.opcode      := decode_s3.rdOp
   taskRD_s3.expCompAck  := Mux(taskChipType === ChipType.Local, false.B, true.B)
   taskRD_s3.from.IncoId := io.sliceId
   taskRD_s3.to.IncoId   := Mux(taskChipType === ChipType.Local, IncoID.LOCALMAS.U, IncoID.CSNMAS.U)
   taskRD_s3.replace     := false.B
-  taskRD_s3.ReadDCU     := decode_s3.readDCU
-
+  taskRD_s3.ReadDCU     := false.B
 
   /*
    * Send Write / Dataless to SN(DDRC) / HN-F(CSN)
    */
   // taskWD_s3
+  assert(Mux(valid_s3, !decode_s3.writeDown, true.B), "TODO")
 
   /*
    * Send Read / Clean to DataBuffer
@@ -214,11 +216,13 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
    * Send Read to SN(DCU)
    */
   // readDCU_s3
+  assert(Mux(valid_s3, !decode_s3.readDCU, true.B), "TODO")
 
   /*
    * Send Write to SN(DCU)
    */
   // writeDCU_s3
+  assert(Mux(valid_s3, !decode_s3.writeDCU, true.B), "TODO")
 
   /*
    * Send Write to Self Directory

@@ -18,6 +18,7 @@ abstract class DJBundle(implicit val p: Parameters) extends Bundle with HasDJPar
 
 class DongJiang()(implicit p: Parameters) extends DJModule {
 /*
+ * TODO: Update It
  * System Architecture: (2 RNSLAVE, 1 RNMASTER, 1 SNMASTER and 2 Slice)
  *
  *                                          ----------------------------------------------------------
@@ -44,6 +45,7 @@ class DongJiang()(implicit p: Parameters) extends DJModule {
 
 
 /*
+ * TODO: Update It
  * How To Detemine A Req( Read / Dataless / Atomic / CMO / Write ) Go To Which Master( RNMASTER / SNMASTER ):
  * 1. Use CoreID
  *
@@ -60,6 +62,7 @@ class DongJiang()(implicit p: Parameters) extends DJModule {
 
 
 /*
+ * TODO: Update It
  * CHI ID Map Table:
  *
  * *********************************************************** RNSLAVE ***************************************************************************

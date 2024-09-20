@@ -35,8 +35,8 @@ object SMType {
   val width = 2
   val RDCU  = "b00".U
   val RDDR  = "b01".U
-  val WRITE = "b10".U
-  val REPL  = "b11".U
+  val WRITE = "b10".U // Write DCU
+  val REPL  = "b11".U // Read DCU And Write DDRC
 }
 
 trait HasSMType extends Bundle { this: Bundle =>
