@@ -19,8 +19,8 @@ import xs.utils._
  *                             waitSnpDone        WaitSnpDone
  *
  *
- * Resp Need Read DB:     [Free]  -----> [RCDB] -----> [Resp2Node] -----> [WaitCompAck] -----> [Resp2Slice]
- * Resp Not Need Read DB: [Free]         ----->        [Resp2Node] -----> [WaitCompAck] -----> [Resp2Slice]
+ * Resp Need Read DB:     [Free]  -----> [RCDB] -----> [Resp2Node] -----> [WaitCompAck]
+ * Resp Not Need Read DB: [Free]         ----->        [Resp2Node] -----> [WaitCompAck]
  *
  *
  *
@@ -175,7 +175,7 @@ class RnSlavePCU(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) ex
         is(PCURS.WaitCompAck) {
           val hit       = io.chi.txrsp.fire & io.chi.txrsp.bits.TxnID === i.U
           assert(Mux(hit, io.chi.txrsp.bits.Opcode === CompAck, true.B))
-          pcu.state := Mux(hit, PCURS.Resp2Slice, pcu.state)
+          pcu.state := Mux(hit, PCURS.Free, pcu.state)
         }
       }
   }
@@ -288,8 +288,8 @@ class RnSlavePCU(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) ex
   io.chi.rxdat.bits.TgtID   := pcus(datSelId).chiMes.srcID
   io.chi.rxdat.bits.SrcID   := hnfNodeId.U
   io.chi.rxdat.bits.TxnID   := pcus(datSelId).chiMes.txnID
+  io.chi.rxdat.bits.HomeNID := hnfNodeId.U
   io.chi.rxdat.bits.DBID    := datSelId
-  io.chi.rxdat.bits.HomeNID := 0.U
   io.chi.rxdat.bits.Resp    := pcus(datSelId).chiMes.resp
   io.chi.rxdat.bits.DataID  := io.dbSigs.dataFDB.bits.dataID
   io.chi.rxdat.bits.Data    := io.dbSigs.dataFDB.bits.data
@@ -302,6 +302,30 @@ class RnSlavePCU(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) ex
 // ---------------------------------------------------- Receive Rsp From Node ------------------------------------------- //
 // ---------------------------------------------------------------------------------------------------------------------- //
   io.chi.txrsp.ready        := true.B
+
+
+// ---------------------------------------------------------------------------------------------------------------------- //
+// ------------------------------------------------ Select PCU send Resp to Slice --------------------------------------- //
+// ---------------------------------------------------------------------------------------------------------------------- //
+  /*
+   * Select one PCU to Send RxDat
+   */
+//  val respBeSendVec             = pcus.map { case p => p.state === PCURS.Resp2Slice }
+//  val respSelId                 = PriorityEncoder(respBeSendVec)
+//
+//  io.resp2Slice.valid           := respBeSendVec.reduce(_ | _)
+//  io.resp2Slice.bits.from       := rnSlvId.U
+//  io.resp2Slice.bits.to         := pcus(respSelId).indexMes.from
+//  io.resp2Slice.bits.mshrSet    := pcus(respSelId).indexMes.mSet
+//  io.resp2Slice.bits.mshrWay    := pcus(respSelId).indexMes.mshrWay
+//  io.resp2Slice.bits.useEvict   := pcus(respSelId).indexMes.useEvict
+//  io.resp2Slice.bits.dbid       := pcus(respSelId).indexMes.dbid
+//  io.resp2Slice.bits.isSnpResp  := true.B
+//  io.resp2Slice.bits.isReqResp  := false.B
+//  io.resp2Slice.bits.hasData    := pcus(respSelId).chiMes.isDat
+//  io.resp2Slice.bits.resp       := pcus(respSelId).chiMes.resp
+//  io.resp2Slice.bits.fwdState   := pcus(respSelId).chiMes.fwdState
+
 
 
 
