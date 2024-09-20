@@ -94,9 +94,10 @@ object CHIChannel {
     val width = 2
 
     val REQ = "b00".U
-    val DAT = "b00".U
-    val RSP = "b00".U
-    val SNP = "b00".U
+    val DAT = "b01".U
+    val RSP = "b10".U
+    val SNP = "b11".U
+
 }
 
 trait HasCHIChannel {
