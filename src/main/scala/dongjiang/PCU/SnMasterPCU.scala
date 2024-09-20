@@ -48,16 +48,11 @@ trait HasSMType extends Bundle { this: Bundle =>
   def isRepl      = smType === SMType.REPL
 }
 
-class PCUSMEntry(param: InterfaceParam)(implicit p: Parameters) extends DJBundle with HasAddr with HasMSHRWay with HasSMType {
+class PCUSMEntry(param: InterfaceParam)(implicit p: Parameters) extends DJBundle with HasSMType {
   val state         = UInt(PCUSM.width.W)
-  val reqMes        = new DJBundle with HasFromIncoID with HasMSHRWay {
-    val opcode      = UInt(6.W)
-  }
-  val respMes       = new DJBundle {
-    val resp        = UInt(ChiResp.width.W)
-    val dbid        = Valid(UInt(djparam.chiDBIDBits.W))
-  }
-  val dbid          = Valid(UInt(dbIdBits.W))
+  val indexMes      = new DJBundle with HasAddr with HasFromIncoID with HasMSHRWay with HasDBID
+  val chiMes        = new SNMASCHIMesBundle()
+  val hasData       = Bool()
   val getDataNum    = UInt(beatNumBits.W)
 
   def isFree        = state === PCUSM.Free
@@ -84,8 +79,8 @@ class SnMasterPCU(snMasId: Int, param: InterfaceParam)(implicit p: Parameters) e
   // PCU Req To Node ID
   val pcuResp2SliceID = Wire(UInt(param.pcuIdBits.W))
   // req from slice
-  val addrSaveInPCU   = Wire(UInt(addressBits.W))
-  val reqSaveInPCU    = WireInit(0.U.asTypeOf(pcus(0).reqMes))
+  val indexSaveInPCU  = WireInit(0.U.asTypeOf(pcus(0).indexMes))
+  val reqSaveInPCU    = WireInit(0.U.asTypeOf(pcus(0).chiMes))
 
 
 // ---------------------------------------------------------------------------------------------------------------------- //
@@ -144,22 +139,21 @@ class SnMasterPCU(snMasId: Int, param: InterfaceParam)(implicit p: Parameters) e
        * Receive New Req
        */
       when(io.req2Node.fire & pcuGetReqID === i.U) {
-        pcu.addr    := addrSaveInPCU
-        pcu.reqMes  := reqSaveInPCU
+        pcu.chiMes  := reqSaveInPCU
         assert(pcu.state === PCUSM.Free)
       /*
        * Receive DBID From DataBuffer
        */
       }.elsewhen(io.dbSigs.wResp.fire & pcuRecDBID === i.U) {
-        pcu.dbid.valid  := true.B
-        pcu.dbid.bits   := io.dbSigs.wResp.bits.dbid
+        pcu.hasData       := true.B
+        pcu.indexMes.dbid := io.dbSigs.wResp.bits.dbid
         assert(pcu.state === PCUSM.WaitDBID)
       /*
        * Receive Data And Resp From CHI RxDat
        */
       }.elsewhen(io.chi.rxdat.fire & io.chi.rxdat.bits.TxnID === i.U) {
         pcu.getDataNum    := pcu.getDataNum + 1.U
-        pcu.respMes.resp  := io.chi.rxdat.bits.Resp
+        pcu.chiMes.resp   := io.chi.rxdat.bits.Resp
         /*
          * Clean PCU Entry When Its Free
          */
@@ -175,13 +169,15 @@ class SnMasterPCU(snMasId: Int, param: InterfaceParam)(implicit p: Parameters) e
   /*
    * Receive req2Node(Snoop)
    */
-  addrSaveInPCU         := io.req2Node.bits.addr
-  reqSaveInPCU.opcode   := io.req2Node.bits.opcode
-  reqSaveInPCU.mshrWay  := io.req2Node.bits.mshrWay
-  reqSaveInPCU.useEvict := io.req2Node.bits.useEvict
-  reqSaveInPCU.from     := io.req2Node.bits.from
-  reqSaveInPCU.mshrWay  := io.req2Node.bits.mshrWay
-  reqSaveInPCU.useEvict := io.req2Node.bits.useEvict
+  indexSaveInPCU.addr     := io.req2Node.bits.addr
+  indexSaveInPCU.mshrWay  := io.req2Node.bits.mshrWay
+  indexSaveInPCU.useEvict := io.req2Node.bits.useEvict
+  indexSaveInPCU.from     := io.req2Node.bits.from
+  indexSaveInPCU.mshrWay  := io.req2Node.bits.mshrWay
+  indexSaveInPCU.useEvict := io.req2Node.bits.useEvict
+  reqSaveInPCU.opcode     := io.req2Node.bits.opcode
+  reqSaveInPCU.tgtID      := io.req2Node.bits.tgtID
+  reqSaveInPCU.expCompAck := io.req2Node.bits.expCompAck
 
   /*
    * Set PCU Value
@@ -228,8 +224,8 @@ class SnMasterPCU(snMasId: Int, param: InterfaceParam)(implicit p: Parameters) e
   pcuReq2NodeID       := PriorityEncoder(pcuReq2NodeVec)
 
   io.chi.txreq.valid            := pcuReq2NodeVec.reduce(_ | _)
-  io.chi.txreq.bits.Addr        := pcus(pcuReq2NodeID).addr
-  io.chi.txreq.bits.Opcode      := pcus(pcuReq2NodeID).reqMes.opcode
+  io.chi.txreq.bits.Addr        := pcus(pcuReq2NodeID).indexMes.addr
+  io.chi.txreq.bits.Opcode      := pcus(pcuReq2NodeID).chiMes.opcode
   io.chi.txreq.bits.TgtID       := ddrcNodeId.U
   io.chi.txreq.bits.SrcID       := hnfNodeId.U
   io.chi.txreq.bits.TxnID       := pcuReq2NodeID
@@ -244,7 +240,7 @@ class SnMasterPCU(snMasId: Int, param: InterfaceParam)(implicit p: Parameters) e
 // --------------------------------- Receive Data From CHI DAT And Send It To DataBuffer -------------------------------- //
 // ---------------------------------------------------------------------------------------------------------------------- //
   io.dbSigs.dataTDB.valid       := io.chi.rxdat.valid
-  io.dbSigs.dataTDB.bits.dbid   := pcus(io.chi.rxdat.bits.TxnID(param.pcuIdBits-1, 0)).dbid.bits
+  io.dbSigs.dataTDB.bits.dbid   := pcus(io.chi.rxdat.bits.TxnID(param.pcuIdBits-1, 0)).indexMes.dbid
   io.dbSigs.dataTDB.bits.data   := io.chi.rxdat.bits.Data
   io.dbSigs.dataTDB.bits.dataID := io.chi.rxdat.bits.DataID
   io.chi.rxdat.ready            := io.dbSigs.dataTDB.ready
@@ -261,13 +257,13 @@ class SnMasterPCU(snMasId: Int, param: InterfaceParam)(implicit p: Parameters) e
   io.resp2Slice.valid             := pcuResp2SliceVec.reduce(_ | _)
   io.resp2Slice.bits              := DontCare
   io.resp2Slice.bits.isReqResp    := true.B
-  io.resp2Slice.bits.mshrSet      := pcus(pcuResp2SliceID).mSet
-  io.resp2Slice.bits.mshrWay      := pcus(pcuResp2SliceID).mshrWay
-  io.resp2Slice.bits.useEvict     := pcus(pcuResp2SliceID).useEvict
+  io.resp2Slice.bits.mshrSet      := pcus(pcuResp2SliceID).indexMes.mSet
+  io.resp2Slice.bits.mshrWay      := pcus(pcuResp2SliceID).indexMes.mshrWay
+  io.resp2Slice.bits.useEvict     := pcus(pcuResp2SliceID).indexMes.useEvict
   io.resp2Slice.bits.from.IncoId  := snMasId.U
-  io.resp2Slice.bits.hasData      := pcus(pcuResp2SliceID).dbid.valid
-  io.resp2Slice.bits.dbid         := pcus(pcuResp2SliceID).dbid.bits
-  io.resp2Slice.bits.resp         := pcus(pcuResp2SliceID).respMes.resp
+  io.resp2Slice.bits.hasData      := pcus(pcuResp2SliceID).hasData
+  io.resp2Slice.bits.dbid         := pcus(pcuResp2SliceID).indexMes.dbid
+  io.resp2Slice.bits.resp         := pcus(pcuResp2SliceID).chiMes.resp
 
 
 
@@ -276,5 +272,5 @@ class SnMasterPCU(snMasId: Int, param: InterfaceParam)(implicit p: Parameters) e
     0.U(64.W)
   }))
   cntReg.zip(pcus).foreach { case (c, p) => c := Mux(p.isFree, 0.U, c + 1.U) }
-  cntReg.zipWithIndex.foreach { case (c, i) => assert(c < TIMEOUT_SMPCU.U, "SNMAS PCU[0x%x] ADDR[0x%x] OP[0x%x] TIMEOUT", i.U, pcus(i).addr, pcus(i).reqMes.opcode) }
+  cntReg.zipWithIndex.foreach { case (c, i) => assert(c < TIMEOUT_SMPCU.U, "SNMAS PCU[0x%x] ADDR[0x%x] OP[0x%x] TIMEOUT", i.U, pcus(i).indexMes.addr, pcus(i).chiMes.opcode) }
 }

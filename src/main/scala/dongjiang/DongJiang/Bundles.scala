@@ -65,95 +65,99 @@ trait HasPipeID extends Bundle { this: Bundle => val pipeId = UInt(PipeID.width.
 
 trait HasPCUID extends DJBundle { this: Bundle => val pcuId = UInt(pcuIdBits.W) }
 
-// ---------------------------------------------------------------- Req To Slice Bundle ----------------------------------------------------------------------------- //
-// TODO: Rename it
-trait HasReqBaseMesBundle extends DJBundle { this: Bundle =>
-    // CHI Id(Use in RnSlave)
-    val srcID       = UInt(djparam.chiNodeIdBits.W)
-    val txnID       = UInt(djparam.chiNodeIdBits.W)
-    // Snp Mes(Use in RnMaster)
-    val isSnp       = Bool()
-    val doNotGoToSD = Bool()
-    val retToSrc    = Bool()
+// ---------------------------------------------------------------- CHI Base Mes Bundle ----------------------------------------------------------------------------- //
+trait HasBaseCHIMesBundle extends DJBundle with HasCHIChannel { this: Bundle =>
+    // CHI ID
+    def useTgt          : Boolean = true
+    def useSrc          : Boolean = true
+    def useTxn          : Boolean = true
+    val tgtIDOpt        = if(useTgt) Some(UInt(djparam.chiNodeIdBits.W)) else None
+    val srcIDOpt        = if(useSrc) Some(UInt(djparam.chiNodeIdBits.W)) else None
+    val txnIDOpt        = if(useTxn) Some(UInt(djparam.chiNodeIdBits.W)) else None
+    def tgtID           = tgtIDOpt.get
+    def srcID           = srcIDOpt.get
+    def txnID           = txnIDOpt.get
+    // Snp Mes(Use In Snp)
+    def useSnp          : Boolean = true
+    val doNotGoToSDOpt  = if(useSnp) Some(Bool()) else None
+    val retToSrcOpt     = if(useSnp) Some(Bool()) else None
+    def doNotGoToSD     = doNotGoToSDOpt.get
+    def retToSrc        = retToSrcOpt.get
+    // resp Mes(Use In Resp)
+    def useResp         : Boolean = true
+    val respOpt         = if(useResp) Some(UInt(ChiResp.width.W)) else None
+    val fwdStateOpt     = if(useResp) Some(UInt(ChiResp.width.W)) else None
+    def resp            = respOpt.get
+    def fwdState        = fwdStateOpt.get
+    // DBIDResp DBID(Use In Mas)
+    def useDBID         : Boolean = true
+    val chiDBIDOpt      = if(useDBID) Some(UInt(djparam.chiDBIDBits.W)) else None
+    def chiDBID         = chiDBIDOpt.get
     // CHI Mes(Common)
-    val opcode      = UInt(6.W)
-    val expCompAck  = Bool()
+    val opcode          = UInt(6.W)
+    val expCompAck      = Bool()
+
 }
 
-class ReqBaseMesBundle(implicit p: Parameters) extends DJBundle with HasReqBaseMesBundle with HasFromIncoID
+// ---------------------------------------------------------------- RNSLV CHI Mes Bundle ----------------------------------------------------------------------------- //
+class RNSLVCHIMesBundle(implicit p: Parameters) extends DJBundle with HasBaseCHIMesBundle {
+    override def useDBID: Boolean = false
+}
 
-trait HasReq2SliceBundle extends DJBundle with HasReqBaseMesBundle with HasAddr
+// ---------------------------------------------------------------- MSHR CHI Mes Bundle ----------------------------------------------------------------------------- //
+class SNMASCHIMesBundle(implicit p: Parameters) extends DJBundle with HasBaseCHIMesBundle {
+    override def useSrc : Boolean = false
+    override def useTxn : Boolean = false
+    override def useSnp : Boolean = false
+}
 
-class Req2SliceBundleWitoutXbarId(implicit p: Parameters) extends DJBundle with HasReq2SliceBundle
+// ---------------------------------------------------------------- MSHR CHI Mes Bundle ----------------------------------------------------------------------------- //
+class MSHRCHIMesBundle(implicit p: Parameters) extends DJBundle with HasBaseCHIMesBundle with HasIncoID {
+    override def useTgt : Boolean = false
+    override def useResp: Boolean = false
+    override def useDBID: Boolean = false
+}
 
-class Req2SliceBundle(implicit p: Parameters) extends DJBundle with HasReq2SliceBundle with HasIncoID with HasPCUID
+// ---------------------------------------------------------------- Req To Slice Bundle ----------------------------------------------------------------------------- //
+class Req2SliceBundle(implicit p: Parameters) extends DJBundle with HasBaseCHIMesBundle with HasPCUID with HasIncoID with HasAddr {
+    override def useTgt : Boolean = false
+    override def useResp: Boolean = false
+    override def useDBID: Boolean = false
+}
 
 // -------------------------------------------------------------- Req Ack To Node Bundle ---------------------------------------------------------------------------- //
 class ReqAck2NodeBundle(implicit p: Parameters) extends DJBundle with HasToIncoID with HasPCUID { val retry = Bool(); def receive = !retry }
 
 // ---------------------------------------------------------------- Resp To Node Bundle ----------------------------------------------------------------------------- //
-trait HasResp2NodeBundle extends DJBundle with HasCHIChannel with HasMSHRWay with HasDBID { this: Bundle =>
-    // CHI Id
-    val tgtID       = UInt(djparam.chiNodeIdBits.W)
-    val srcID       = UInt(djparam.chiNodeIdBits.W)
-    val txnID       = UInt(djparam.chiNodeIdBits.W)
-    // CHI Mes
-    val opcode      = UInt(6.W)
-    val expCompAck  = Bool()
-    // Indicate state
-    val resp        = UInt(ChiResp.width.W)
-    // Indicate Requster final state in DCT
-    val fwdState    = UInt(ChiResp.width.W)
-    // Need Read DataBuffer
-    val needReadDB  = Bool()
+class Resp2NodeBundle(implicit p: Parameters) extends DJBundle with HasBaseCHIMesBundle with HasAddr with HasIncoID with HasMSHRWay with HasDBID {
+    override def useSnp : Boolean = false
+    override def useDBID: Boolean = false
+    val needReadDB      = Bool()
 }
-
-class Resp2NodeBundleWitoutXbarId(implicit p: Parameters) extends DJBundle with HasResp2NodeBundle
-
-class Resp2NodeBundle(implicit p: Parameters) extends DJBundle with HasResp2NodeBundle with HasIncoID
 
 
 // ---------------------------------------------------------------- Req To Node Bundle ----------------------------------------------------------------------------- //
-trait HasReq2NodeBundle extends DJBundle with HasAddr with HasMSHRWay { this: Bundle =>
-    // CHI Id
-    val tgtId       = UInt(djparam.chiNodeIdBits.W)
-    val srcId       = UInt(djparam.chiNodeIdBits.W)
-    val txnId       = UInt(djparam.chiNodeIdBits.W)
-    // Snp Mes (Use in RnSlave)
-    val retToSrc    = Bool()
-    val doNotGoToSD = Bool()
-    // CHI Mes (Common)
-    val opcode      = UInt(6.W)
-    // CHI Mes (Use in RnMaster)
-    val resp        = UInt(ChiResp.width.W) // Use in write back
-    val expCompAck  = Bool()
-    // Replace (Use In SnMaster)
-    val replace     = Bool()
-    val ReadDCU     = Bool()
+class Req2NodeBundle(implicit p: Parameters) extends DJBundle with HasBaseCHIMesBundle with HasIncoID with HasAddr with HasMSHRWay {
+    override def useResp: Boolean = false
+    override def useDBID: Boolean = false
+    val replace         = Bool()
+    val ReadDCU         = Bool()
 }
-
-class Req2NodeBundleWitoutXbarId(implicit p: Parameters) extends DJBundle with HasReq2NodeBundle
-
-class Req2NodeBundle(implicit p: Parameters) extends DJBundle with HasReq2NodeBundle with HasIncoID
 
 
 // ---------------------------------------------------------------- Resp To Slice Bundle ----------------------------------------------------------------------------- //
-trait HasResp2SliceBundle extends DJBundle with HasDBID with HasMHSRIndex { this: Bundle =>
-    val isSnpResp   = Bool()
-    val isReqResp   = Bool()
-    val hasData     = Bool()
+class Resp2SliceBundle(implicit p: Parameters) extends DJBundle with HasIncoID with HasDBID with HasMHSRIndex {
+    val isSnpResp       = Bool()
+    val isReqResp       = Bool()
+    val hasData         = Bool()
     // Indicate Snoopee final state
-    val resp        = UInt(ChiResp.width.W)
+    val resp            = UInt(ChiResp.width.W)
     // Indicate Requster final state in DCT
-    val fwdState    = Valid(UInt(ChiResp.width.W))
+    val fwdState        = Valid(UInt(ChiResp.width.W))
 
-    def isResp      = isSnpResp | isReqResp
-    def isUpdate    = !isResp
+    def isResp          = isSnpResp | isReqResp
+    def isUpdate        = !isResp
 }
-
-class Resp2SliceBundleWitoutXbarId(implicit p: Parameters) extends DJBundle with HasResp2SliceBundle
-
-class Resp2SliceBundle(implicit p: Parameters) extends DJBundle with HasResp2SliceBundle with HasIncoID
 
 
 // ---------------------------------------------------------------- DataBuffer Base Bundle ----------------------------------------------------------------------------- //

@@ -3,6 +3,7 @@ package DONGJIANG.PCU
 import DONGJIANG._
 import DONGJIANG.CHI._
 import DONGJIANG.CHI.CHIOp.REQ._
+import DONGJIANG.CHI.CHIOp.RSP._
 import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config._
@@ -81,14 +82,15 @@ object PCURS {
   val WaitSliceAck    = "b0010".U
   val WaitSliceResp   = "b0011".U
   val RCDB            = "b0100".U // Read & Clean DataBuffer
-  val WaitCompAck     = "b0101".U
-  val Resp2Node       = "b0110".U
-  val GetDBID         = "b0111".U
-  val WaitDBID        = "b1000".U
-  val DBIDResp2Node   = "b1001".U
-  val WaitData        = "b1010".U
-  val Snp2Node        = "b1011".U
-  val WaitSnpResp     = "b1100".U
+  val Resp2Node       = "b0101".U
+  val WaitCompAck     = "b0110".U
+  val Resp2Slice      = "b0111".U
+  val GetDBID         = "b1000".U
+  val WaitDBID        = "b1001".U
+  val DBIDResp2Node   = "b1010".U
+  val WaitData        = "b1011".U
+  val Snp2Node        = "b1100".U
+  val WaitSnpResp     = "b1101".U
 }
 
 class PCURSEntry(param: InterfaceParam)(implicit p: Parameters) extends DJBundle  {
@@ -100,16 +102,8 @@ class PCURSEntry(param: InterfaceParam)(implicit p: Parameters) extends DJBundle
     val waitWBDone  = Bool()
     val trans2Snp   = Bool()
   }
-  val chiMes        = new DJBundle with HasCHIChannel {
-    val opcode      = UInt(6.W)
-    val txnId       = UInt(djparam.chiTxnidBits.W)
-    val tgtId       = UInt(djparam.chiNodeIdBits.W)
-    val srcId       = UInt(djparam.chiNodeIdBits.W)
-    val resp        = UInt(ChiResp.width.W)
-    val expCompAck  = Bool()
-    val snpRetToSrc    = Bool()
-    val snpDoNotGoToSD = Bool()
-  }
+  val chiMes        = new RNSLVCHIMesBundle()
+
   def isFree        = state === PCURS.Free
   def isReqBeSend   = state === PCURS.Req2Slice & !nestMes.asUInt.orR
   def isRspBeSend   = state === PCURS.Resp2Node & chiMes.isRsp
@@ -175,7 +169,13 @@ class RnSlavePCU(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) ex
           val rxDatHit  = io.chi.rxdat.fire & io.chi.rxdat.bits.DBID === i.U & toBeatNum(io.chi.rxdat.bits.DataID) === (nrBeat - 1).U
           val rxRspHit  = io.chi.rxrsp.fire & io.chi.rxrsp.bits.DBID === i.U
           val expAck    = pcu.chiMes.expCompAck
-          pcu.state := Mux(rxDatHit | rxRspHit, Mux(expAck, PCURS.WaitCompAck, PCURS.Resp2Node), pcu.state)
+          pcu.state     := Mux(rxDatHit | rxRspHit, Mux(expAck, PCURS.WaitCompAck, PCURS.Resp2Node), pcu.state)
+        }
+        // State: WaitCompAck
+        is(PCURS.WaitCompAck) {
+          val hit       = io.chi.txrsp.fire & io.chi.txrsp.bits.TxnID === i.U
+          assert(Mux(hit, io.chi.txrsp.bits.Opcode === CompAck, true.B))
+          pcu.state := Mux(hit, PCURS.Resp2Slice, pcu.state)
         }
       }
   }
@@ -225,11 +225,11 @@ class RnSlavePCU(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) ex
   indexSaveInPCU.useEvict       := Mux(respVal, io.resp2Node.bits.useEvict,   Mux(snpVal, io.req2Node.bits.useEvict,    DontCare))
   indexSaveInPCU.dbid           := Mux(respVal, io.resp2Node.bits.dbid,       Mux(snpVal, 0.U,                          0.U))
   taskSaveInPCU.opcode          := Mux(respVal, io.resp2Node.bits.opcode,     Mux(snpVal, io.req2Node.bits.opcode,      io.chi.txreq.bits.Opcode))
-  taskSaveInPCU.tgtId           := Mux(respVal, io.resp2Node.bits.tgtID,      Mux(snpVal, io.req2Node.bits.tgtId,       DontCare))
-  taskSaveInPCU.txnId           := Mux(respVal, io.resp2Node.bits.txnID,      Mux(snpVal, io.req2Node.bits.txnId,       io.chi.txreq.bits.TxnID))
-  taskSaveInPCU.srcId           := Mux(respVal, io.resp2Node.bits.srcID,      Mux(snpVal, io.req2Node.bits.srcId,       io.chi.txreq.bits.SrcID))
-  taskSaveInPCU.snpRetToSrc     := Mux(respVal, DontCare,                     Mux(snpVal, io.req2Node.bits.retToSrc,    DontCare))
-  taskSaveInPCU.snpDoNotGoToSD  := Mux(respVal, DontCare,                     Mux(snpVal, io.req2Node.bits.doNotGoToSD, DontCare))
+  taskSaveInPCU.tgtID           := Mux(respVal, io.resp2Node.bits.tgtID,      Mux(snpVal, io.req2Node.bits.tgtID,       DontCare))
+  taskSaveInPCU.txnID           := Mux(respVal, io.resp2Node.bits.txnID,      Mux(snpVal, io.req2Node.bits.txnID,       io.chi.txreq.bits.TxnID))
+  taskSaveInPCU.srcID           := Mux(respVal, io.resp2Node.bits.srcID,      Mux(snpVal, io.req2Node.bits.srcID,       io.chi.txreq.bits.SrcID))
+  taskSaveInPCU.retToSrc        := Mux(respVal, DontCare,                     Mux(snpVal, io.req2Node.bits.retToSrc,    DontCare))
+  taskSaveInPCU.doNotGoToSD     := Mux(respVal, DontCare,                     Mux(snpVal, io.req2Node.bits.doNotGoToSD, DontCare))
   taskSaveInPCU.channel         := Mux(respVal, io.resp2Node.bits.channel,    Mux(snpVal, CHIChannel.SNP,               CHIChannel.REQ))
   taskSaveInPCU.resp            := Mux(respVal, io.resp2Node.bits.resp,       Mux(snpVal, 0.U,                          0.U))
   taskSaveInPCU.expCompAck      := Mux(respVal, io.resp2Node.bits.expCompAck, Mux(snpVal, false.B,                      io.chi.txreq.bits.ExpCompAck))
@@ -257,11 +257,11 @@ class RnSlavePCU(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) ex
    * Send Req To Node
    */
   io.req2Slice.valid            := reqBeSendVec.reduce(_ | _)
+  io.req2Slice.bits.channel     := pcus(pcuSendReqID).chiMes.channel
   io.req2Slice.bits.opcode      := pcus(pcuSendReqID).chiMes.opcode
   io.req2Slice.bits.addr        := pcus(pcuSendReqID).indexMes.addr
-  io.req2Slice.bits.isSnp       := false.B
-  io.req2Slice.bits.srcID       := pcus(pcuSendReqID).chiMes.srcId
-  io.req2Slice.bits.txnID       := pcus(pcuSendReqID).chiMes.txnId
+  io.req2Slice.bits.srcID       := pcus(pcuSendReqID).chiMes.srcID
+  io.req2Slice.bits.txnID       := pcus(pcuSendReqID).chiMes.txnID
   io.req2Slice.bits.expCompAck  := pcus(pcuSendReqID).chiMes.expCompAck
   // IdMap
   io.req2Slice.bits.to.IncoId   := pcus(pcuSendReqID).indexMes.mBank
@@ -285,9 +285,9 @@ class RnSlavePCU(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) ex
   io.chi.rxdat.valid        := datBeSendVec.reduce(_ | _)
   io.chi.rxdat.bits         := DontCare
   io.chi.rxdat.bits.Opcode  := pcus(datSelId).chiMes.opcode
-  io.chi.rxdat.bits.TgtID   := pcus(datSelId).chiMes.srcId
+  io.chi.rxdat.bits.TgtID   := pcus(datSelId).chiMes.srcID
   io.chi.rxdat.bits.SrcID   := hnfNodeId.U
-  io.chi.rxdat.bits.TxnID   := pcus(datSelId).chiMes.txnId
+  io.chi.rxdat.bits.TxnID   := pcus(datSelId).chiMes.txnID
   io.chi.rxdat.bits.DBID    := datSelId
   io.chi.rxdat.bits.HomeNID := 0.U
   io.chi.rxdat.bits.Resp    := pcus(datSelId).chiMes.resp
@@ -298,10 +298,17 @@ class RnSlavePCU(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) ex
   io.dbSigs.dataFDB.ready   := io.chi.rxdat.ready
 
 
+// ---------------------------------------------------------------------------------------------------------------------- //
+// ---------------------------------------------------- Receive Rsp From Node ------------------------------------------- //
+// ---------------------------------------------------------------------------------------------------------------------- //
+  io.chi.txrsp.ready        := true.B
+
+
+
 
 
 // ---------------------------  Assertion  -------------------------------- //
   val cntReg = RegInit(VecInit(Seq.fill(param.nrPCUEntry) { 0.U(64.W) }))
   cntReg.zip(pcus).foreach { case(c, p) => c := Mux(p.isFree, 0.U, c + 1.U) }
-  cntReg.zipWithIndex.foreach { case(c, i) => assert(c < TIMEOUT_RSPCU.U, "RNSLV PCU[0x%x] ADDR[0x%x] OP[0x%x] TIMEOUT", i.U, pcus(i).indexMes.addr, pcus(i).chiMes.opcode) }
+  cntReg.zipWithIndex.foreach { case(c, i) => assert(c < TIMEOUT_RSPCU.U, "RNSLV PCU[0x%x] ADDR[0x%x] CHANNEL[%x] OP[0x%x] TIMEOUT", i.U, pcus(i).indexMes.addr, pcus(i).chiMes.channel, pcus(i).chiMes.opcode) }
 }
