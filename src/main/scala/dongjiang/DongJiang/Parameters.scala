@@ -170,6 +170,13 @@ trait HasDJParam extends HasParseZJParam {
     val dsIndexBits     = log2Ceil(nrDSEntry)
     val dsBankBits      = log2Ceil(djparam.nrDSBank)
 
+    // Base Fake DDRC Mes
+    val nrDDRCBank      = dataBits / 64
+    val nrDDRCReqQ      = 4
+    val nrDDRCRespQ     = 4
+    val nrDDRCWBuf      = 4
+    val ddrcWBufIdBits  = log2Ceil(nrDDRCWBuf)
+
 
     // Slice Queue
     val mpTaskQBits     = log2Ceil(djparam.nrMpTaskQueue)
