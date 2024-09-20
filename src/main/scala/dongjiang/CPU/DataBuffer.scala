@@ -11,7 +11,7 @@ object DBState {
   val width       = 3
   // FREE -> ALLOC -> FREE
   // FREE -> ALLOC -> READING(needClean) -> READ(needClean) -> FREE
-  // FREE -> ALLOC -> READING(!needClean) -> READ(!needClean) -> READ_DONE -> READING(needClean) -> READ(needClean) -> FREE
+  // FREE -> ALLOC -> READING(!needClean) -> READ(!needClean) -> READDONE -> READING(needClean) -> READ(needClean) -> FREE
   val FREE        = "b000".U
   val ALLOC       = "b001".U
   val READ        = "b010".U // Ready to read
@@ -27,14 +27,12 @@ class DBEntry(implicit p: Parameters) extends DJBundle with HasToIncoID {
   val beats       = Vec(nrBeat, UInt(beatBits.W))
 
   def getBeat     = beats(beatRNum)
-  def toDataID: UInt = {
-    if (nrBeat == 1) { 0.U }
-    else if (nrBeat == 2) { Mux(beatRNum === 0.U, "b00".U, "b10".U) }
-    else { beatRNum }
-  }
-
   def isFree      = state === DBState.FREE
   def isAlloc     = state === DBState.ALLOC
+  def isRead      = state === DBState.READ
+  def isReading   = state === DBState.READING
+  def isReadDone  = state === DBState.READ_DONE
+  def canRecReq   = isAlloc | isReadDone
 }
 
 
@@ -60,13 +58,13 @@ class DataBuffer()(implicit p: Parameters) extends DJModule {
 // ---------------------------------------------------------------------------------------------------------------------- //
   val dbFreeVec             = entrys.map(_.isFree)
   val wReqId                = PriorityEncoder(dbFreeVec)
-
+  // receive
   io.wReq.ready             := wRespQ.io.enq.ready & dbFreeVec.reduce(_ | _)
   wRespQ.io.enq.valid       := io.wReq.valid & dbFreeVec.reduce(_ | _)
   wRespQ.io.enq.bits.dbid   := wReqId
   wRespQ.io.enq.bits.to     := io.wReq.bits.from
   wRespQ.io.enq.bits.pcuId  := io.wReq.bits.pcuId
-
+  // output
   io.wResp                  <> wRespQ.io.deq
 
 
@@ -80,11 +78,29 @@ class DataBuffer()(implicit p: Parameters) extends DJModule {
 // ---------------------------------------------------------------------------------------------------------------------- //
 // ---------------------------------------------------- RC REQ TO DB ---------------------------------------------------- //
 // ---------------------------------------------------------------------------------------------------------------------- //
-  when(io.dbRCReqOpt.get.valid) {
+  when(io.dbRCReqOpt.get.fire) {
     entrys(io.dbRCReqOpt.get.bits.dbid).needClean := io.dbRCReqOpt.get.bits.isClean
     entrys(io.dbRCReqOpt.get.bits.dbid).to        := io.dbRCReqOpt.get.bits.to
   }
-  io.dbRCReqOpt.get.ready := true.B
+  io.dbRCReqOpt.get.ready := entrys(io.dbRCReqOpt.get.bits.dbid).canRecReq
+
+// ---------------------------------------------------------------------------------------------------------------------- //
+// ---------------------------------------------------- DATA TO NODE ---------------------------------------------------- //
+// ---------------------------------------------------------------------------------------------------------------------- //
+  val readVec     = entrys.map(_.isRead)
+  val readingVec  = entrys.map(_.isReading)
+  val hasReading  = readingVec.reduce(_ | _)
+  val readId      = RREncoder(readVec)
+  val readingId   = PriorityEncoder(readingVec)
+  val selReadId   = Mux(hasReading, readingId, readId)
+  assert(PopCount(readingVec) <= 1.U)
+
+  io.dataFDB.valid            := readVec.reduce(_ | _) | readingVec.reduce(_ | _)
+  io.dataFDB.bits.data        := entrys(selReadId).getBeat
+  io.dataFDB.bits.dataID      := toDataID(entrys(selReadId).beatRNum)
+  io.dataFDB.bits.dbid        := selReadId
+  io.dataFDB.bits.to          := entrys(selReadId).to
+  entrys(selReadId).beatRNum  := entrys(selReadId).beatRNum + io.dataFDB.fire.asUInt
 
 
 // ---------------------------------------------------------------------------------------------------------------------- //
@@ -101,8 +117,31 @@ class DataBuffer()(implicit p: Parameters) extends DJModule {
         // ALLOC
         is(DBState.ALLOC) {
           val hit   = io.dbRCReqOpt.get.fire & io.dbRCReqOpt.get.bits.dbid === i.U
-          val read  = io.dbRCReqOpt.get.bits.isRead
-          val clean = io.dbRCReqOpt.get.bits.isClean
+          val read  = io.dbRCReqOpt.get.bits.isRead & hit
+          val clean = io.dbRCReqOpt.get.bits.isClean & hit
+          s := Mux(read, DBState.READ, Mux(clean, DBState.FREE, s))
+        }
+        // READ
+        is(DBState.READ) {
+          val hit = io.dataFDB.fire & !hasReading & io.dataFDB.bits.dbid === i.U
+          if(nrBeat > 1) {
+            s := Mux(hit, DBState.READING, s)
+          } else {
+            s := Mux(hit, DBState.READ_DONE, s)
+          }
+        }
+        // READING
+        is(DBState.READING) {
+          val hit     = io.dataFDB.fire & io.dataFDB.bits.dbid === i.U
+          val isLast  = entrys(i).beatRNum === (nrBeat - 1).U
+          val clean   = entrys(i).needClean
+          s := Mux(hit & isLast, Mux(clean, DBState.FREE, DBState.READ_DONE), s)
+        }
+        // READ_DONE
+        is(DBState.READ_DONE) {
+          val hit   = io.dbRCReqOpt.get.fire & io.dbRCReqOpt.get.bits.dbid === i.U
+          val read  = io.dbRCReqOpt.get.bits.isRead & hit
+          val clean = io.dbRCReqOpt.get.bits.isClean & hit
           s := Mux(read, DBState.READ, Mux(clean, DBState.FREE, s))
         }
       }
