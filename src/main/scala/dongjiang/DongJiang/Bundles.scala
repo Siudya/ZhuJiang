@@ -77,6 +77,7 @@ trait HasReqBaseMesBundle extends DJBundle { this: Bundle =>
     val retToSrc    = Bool()
     // CHI Mes(Common)
     val opcode      = UInt(6.W)
+    val expCompAck  = Bool()
 }
 
 class ReqBaseMesBundle(implicit p: Parameters) extends DJBundle with HasReqBaseMesBundle with HasFromIncoID
@@ -98,7 +99,8 @@ trait HasResp2NodeBundle extends DJBundle with HasCHIChannel with HasMSHRWay wit
     val txnID       = UInt(djparam.chiNodeIdBits.W)
     // CHI Mes
     val opcode      = UInt(6.W)
-    // Indicate Snoopee final state
+    val expCompAck  = Bool()
+    // Indicate state
     val resp        = UInt(ChiResp.width.W)
     // Indicate Requster final state in DCT
     val fwdState    = UInt(ChiResp.width.W)
@@ -175,7 +177,7 @@ trait HasDBData extends DJBundle { this: Bundle =>
 class DBRCReq(implicit p: Parameters)       extends DJBundle with HasDBRCOp with HasDBID with HasToIncoID
 class DBWReq(implicit p: Parameters)        extends DJBundle                             with HasFromIncoID with HasPCUID
 class DBWResp(implicit p: Parameters)       extends DJBundle                with HasDBID with HasToIncoID   with HasPCUID
-class NodeFDBData(implicit p: Parameters)   extends DJBundle with HasDBData              with HasToIncoID
+class NodeFDBData(implicit p: Parameters)   extends DJBundle with HasDBData with HasDBID with HasToIncoID
 class NodeTDBData(implicit p: Parameters)   extends DJBundle with HasDBData with HasDBID
 
 class DBBundle(hasDBRCReq: Boolean = false)(implicit p: Parameters) extends DJBundle {
