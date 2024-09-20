@@ -31,6 +31,7 @@ object RespType {
 
 class InstBundle(implicit p: Parameters) extends DJBundle {
   val chipType    = UInt(ChipType.width.W)
+  val channel     = UInt(CHIChannel.width.W)
   val opcode      = UInt(6.W)
   val srcState    = UInt(ChiState.width.W)
   val othState    = UInt(ChiState.width.W)

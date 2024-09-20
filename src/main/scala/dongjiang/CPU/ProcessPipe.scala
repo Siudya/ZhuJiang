@@ -149,6 +149,7 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
   taskChipType      := getChipTypeByAddr(task_s3_g.bits.addr)
   inst_s3           := DontCare
   inst_s3.chipType  := taskChipType
+  inst_s3.channel   := task_s3_g.bits.reqMes.channel
   inst_s3.opcode    := task_s3_g.bits.reqMes.opcode
   inst_s3.srcState  := Mux(task_s3_g.bits.readDir, srcState, ChiState.I)
   inst_s3.othState  := Mux(task_s3_g.bits.readDir, othState, ChiState.I)

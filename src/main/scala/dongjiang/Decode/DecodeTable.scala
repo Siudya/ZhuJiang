@@ -64,9 +64,9 @@ import chisel3.util._
 object LocalReadDecode {
   def readNotSharedDirty: Seq[(UInt, UInt)] = Seq(
     // LOCAL REQ
-    Cat(Local, ReadNotSharedDirty, I, I, I, NOTRESP) -> (ReadDown | RDOp(ReadNoSnp)),
+    Cat(Local, REQ, ReadNotSharedDirty, I, I, I, NOTRESP) -> (ReadDown | RDOp(ReadNoSnp)),
     // LOCAL RESP
-    Cat(Local, ReadNotSharedDirty, I, I, I, RD, RespHasData, ChiResp.I, ChiResp.I, ChiResp.UC) -> (Commit | RDB2Src | wSFDir | RespOp(CompData) | RespChnl(DAT) | Resp(UC) | SrcState(UC) | OthState(I))
+    Cat(Local, REQ, ReadNotSharedDirty, I, I, I, RD, RespHasData, ChiResp.I, ChiResp.I, ChiResp.UC) -> (Commit | RDB2Src | wSFDir | RespOp(CompData) | RespChnl(DAT) | Resp(UC) | SrcState(UC) | OthState(I))
   )
 
   def table: Seq[(UInt, UInt)] = readNotSharedDirty
