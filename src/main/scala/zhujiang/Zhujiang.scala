@@ -13,6 +13,7 @@ import org.chipsalliance.cde.config.Parameters
 import xijiang.{NodeType, Ring}
 import DONGJIANG._
 import DONGJIANG.DCU._
+import DONGJIANG.DDRC._
 import chisel3.util.{Decoupled, DecoupledIO}
 import xijiang.c2c.C2cLinkPort
 import zhujiang.chi.{DataFlit, ReqFlit, RespFlit}
@@ -52,7 +53,6 @@ class Zhujiang(implicit p: Parameters) extends ZJModule {
   private val localRing = Module(new Ring(true))
 //  private val csnRing = Module(new Ring(false))
 
-  localRing.icnSns.get.foreach(_ <> DontCare)
   localRing.icnHis.get.foreach(_ <> DontCare)
   localRing.ioChip.get := 0.U
 
@@ -85,12 +85,15 @@ class Zhujiang(implicit p: Parameters) extends ZJModule {
    * dongjiang
    */
   val ddrcNode  = zjparam.localRing.filter(_.mainMemory).last
+  val dcuNodes  = zjparam.localRing.filter(_.nodeType == NodeType.S).filter(!_.mainMemory)
   require(zjparam.localRing.count(_.mainMemory) == 1)
 
   val dongjiang = Module(new DongJiang())
-  val ddrc      = Module(new DCU(ddrcNode))
+  val ddrc      = Module(new FakeDDRC(ddrcNode))
+  val dcus      = Seq.fill(dcuNodes.length) { Module(new DCU(dcuNodes.head)) }
 
   dongjiang.io.toLocal  <> localRing.icnHfs.get.last
   ddrc.io.sn            <> localRing.icnSns.get.last
+  dcus.zip(localRing.icnSns.get.init).foreach { case(a, b) => a.io.sn <> b }
 
 }
