@@ -82,8 +82,8 @@ class DecodeBundle(chiRespWidth: Int = 3, chiStateWidth: Int = 3) extends Bundle
 
   // Send Snoop to Slave Node
   val snpOp       = UInt(5.W)
-//  val retToSrc    = Bool()
-//  val doNotGoToSD = Bool()
+  val retToSrc    = Bool()
+//  val doNotGoToSD = Bool() // The default is true
 
   // Send Read or Write to Master Node
   val rdOp        = UInt(6.W)
@@ -123,8 +123,9 @@ object Code {
   def Resp    (x: UInt): UInt = { val temp = WireInit(0.U.asTypeOf(new DecodeBundle())); temp.resp := x;            temp.asUInt }
   def FwdState(x: UInt): UInt = { val temp = WireInit(0.U.asTypeOf(new DecodeBundle())); temp.fwdState := x;        temp.asUInt }
   def SnpOp   (x: UInt): UInt = { val temp = WireInit(0.U.asTypeOf(new DecodeBundle())); temp.snpOp := x;           temp.asUInt }
+  def retToSrc         : UInt = { val temp = WireInit(0.U.asTypeOf(new DecodeBundle())); temp.retToSrc := true.B;   temp.asUInt }
   def RDOp    (x: UInt): UInt = { val temp = WireInit(0.U.asTypeOf(new DecodeBundle())); temp.rdOp := x;            temp.asUInt }
-  def ReplOp  (x: UInt): UInt = { val temp = WireInit(0.U.asTypeOf(new DecodeBundle())); temp.wdOp := x;            temp.asUInt }
+  def WDOp    (x: UInt): UInt = { val temp = WireInit(0.U.asTypeOf(new DecodeBundle())); temp.wdOp := x;            temp.asUInt }
   def HnState (x: UInt): UInt = { val temp = WireInit(0.U.asTypeOf(new DecodeBundle())); temp.hnState := x;         temp.asUInt }
   def SrcState(x: UInt): UInt = { val temp = WireInit(0.U.asTypeOf(new DecodeBundle())); temp.srcState := x;        temp.asUInt }
   def OthState(x: UInt): UInt = { val temp = WireInit(0.U.asTypeOf(new DecodeBundle())); temp.othState := x;        temp.asUInt }

@@ -16,6 +16,7 @@ import chisel3._
 import chisel3.util._
 
 /*
+ * TODO: Update It
  * {Read / Dataless / Atomic / CMO} Request Processing Flow 0 (longest path):
  *                                                                  GetChiTxReq -> RecordInReqBuf -> IssueReq -> [Retry] -> [IssueReq] -> AllocMSHR -> ReadDir -> WaitDirResp -> Decode0 -> MpUpdateMSHR -> Process([Snoop] / [ReadDown] / [ReqRetry])
  *                                                                  |-------------------------- RnSlave -----------------------------|    |-- S0 --|  |-- S1 --|  |--- S2 ---|  |------------------------------- S3 ---------------------------------|
@@ -63,10 +64,44 @@ import chisel3.util._
 
 object LocalReadDecode {
   def readNotSharedDirty: Seq[(UInt, UInt)] = Seq(
-    // LOCAL REQ
-    Cat(Local, REQ, ReadNotSharedDirty, I, I, I, NOTRESP) -> (ReadDown | RDOp(ReadNoSnp)),
-    // LOCAL RESP
-    Cat(Local, REQ, ReadNotSharedDirty, I, I, I, RD, RespHasData, ChiResp.I, ChiResp.I, ChiResp.UC) -> (Commit | RDB2Src | wSFDir | RespOp(CompData) | RespChnl(DAT) | Resp(UC) | SrcState(UC) | OthState(I))
+    // ----------------------------------------------------------- LOCAL REQ ----------------------------------------------//
+    Cat(Local, REQ, ReadNotSharedDirty,  I,  I,  I, NOTRESP) -> (ReadDown | RDOp(ReadNoSnp)),
+    Cat(Local, REQ, ReadNotSharedDirty,  I, UC,  I, NOTRESP) -> (Snoop    | SnpOp(SnpNotSharedDirty) | retToSrc),
+    Cat(Local, REQ, ReadNotSharedDirty,  I, UD,  I, NOTRESP) -> (Snoop    | SnpOp(SnpNotSharedDirty) | retToSrc),
+    Cat(Local, REQ, ReadNotSharedDirty,  I, SC,  I, NOTRESP) -> (Snoop    | SnpOp(SnpNotSharedDirty) | retToSrc),
+    Cat(Local, REQ, ReadNotSharedDirty,  I,  I, UC, NOTRESP) -> (ReadDCU  | RDOp(ReadNoSnp)),
+    Cat(Local, REQ, ReadNotSharedDirty,  I,  I, UD, NOTRESP) -> (ReadDCU  | RDOp(ReadNoSnp)),
+    Cat(Local, REQ, ReadNotSharedDirty,  I,  I, SC, NOTRESP) -> (ReadDCU  | RDOp(ReadNoSnp)),
+    Cat(Local, REQ, ReadNotSharedDirty,  I, SC, SC, NOTRESP) -> (ReadDCU  | RDOp(ReadNoSnp)),
+    Cat(Local, REQ, ReadNotSharedDirty,  I,  I, SD, NOTRESP) -> (ReadDCU  | RDOp(ReadNoSnp)),
+    Cat(Local, REQ, ReadNotSharedDirty,  I, SC, SD, NOTRESP) -> (ReadDCU  | RDOp(ReadNoSnp)),
+    // ----------------------------------------------------------- LOCAL RESP ----------------------------------------------//
+    // TODO: Consider a variation of the SC/SD mapping as UC/SD In Local
+    //  I  I  I
+    Cat(Local, REQ, ReadNotSharedDirty,  I,  I,  I, RD,  RespHasData, ChiResp.I,     ChiResp.I, ChiResp.UC) -> (Commit | RDB2Src | wSFDir |         RespOp(CompData) | RespChnl(DAT) | Resp(ChiResp.UC)    | HnState(I)  | SrcState(UC) | OthState(I)),
+    //  I UC  I
+    Cat(Local, REQ, ReadNotSharedDirty,  I, UC,  I, Snp, RespHasData, ChiResp.I,     ChiResp.I, ChiResp.I)  -> (Commit | RDB2Src | wSFDir |         RespOp(CompData) | RespChnl(DAT) | Resp(ChiResp.UC)    | HnState(I)  | SrcState(UC) | OthState(I)),
+    Cat(Local, REQ, ReadNotSharedDirty,  I, UC,  I, Snp, RespHasData, ChiResp.I_PD,  ChiResp.I, ChiResp.I)  -> (Commit | RDB2Src | wSFDir |         RespOp(CompData) | RespChnl(DAT) | Resp(ChiResp.UD_PD) | HnState(I)  | SrcState(UD) | OthState(I)),
+    Cat(Local, REQ, ReadNotSharedDirty,  I, UC,  I, Snp, RespHasData, ChiResp.SC,    ChiResp.I, ChiResp.I)  -> (Commit | RDB2Src | wSFDir |         RespOp(CompData) | RespChnl(DAT) | Resp(ChiResp.SC)    | HnState(I)  | SrcState(SC) | OthState(SC)),
+    Cat(Local, REQ, ReadNotSharedDirty,  I, UC,  I, Snp, RespHasData, ChiResp.SC_PD, ChiResp.I, ChiResp.I)  -> (Commit | RDB2Src | wSFDir | WSDir | RespOp(CompData) | RespChnl(DAT) | Resp(ChiResp.SC)    | HnState(SD) | SrcState(SC) | OthState(SC) | WriteDCU | WDOp(WriteNoSnpFull)),
+    //  I UD  I
+    Cat(Local, REQ, ReadNotSharedDirty,  I, UD,  I, Snp, RespHasData, ChiResp.I_PD,  ChiResp.I, ChiResp.I)  -> (Commit | RDB2Src | wSFDir |         RespOp(CompData) | RespChnl(DAT) | Resp(ChiResp.UD_PD) | HnState(I)  | SrcState(UD) | OthState(I)),
+    Cat(Local, REQ, ReadNotSharedDirty,  I, UD,  I, Snp, RespHasData, ChiResp.SC_PD, ChiResp.I, ChiResp.I)  -> (Commit | RDB2Src | wSFDir | WSDir | RespOp(CompData) | RespChnl(DAT) | Resp(ChiResp.SC)    | HnState(SD) | SrcState(SC) | OthState(SC) | WriteDCU | WDOp(WriteNoSnpFull)),
+    //  I SC  I
+    Cat(Local, REQ, ReadNotSharedDirty,  I, SC,  I, Snp, RespHasData, ChiResp.I,     ChiResp.I, ChiResp.I)  -> (Commit | RDB2Src | wSFDir |         RespOp(CompData) | RespChnl(DAT) | Resp(ChiResp.SC)    | HnState(I)  | SrcState(SC) | OthState(I)),
+    Cat(Local, REQ, ReadNotSharedDirty,  I, SC,  I, Snp, RespHasData, ChiResp.SC,    ChiResp.I, ChiResp.I)  -> (Commit | RDB2Src | wSFDir |         RespOp(CompData) | RespChnl(DAT) | Resp(ChiResp.SC)    | HnState(I)  | SrcState(SC) | OthState(SC)),
+    //  I  I UC
+    Cat(Local, REQ, ReadNotSharedDirty,  I,  I, UC, RD,  RespHasData, ChiResp.I,     ChiResp.I, ChiResp.UC) -> (Commit | RDB2Src | wSFDir | WSDir | RespOp(CompData) | RespChnl(DAT) | Resp(ChiResp.UC)    | HnState(I)  | SrcState(UC) | OthState(I)),
+    //  I  I UD
+    Cat(Local, REQ, ReadNotSharedDirty,  I,  I, UD, RD,  RespHasData, ChiResp.I,     ChiResp.I, ChiResp.UD) -> (Commit | RDB2Src | wSFDir | WSDir | RespOp(CompData) | RespChnl(DAT) | Resp(ChiResp.UD_PD) | HnState(I)  | SrcState(UD) | OthState(I)),
+    //  I  I SC
+    Cat(Local, REQ, ReadNotSharedDirty,  I,  I, SC, RD,  RespHasData, ChiResp.I,     ChiResp.I, ChiResp.SC) -> (Commit | RDB2Src | wSFDir |         RespOp(CompData) | RespChnl(DAT) | Resp(ChiResp.SC)    | HnState(SC) | SrcState(SC) | OthState(I)),
+    //  I SC SC
+    Cat(Local, REQ, ReadNotSharedDirty,  I, SC, SC, RD,  RespHasData, ChiResp.I,     ChiResp.I, ChiResp.SC) -> (Commit | RDB2Src | wSFDir |         RespOp(CompData) | RespChnl(DAT) | Resp(ChiResp.SC)    | HnState(SC) | SrcState(SC) | OthState(SC)),
+    //  I  I SD
+    Cat(Local, REQ, ReadNotSharedDirty,  I,  I, SD, RD,  RespHasData, ChiResp.I,     ChiResp.I, ChiResp.SC) -> (Commit | RDB2Src | wSFDir |         RespOp(CompData) | RespChnl(DAT) | Resp(ChiResp.SC)    | HnState(SD) | SrcState(SC) | OthState(I)),
+    //  I SC SD
+    Cat(Local, REQ, ReadNotSharedDirty,  I,  I, SD, RD,  RespHasData, ChiResp.I,     ChiResp.I, ChiResp.SC) -> (Commit | RDB2Src | wSFDir |         RespOp(CompData) | RespChnl(DAT) | Resp(ChiResp.SC)    | HnState(SD) | SrcState(SC) | OthState(SC)),
   )
 
   def table: Seq[(UInt, UInt)] = readNotSharedDirty
