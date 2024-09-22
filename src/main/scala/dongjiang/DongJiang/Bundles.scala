@@ -75,6 +75,7 @@ trait HasBaseCHIMesBundle extends DJBundle with HasCHIChannel { this: Bundle =>
     val srcIDOpt        = if(useSrc) Some(UInt(djparam.chiNodeIdBits.W)) else None
     val txnIDOpt        = if(useTxn) Some(UInt(djparam.chiNodeIdBits.W)) else None
     def tgtID           = tgtIDOpt.get
+    def snpMetaVec      = tgtID(nrRnfNode - 1 ,0)
     def srcID           = srcIDOpt.get
     def txnID           = txnIDOpt.get
     // Snp Mes(Use In Snp)
