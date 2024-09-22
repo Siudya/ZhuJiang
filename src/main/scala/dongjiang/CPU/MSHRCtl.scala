@@ -33,6 +33,8 @@ class MSHREntry(useAddr: Boolean = false)(implicit p: Parameters) extends DJBund
   // resp mes
   val waitIntfVec     = Vec(nrIntf, Bool()) // Wait Snoop Resp or Req Resp
   val respMes         = new RespMesBundle()
+  // evict mes
+  val isEvictTask     = Bool()
 
   def isValid         = state =/= MSHRState.Free
   def isFree          = state === MSHRState.Free
@@ -310,7 +312,7 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
             is(MSHRState.Free) {
               val nodeHit = io.req2Slice.valid & canReceiveNode & i.U === io.req2Slice.bits.mSet & j.U === nodeReqInvWay
               val pipeHit = io.udpMSHR.valid & io.udpMSHR.bits.isReq & mshrCanReceivePipe & io.udpMSHR.bits.mSet === i.U & pipeReqInvWay === j.U
-              m.state     := Mux(nodeHit | pipeHit, MSHRState.BeSend, MSHRState.Free)
+              m.state     := Mux(nodeHit, MSHRState.BeSend, Mux(pipeHit, MSHRState.WaitResp, MSHRState.Free))
             }
             // BeSend
             is(MSHRState.BeSend) {
@@ -321,13 +323,18 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
             // AlreadySend
             is(MSHRState.AlreadySend) {
               val hit     = io.udpMSHR.valid & io.udpMSHR.bits.mSet === i.U & io.udpMSHR.bits.mshrWay === j.U
-              val isClean = !io.udpMSHR.bits.waitIntfVec.reduce(_ | _)
-              m.state     := Mux(hit, Mux(isClean, MSHRState.Free, MSHRState.WaitResp), MSHRState.AlreadySend)
+              val retry   = io.udpMSHR.bits.isRetry
+              val update  = io.udpMSHR.bits.isUpdate & io.udpMSHR.bits.waitIntfVec.reduce(_ | _)
+              val clean   = io.udpMSHR.bits.isUpdate & !io.udpMSHR.bits.waitIntfVec.reduce(_ | _)
+              m.state     := Mux(hit & retry, MSHRState.BeSend,
+                                Mux(hit & update, MSHRState.WaitResp,
+                                  Mux(hit & clean, MSHRState.Free, MSHRState.AlreadySend)))
             }
             // WaitResp
             is(MSHRState.WaitResp) {
               val hit     = !m.waitIntfVec.reduce(_ | _)
-              m.state     := Mux(hit, Mux(m.isResp, MSHRState.BeSend, MSHRState.Free), MSHRState.WaitResp)
+              val isEvict = m.isEvictTask
+              m.state     := Mux(hit, Mux(isEvict, MSHRState.Free, MSHRState.BeSend), MSHRState.WaitResp)
             }
           }
       }
