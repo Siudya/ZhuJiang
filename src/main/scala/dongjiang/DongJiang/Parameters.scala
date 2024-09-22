@@ -43,7 +43,7 @@ case class DJParam(
                     localSnMasterIntf:  InterfaceParam =              InterfaceParam( name = "SnMaster_LOCAL", isRn = false,  isSlave = false, chipId = Some(0)),
                     csnRnSlaveIntf:     Option[InterfaceParam] = None, // Some(InterfaceParam( name = "RnSalve_CSN",    isRn = true,   isSlave = true)),
                     csnRnMasterIntf:    Option[InterfaceParam] = None, // Some(InterfaceParam( name = "RnMaster_CSN",   isRn = true,   isSlave = false, chipId = Some(1) )),
-                    chiNodeIdBits: Int = 12,
+                    chiNodeIdBits: Int = 8,
                     chiTxnidBits: Int = 12,
                     chiDBIDBits: Int = 16,
                     // ------------------------ DCU Base Mes ------------------ //
@@ -78,6 +78,7 @@ case class DJParam(
                     dirMulticycle: Int = 2,
                     dirHoldMcp: Boolean = true,
                   ) {
+    require(chiNodeIdBits >= 7 && chiNodeIdBits <= 11)
     require(2 <= nrEvictWays & nrEvictWays <= nrMSHRWays)
     require(nrMpTaskQueue > 0)
     require(nrMpReqQueue > 0)
@@ -120,7 +121,7 @@ trait HasParseZJParam extends HasZJParams {
 
     def fromSnNode(x: UInt) = snNodeIdSeq.map(_.asUInt === x).reduce(_ | _)
 
-    def getMetaIdBySrcID(x: UInt): UInt = {
+    def getMetaIdByNodeID(x: UInt): UInt = {
         val metaId = WireInit((nrRnfNode + 1).U((rnfNodeIdBits + 1).W))
         rnNodeIdSeq.zipWithIndex.foreach {
             case (id, i) =>
@@ -130,6 +131,18 @@ trait HasParseZJParam extends HasZJParams {
         }
         assert(metaId =/= (nrRnfNode + 1).U)
         metaId(rnfNodeIdBits - 1, 0)
+    }
+
+    def getNodeIDByMetaId(x: UInt) = {
+        val nodeID = WireInit(0xfff.U)
+        rnNodeIdSeq.zipWithIndex.foreach {
+            case (id, i) =>
+                when(x === i.U) {
+                    nodeID := id.U
+                }
+        }
+        assert(nodeID =/= 0xfff.U)
+        nodeID(10, 0)
     }
 }
 
@@ -191,14 +204,14 @@ trait HasDJParam extends HasParseZJParam {
     val dirBankBits     = log2Ceil(djparam.nrDirBank)
     val offsetBits      = log2Ceil(djparam.blockBytes)
 
-    // SELF DIR Parameters: [sTag] + [sSet] + [sDirBank] + [bank] + [offset]
-    // [sSet] + [sDirBank] = [setBis]
+    // SELF DIR Parameters: [sTag] + [sSet] + [dirBank] + [bank] + [offset]
+    // [sSet] + [dirBank] = [setBis]
     val sWayBits        = log2Ceil(djparam.selfWays)
     val sSetBits        = log2Ceil(djparam.selfSets/djparam.nrDirBank)
     val sTagBits        = djparam.addressBits - sSetBits - dirBankBits - bankBits - offsetBits
 
-    // SF DIR Parameters: [cTag] + [cSet] + [cDirBank] + [bank] + [offset]
-    // [sfSet] + [sfDirBank] = [sfSetsBits]
+    // SF DIR Parameters: [sfTag] + [sfSet] + [dirBank] + [bank] + [offset]
+    // [sfSet] + [dirBank] = [sfSetsBits]
     val sfWayBits       = log2Ceil(djparam.sfDirWays)
 
     val sfSetBits       = log2Ceil(djparam.sfDirSets / djparam.nrDirBank)
