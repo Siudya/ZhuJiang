@@ -49,6 +49,8 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
   val task_s3_g           = RegInit(0.U.asTypeOf(Valid(new PipeTaskBundle())))
   val dirRes_s3           = WireInit(0.U.asTypeOf(Valid(new DirRespBundle())))
   val taskChipType        = Wire(UInt(ChipType.width.W))
+  val srcMetaId           = Wire(UInt(rnfNodeIdBits.W))
+  val othHitVec           = Wire(Vec(nrRnfNode, Bool()))
   // s3 decode signals
   val inst_s3             = Wire(new InstBundle());  dontTouch(inst_s3)
   val decode_s3           = Wire(new DecodeBundle());  dontTouch(decode_s3)
@@ -68,10 +70,10 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
   val evictSF_s3          = Wire(Bool()) // replace snoop filter
   // s3 execute signals: Update mshr or do some req
   val retry_s3            = Wire(Bool())
-  val retry2MSHR_s3_g     = RegInit(false.B)
-  val upd2MSHR_s3_g       = RegInit(false.B)
-  val rep2MSHRl_s3_g      = RegInit(false.B)
-  val evict2MSHR_s3_g     = RegInit(false.B)
+  val doneRetry2MSHR_s3_g = RegInit(false.B)
+  val doneUpd2MSHR_s3_g   = RegInit(false.B)
+  val doneRepl2MSHR_s3_g  = RegInit(false.B)
+  val doneEvict2MSHR_s3_g = RegInit(false.B)
   val mshrLetRetry_s3     = Wire(Bool())
   // s3 execute signals: Execute specific tasks
   val done_s3_g           = RegInit(0.U.asTypeOf(new OperationsBundle()))
@@ -132,9 +134,9 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
   /*
    * Parse Dir Result
    */
-  val metaId    = getMetaIdBySrcID(task_s3_g.bits.reqMes.srcID)
-  val srcHit    = dirRes_s3.bits.sf.hit & !dirRes_s3.bits.sf.metaVec(metaId).isInvalid
-  val srcState  = Mux(srcHit, dirRes_s3.bits.sf.metaVec(metaId).state, ChiState.I)
+  srcMetaId     := getMetaIdByNodeID(task_s3_g.bits.reqMes.srcID)
+  val srcHit    = dirRes_s3.bits.sf.hit & !dirRes_s3.bits.sf.metaVec(srcMetaId).isInvalid
+  val srcState  = Mux(srcHit, dirRes_s3.bits.sf.metaVec(srcMetaId).state, ChiState.I)
 
   val othHit    = dirRes_s3.bits.sf.hit & (PopCount(dirRes_s3.bits.sf.metaVec.map(!_.isInvalid)) > srcHit.asUInt)
   val sfHitId   = PriorityEncoder(dirRes_s3.bits.sf.metaVec.map(!_.isInvalid))
@@ -177,7 +179,20 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
    * Send Snoop to RN-F
    */
   // taskSnp_s3
-  assert(Mux(valid_s3, !decode_s3.snoop, true.B), "TODO")
+  val sfHitVec          = dirRes_s3.bits.sf.metaVec.map(!_.isInvalid)
+  othHitVec.zipWithIndex.foreach { case(hit, i) => hit := dirRes_s3.bits.sf.hit & sfHitVec(i) & srcMetaId =/= i.U }
+
+  taskSnp_s3            := DontCare
+  taskSnp_s3.channel    := CHIChannel.SNP
+  taskSnp_s3.addr       := task_s3_g.bits.addr
+  taskSnp_s3.mshrWay    := task_s3_g.bits.mshrWay
+  taskSnp_s3.useEvict   := task_s3_g.bits.useEvict
+  taskSnp_s3.tgtID      := othHitVec.asUInt; require(taskSnp_s3.tgtID.getWidth >= othHitVec.getWidth)
+  taskSnp_s3.srcID      := DontCare
+  taskSnp_s3.txnID      := DontCare
+  taskSnp_s3.opcode     := decode_s3.snpOp
+  taskSnp_s3.retToSrc   := decode_s3.retToSrc
+  taskSnp_s3.doNotGoToSD := true.B
 
   /*
    * Send Read to SN(DDRC) / HN-F(CSN)
@@ -240,9 +255,9 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
   wSFDir_s3.replMes         := dirRes_s3.bits.sf.replMes
   wSFDir_s3.metaVec.zip(dirRes_s3.bits.sf.metaVec).zipWithIndex.foreach {
     case((a, b), i) =>
-      when(!b.isInvalid & i.U =/= metaId) { a.state := decode_s3.othState }
-      .elsewhen(i.U === metaId)           { a.state := decode_s3.srcState }
-      .otherwise                          { a.state := ChiState.I }
+      when(!b.isInvalid & i.U =/= srcMetaId) { a.state := decode_s3.othState }
+      .elsewhen(i.U === srcMetaId)           { a.state := decode_s3.srcState }
+      .otherwise                             { a.state := ChiState.I }
   }
 
   /*
@@ -277,15 +292,18 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
   retry_s3    := todo_s3.wSDir & dirRes_s3.bits.s.replRetry | todo_s3.wSFDir & dirRes_s3.bits.sf.replRetry
   replace_s3  := todo_s3.wSDir & !hnHit & !dirRes_s3.bits.s.metaVec(0).isInvalid
   evictSF_s3  := todo_s3.wSFDir & !srcHit & !othHit & dirRes_s3.bits.s.metaVec.map(!_.isInvalid).reduce(_ | _)
+  assert(Mux(valid_s3, !replace_s3, true.B), "TODO")
+  assert(Mux(valid_s3, !evictSF_s3, true.B), "TODO")
+
 
   /*
    * Update MSHR Mes or let task retry
    */
   val needUpdMSHR             = todo_s3.reqToMas | todo_s3.reqToSlv | replace_s3 | evictSF_s3
-  val doRetry                 = retry_s3 & !retry2MSHR_s3_g
-  val doUpdate                = needUpdMSHR & !upd2MSHR_s3_g
-  val doRepl                  = replace_s3 & !rep2MSHRl_s3_g
-  val doEvict                 = evictSF_s3 & !evict2MSHR_s3_g
+  val doRetry                 = retry_s3 & !doneRetry2MSHR_s3_g
+  val doUpdate                = needUpdMSHR & !doneUpd2MSHR_s3_g
+  val doRepl                  = replace_s3 & !doneRepl2MSHR_s3_g
+  val doEvict                 = evictSF_s3 & !doneEvict2MSHR_s3_g
   val mshrTaskVec             = Seq(doRetry, doUpdate, doRepl, doEvict)
   //                                          Retry                                   Update                                Replace                 EvictSF
   io.udpMSHR.bits.updType     := Mux(doRetry, UpdMSHRType.RETRY,        Mux(doUpdate, UpdMSHRType.UPD,          Mux(doRepl, UpdMSHRType.REPL,       UpdMSHRType.EVICT)))
@@ -305,11 +323,11 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
   /*
    * Receive mshrResp
    */
-  retry2MSHR_s3_g             := Mux(retry2MSHR_s3_g, !canGo_s3, io.udpMSHR.fire & io.udpMSHR.bits.isRetry)
-  upd2MSHR_s3_g               := Mux(upd2MSHR_s3_g,   !canGo_s3, (io.mshrResp.valid & io.mshrResp.bits.isUpdate) |
+  doneRetry2MSHR_s3_g         := Mux(doneRetry2MSHR_s3_g, !canGo_s3, io.udpMSHR.fire & io.udpMSHR.bits.isRetry)
+  doneUpd2MSHR_s3_g           := Mux(doneUpd2MSHR_s3_g,   !canGo_s3, (io.mshrResp.valid & io.mshrResp.bits.isUpdate) |
                                                                  (io.udpMSHR.fire & io.udpMSHR.bits.isUpdate & io.udpMSHR.bits.willUseWay === 0.U))
-  rep2MSHRl_s3_g              := Mux(rep2MSHRl_s3_g,  !canGo_s3, io.mshrResp.valid & io.mshrResp.bits.isRepl)
-  evict2MSHR_s3_g             := Mux(evict2MSHR_s3_g, !canGo_s3, io.mshrResp.valid & io.mshrResp.bits.isEvict)
+  doneRepl2MSHR_s3_g          := Mux(doneRepl2MSHR_s3_g,  !canGo_s3, io.mshrResp.valid & io.mshrResp.bits.isRepl)
+  doneEvict2MSHR_s3_g         := Mux(doneEvict2MSHR_s3_g, !canGo_s3, io.mshrResp.valid & io.mshrResp.bits.isEvict)
 
   mshrLetRetry_s3             := io.mshrResp.fire & io.mshrResp.bits.retry
 
@@ -327,7 +345,7 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
   /*
    * Send Req to Node
    */
-  val canSendReq    = valid_s3 & !retry_s3 & (upd2MSHR_s3_g | !(replace_s3 | evictSF_s3)) & !mshrLetRetry_s3
+  val canSendReq    = valid_s3 & !retry_s3 & (doneUpd2MSHR_s3_g | !(replace_s3 | evictSF_s3)) & !mshrLetRetry_s3
   val reqDoneList   = Seq(done_s3_g.snoop, done_s3_g.readDown, done_s3_g.writeDown, done_s3_g.readDCU, done_s3_g.writeDCU, doneRepl_s3_g, doneEvict_s3_g)
   val reqTodoList   = Seq(todo_s3.snoop     & !done_s3_g.snoop,
                           todo_s3.readDown  & !done_s3_g.readDown,
