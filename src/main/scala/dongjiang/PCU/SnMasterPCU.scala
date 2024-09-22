@@ -76,7 +76,7 @@ class SnMasterPCU(snMasId: Int, param: InterfaceParam)(implicit p: Parameters) e
   val pcuRecDBID      = Wire(UInt(param.pcuIdBits.W))
   // PCU Req To Node ID
   val pcuReq2NodeID   = Wire(UInt(param.pcuIdBits.W))
-  // PCU Req To Node ID
+  // PCU Send Resp To Slice ID
   val pcuResp2SliceID = Wire(UInt(param.pcuIdBits.W))
   // req from slice
   val indexSaveInPCU  = WireInit(0.U.asTypeOf(pcus(0).indexMes))
@@ -154,9 +154,9 @@ class SnMasterPCU(snMasId: Int, param: InterfaceParam)(implicit p: Parameters) e
       }.elsewhen(io.chi.rxdat.fire & io.chi.rxdat.bits.TxnID === i.U) {
         pcu.getDataNum    := pcu.getDataNum + 1.U
         pcu.chiMes.resp   := io.chi.rxdat.bits.Resp
-        /*
-         * Clean PCU Entry When Its Free
-         */
+      /*
+       * Clean PCU Entry When Its Free
+       */
       }.elsewhen(pcu.isFree) {
         pcu               := 0.U.asTypeOf(pcu)
       }
@@ -249,7 +249,7 @@ class SnMasterPCU(snMasId: Int, param: InterfaceParam)(implicit p: Parameters) e
 
 
 // ---------------------------------------------------------------------------------------------------------------------- //
-// --------------------------------- Receive Data From CHI DAT And Send It To DataBuffer -------------------------------- //
+// ------------------------------------------------ Send Resp To Slice -------------------------------------------------- //
 // ---------------------------------------------------------------------------------------------------------------------- //
   val pcuResp2SliceVec            = pcus.map(_.isResp2Slice)
   pcuResp2SliceID                 := PriorityEncoder(pcuResp2SliceVec)
