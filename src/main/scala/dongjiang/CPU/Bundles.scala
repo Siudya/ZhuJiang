@@ -26,23 +26,17 @@ class PipeTaskBundle(implicit p: Parameters) extends DJBundle with HasAddr with 
 
 object UpdMSHRType { val width = 2; val RETRY = "b00".U ; val UPD = "b01".U; val REPL = "b10".U; val EVICT = "b11".U }
 
-trait HasMSHRUpdBundle extends Bundle {
+class UpdateMSHRReqBundle(implicit p: Parameters) extends DJBundle with HasAddr with HasMSHRWay {
     val updType     = UInt(UpdMSHRType.width.W)
+    val waitIntfVec = Vec(nrIntf, Bool())
 
     def isRetry     = updType === UpdMSHRType.RETRY
-    def isUpdate    = updType === UpdMSHRType.UPD
+    def isUpdate    = updType === UpdMSHRType.UPD & waitIntfVec.reduce(_ | _)
+    def isClean     = updType === UpdMSHRType.UPD & !waitIntfVec.reduce(_ | _)
     def isRepl      = updType === UpdMSHRType.REPL
     def isEvict     = updType === UpdMSHRType.EVICT
+
     def isReq       = isRepl | isEvict
-}
-
-class UpdateMSHRReqBundle(implicit p: Parameters) extends DJBundle with HasAddr with HasPipeID with HasMSHRWay with HasMSHRUpdBundle {
-    val willUseWay      = UInt(2.W)
-    val waitIntfVec     = Vec(nrIntf, Bool())
-}
-
-class UpdateMSHRRespBundle(implicit p: Parameters) extends DJBundle with HasPipeID with HasMSHRWay with HasMSHRUpdBundle {
-    val retry           = Bool()
 }
 
 class DirReadBundle(implicit p: Parameters) extends DJBundle with HasAddr with HasMSHRWay with HasPipeID

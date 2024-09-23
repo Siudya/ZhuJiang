@@ -60,7 +60,7 @@ case class DJParam(
                     // MSHR
                     nrMSHRSets: Int = 4,
                     nrMSHRWays: Int = 4,
-                    nrEvictWays: Int = 4,
+                    nrEvictWays: Int = 2,
                     // number of bank or buffer
                     nrBank: Int = 2,
                     nrDatBuf: Int = 16,

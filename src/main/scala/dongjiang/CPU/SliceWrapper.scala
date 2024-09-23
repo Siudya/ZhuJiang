@@ -53,24 +53,23 @@ class SliceWrapper()(implicit p: Parameters) extends DJModule {
   reqPipe.io.sliceId        := io.sliceId
   respPipe.io.sliceId       := io.sliceId
 
-  object connectPipe {
-    def apply[T <: Bundle with HasPipeID](in: DecoupledIO[T], out: Seq[DecoupledIO[T]]): Unit = {
-      out.head.valid          := in.valid & in.bits.toReqPipe
-      out.last.valid          := in.valid & in.bits.toRespPipe
-      out.foreach(_.bits      := in.bits)
-      in.ready                := out.head.ready & in.bits.toReqPipe | out.last.ready & in.bits.toRespPipe
-    }
-    def apply[T <: Bundle with HasPipeID](in: ValidIO[T], out: Seq[ValidIO[T]]): Unit = {
-      out.head.valid          := in.valid & in.bits.toReqPipe
-      out.last.valid          := in.valid & in.bits.toRespPipe
-      out.foreach(_.bits      := in.bits)
-    }
-  }
-  connectPipe(mshrCtl.io.udpResp,   Seq(reqPipe.io.mshrResp, respPipe.io.mshrResp))
-
   mpReqQueue.io.enq         <> fastPriorityArbDec(Seq(respPipe.io.req2Node, reqPipe.io.req2Node))
   mpRespQueue.io.enq        <> fastPriorityArbDec(Seq(respPipe.io.resp2Node, reqPipe.io.resp2Node))
   io.req2Node               <> mpReqQueue.io.deq
   io.resp2Node              <> mpRespQueue.io.deq
   io.dbRCReq                <> fastPriorityArbDec(Seq(respPipe.io.dbRCReq, reqPipe.io.dbRCReq))
+
+  //  object connectPipe {
+  //    def apply[T <: Bundle with HasPipeID](in: DecoupledIO[T], out: Seq[DecoupledIO[T]]): Unit = {
+  //      out.head.valid          := in.valid & in.bits.toReqPipe
+  //      out.last.valid          := in.valid & in.bits.toRespPipe
+  //      out.foreach(_.bits      := in.bits)
+  //      in.ready                := out.head.ready & in.bits.toReqPipe | out.last.ready & in.bits.toRespPipe
+  //    }
+  //    def apply[T <: Bundle with HasPipeID](in: ValidIO[T], out: Seq[ValidIO[T]]): Unit = {
+  //      out.head.valid          := in.valid & in.bits.toReqPipe
+  //      out.last.valid          := in.valid & in.bits.toRespPipe
+  //      out.foreach(_.bits      := in.bits)
+  //    }
+  //  }
 }
