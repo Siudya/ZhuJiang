@@ -124,9 +124,16 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
   dirCanGo_s3           := canGo_s3 & task_s3_g.valid & taskNext_s3.readDir
   valid_s3              := Mux(task_s3_g.bits.readDir, task_s3_g.valid & dirRes_s3.valid, task_s3_g.valid)
 
+  /*
+   * Reset Done Reg When Get New Task Form S2
+   */
+  val s2Fire            = task_s2.valid & canGo_s2
+  val rstDone           = s2Fire
 
 
-// ---------------------------------------------------------------------------------------------------------------------- //
+
+
+  // ---------------------------------------------------------------------------------------------------------------------- //
 // --------------------------------- S3_Decode: Decode by task Message and Dir Result ------------------------------------//
 // ---------------------------------------------------------------------------------------------------------------------- //
   /*
@@ -321,19 +328,13 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
   require(!hasCSNIntf)
   // Common
   io.udpMSHR.valid            := valid_s3 & (retry_s3 | update_s3 | replace_s3 | evictSF_s3 | clean_s3) & !doneUpd2MSHR_s3_g
-  doneUpd2MSHR_s3_g           := Mux(doneUpd2MSHR_s3_g, !canGo_s3, io.udpMSHR.fire & !canGo_s3)
+  doneUpd2MSHR_s3_g           := Mux(rstDone, false.B, io.udpMSHR.fire)
   val updDone                 = io.udpMSHR.fire | doneUpd2MSHR_s3_g
 
 
 // ---------------------------------------------------------------------------------------------------------------------- //
 // ------------------------ S3_Execute: Execute specific tasks value based on decode results -----------------------------//
 // ---------------------------------------------------------------------------------------------------------------------- //
-  /*
-   * Reset Done Reg When Get New Task Form S2
-   */
-  val s2Fire        = task_s2.valid & canGo_s2
-  val rstDone       = s2Fire
-
   /*
    * Send Req to Node
    */
@@ -356,7 +357,7 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
   reqBeSend_s3(6)   := 0.U.asTypeOf(new Req2NodeBundle()) // TODO: evictSF_s3
   io.req2Node.valid := canSendReq & reqTodoList.reduce(_ | _)
   io.req2Node.bits  := reqBeSend_s3(toBeSendId)
-  reqDoneList.zipWithIndex.foreach { case(d, i) => d := Mux(rstDone, false.B, Mux(d, !canGo_s3, io.req2Node.fire & toBeSendId === i.U)) }
+  reqDoneList.zipWithIndex.foreach { case(d, i) => d := Mux(rstDone, false.B, io.req2Node.fire & toBeSendId === i.U) }
   // req
   val reqDone       = PopCount(reqTodoList) === 0.U | (PopCount(reqTodoList) === 1.U & io.req2Node.fire)
 
@@ -367,11 +368,11 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
   // self
   io.dirWrite.s.valid   := valid_s3 & !retry_s3 & todo_s3.wSDir & !done_s3_g.wSDir
   io.dirWrite.s.bits    := wSDir_s3
-  done_s3_g.wSDir       := Mux(rstDone, false.B, Mux(done_s3_g.wSDir, !canGo_s3, io.dirWrite.s.fire))
+  done_s3_g.wSDir       := Mux(rstDone, false.B, io.dirWrite.s.fire)
   // sf
   io.dirWrite.sf.valid  := valid_s3 & !retry_s3 & todo_s3.wSFDir & !done_s3_g.wSFDir
   io.dirWrite.sf.bits   := wSFDir_s3
-  done_s3_g.wSFDir      := Mux(rstDone, false.B, Mux(done_s3_g.wSFDir, !canGo_s3, io.dirWrite.sf.fire))
+  done_s3_g.wSFDir      := Mux(rstDone, false.B, io.dirWrite.sf.fire)
   // dir
   val dirTodoList       = Seq(todo_s3.wSDir  & !done_s3_g.wSDir  & !io.dirWrite.s.fire,
                               todo_s3.wSFDir & !done_s3_g.wSFDir & !io.dirWrite.sf.fire)
@@ -383,8 +384,8 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
    */
   io.dbRCReq.valid      := valid_s3 & !retry_s3 & ((todo_s3.rDB2Src & !done_s3_g.rDB2Src) | (todo_s3.cleanDB & !done_s3_g.cleanDB))
   io.dbRCReq.bits       := rcDBReq_s3
-  done_s3_g.rDB2Src     := Mux(rstDone, false.B, Mux(done_s3_g.rDB2Src, !canGo_s3, io.dbRCReq.fire & io.dbRCReq.bits.isRead))
-  done_s3_g.cleanDB     := Mux(rstDone, false.B, Mux(done_s3_g.cleanDB, !canGo_s3, io.dbRCReq.fire & io.dbRCReq.bits.isClean))
+  done_s3_g.rDB2Src     := Mux(rstDone, false.B, io.dbRCReq.fire & io.dbRCReq.bits.isRead)
+  done_s3_g.cleanDB     := Mux(rstDone, false.B, io.dbRCReq.fire & io.dbRCReq.bits.isClean)
   val rcDBTodoList      = Seq(todo_s3.rDB2Src & !done_s3_g.rDB2Src & !io.dbRCReq.fire,
                               todo_s3.cleanDB & !done_s3_g.cleanDB & !io.dbRCReq.fire)
   val rcDBDone          = PopCount(rcDBTodoList) === 0.U
@@ -394,7 +395,7 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
    */
   io.resp2Node.valid    := valid_s3 & !retry_s3 & todo_s3.commit & !done_s3_g.commit
   io.resp2Node.bits     := commit_s3
-  done_s3_g.commit      := Mux(rstDone, false.B, Mux(done_s3_g.commit, !canGo_s3, io.resp2Node.fire))
+  done_s3_g.commit      := Mux(rstDone, false.B, io.resp2Node.fire)
   val comDone           = !(todo_s3.commit & !done_s3_g.commit & !io.resp2Node.fire)
 
   /*
