@@ -71,8 +71,6 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
     val mshrResp2Dir  = Vec(2, Valid(new MSHRRespDirBundle()))
   })
 
-  io.udpMSHR.ready    := true.B
-
   // TODO: Delete the following code when the coding is complete
   io <> DontCare
   dontTouch(io)
@@ -124,8 +122,7 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
    * Get Block Message
    */
   val blockByMHSR     = nodeReqMatchVec.reduce(_ | _) | PopCount(nodeReqInvVec) <= 1.U | !evictMatchVec.reduce(_ | _) | lockMatch
-  val blockByPipeReq  = io.udpMSHR.valid & io.udpMSHR.bits.isReq
-  val canReceiveNode  = blockByMHSR | blockByPipeReq
+  val canReceiveNode  = blockByMHSR
 
 
   /*
@@ -168,8 +165,8 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
               m.tag           := io.udpMSHR.bits.mTag
               m.bank          := io.udpMSHR.bits.mBank
             }
-            assert(PopCount(m.waitIntfVec) === 0.U)
-            assert(m.isAlreadySend)
+            assert(PopCount(m.waitIntfVec) === 0.U, s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x]", i.U, j.U, m.addr(i.U), m.chiMes.channel, m.chiMes.opcode)
+            assert(m.isAlreadySend, s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x]", i.U, j.U, m.addr(i.U), m.chiMes.channel, m.chiMes.opcode)
           /*
            * Resp Update mshrTable value
            */
@@ -192,14 +189,14 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
               m.respMes.masDBID.bits    := io.resp2Slice.bits.dbid
             }
             assert(io.resp2Slice.bits.isSnpResp ^ io.resp2Slice.bits.isReqResp)
-            assert(m.waitIntfVec(io.resp2Slice.bits.from.intfId))
-            assert(m.isWaitResp)
+            assert(m.waitIntfVec(io.resp2Slice.bits.from.intfId), s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x]", i.U, j.U, m.addr(i.U), m.chiMes.channel, m.chiMes.opcode)
+            assert(m.isWaitResp, s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x]", i.U, j.U, m.addr(i.U), m.chiMes.channel, m.chiMes.opcode)
           /*
            * Receive Node Req
            */
           }.elsewhen(io.req2Slice.fire & canReceiveNode & i.U === io.req2Slice.bits.mSet & j.U === nodeReqInvWay) {
             m := mshrAlloc_s0
-            assert(m.isFree)
+            assert(m.isFree, s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x]", i.U, j.U, m.addr(i.U), m.chiMes.channel, m.chiMes.opcode)
           /*
            * Clean MSHR Entry When Its Free
            */
