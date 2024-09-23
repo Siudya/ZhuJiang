@@ -21,7 +21,7 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
     // Task From MSHR
     val task        = Flipped(Decoupled(new PipeTaskBundle()))
     // Update Task To MSHR
-    val udpMSHR     = Decoupled(new UpdateMSHRReqBundle())
+    val updMSHR     = Decoupled(new UpdateMSHRReqBundle())
     val updLockMSHR = Decoupled(new MSHRSetBundle)
     // Req To Node
     val req2Node    = Decoupled(new Req2NodeBundle())
@@ -29,7 +29,7 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
     val resp2Node   = Decoupled(new Resp2NodeBundle())
   })
 
-  dontTouch(io.udpMSHR)
+  dontTouch(io)
 
   // TODO: Delete the following code when the coding is complete
   io <> DontCare
@@ -317,19 +317,19 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
    * Update MSHR Mes or let task retry
    */
   //                                           Retry                                        Update / Clean                   Replace                EvictSF
-  io.udpMSHR.bits.updType     := Mux(retry_s3, UpdMSHRType.RETRY, Mux(update_s3 | clean_s3, UpdMSHRType.UPD, Mux(replace_s3, UpdMSHRType.REPL,      UpdMSHRType.EVICT)))
-  io.udpMSHR.bits.addr        := Mux(retry_s3, DontCare,          Mux(update_s3 | clean_s3, DontCare,        Mux(replace_s3, dirRes_s3.bits.s.addr, dirRes_s3.bits.sf.addr)))
+  io.updMSHR.bits.updType     := Mux(retry_s3, UpdMSHRType.RETRY, Mux(update_s3 | clean_s3, UpdMSHRType.UPD, Mux(replace_s3, UpdMSHRType.REPL,      UpdMSHRType.EVICT)))
+  io.updMSHR.bits.addr        := Mux(retry_s3, DontCare,          Mux(update_s3 | clean_s3, DontCare,        Mux(replace_s3, dirRes_s3.bits.s.addr, dirRes_s3.bits.sf.addr)))
   // Use In Retry or Update
-  io.udpMSHR.bits.mshrWay     := task_s3_g.bits.mshrWay
-  io.udpMSHR.bits.useEvict    := task_s3_g.bits.useEvict
+  io.updMSHR.bits.mshrWay     := task_s3_g.bits.mshrWay
+  io.updMSHR.bits.useEvict    := task_s3_g.bits.useEvict
   // Use In Update // TODO: Complete hasCSNIntf
-  io.udpMSHR.bits.waitIntfVec := (Mux(todo_s3.reqToSlv | evictSF_s3, UIntToOH(IncoID.LOCALSLV.U), 0.U) |
+  io.updMSHR.bits.waitIntfVec := (Mux(todo_s3.reqToSlv | evictSF_s3, UIntToOH(IncoID.LOCALSLV.U), 0.U) |
                                   Mux(todo_s3.reqToMas | replace_s3, UIntToOH(IncoID.LOCALMAS.U), 0.U)).asBools
   require(!hasCSNIntf)
   // Common
-  io.udpMSHR.valid            := valid_s3 & (retry_s3 | update_s3 | replace_s3 | evictSF_s3 | clean_s3) & !doneUpd2MSHR_s3_g
-  doneUpd2MSHR_s3_g           := Mux(rstDone, false.B, io.udpMSHR.fire)
-  val updDone                 = io.udpMSHR.fire | doneUpd2MSHR_s3_g
+  io.updMSHR.valid            := valid_s3 & (retry_s3 | update_s3 | replace_s3 | evictSF_s3 | clean_s3) & !doneUpd2MSHR_s3_g
+  doneUpd2MSHR_s3_g           := Mux(rstDone, false.B, io.updMSHR.fire)
+  val updDone                 = io.updMSHR.fire | doneUpd2MSHR_s3_g
 
 
 // ---------------------------------------------------------------------------------------------------------------------- //

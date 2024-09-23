@@ -61,7 +61,7 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
     // Task To MainPipe
     val pipeTask      = Vec(2, Decoupled(new PipeTaskBundle()))
     // Update Task From MainPipe
-    val udpMSHR       = Flipped(Decoupled(new UpdateMSHRReqBundle()))
+    val updMSHR       = Flipped(Decoupled(new UpdateMSHRReqBundle()))
     val updLockMSHR   = Flipped(Decoupled(new MSHRSetBundle))
     // Directory Read Req
     val earlyRReqVec  = Vec(djparam.nrDirBank, Decoupled())
@@ -158,12 +158,12 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
           /*
            * Pipe Update mshrTable value
            */
-          when(io.udpMSHR.valid & !io.udpMSHR.bits.isRetry & io.udpMSHR.bits.useMSHR & io.udpMSHR.bits.mSet === i.U & io.udpMSHR.bits.mshrWay === j.U) {
-            m.waitIntfVec     := io.udpMSHR.bits.waitIntfVec
-            when(io.udpMSHR.bits.isReq) {
+          when(io.updMSHR.valid & !io.updMSHR.bits.isRetry & io.updMSHR.bits.useMSHR & io.updMSHR.bits.mSet === i.U & io.updMSHR.bits.mshrWay === j.U) {
+            m.waitIntfVec     := io.updMSHR.bits.waitIntfVec
+            when(io.updMSHR.bits.isReq) {
               m.chiMes.opcode := DontCare; assert(false.B, "TODO")
-              m.tag           := io.udpMSHR.bits.mTag
-              m.bank          := io.udpMSHR.bits.mBank
+              m.tag           := io.updMSHR.bits.mTag
+              m.bank          := io.updMSHR.bits.mBank
             }
             assert(PopCount(m.waitIntfVec) === 0.U, s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x]", i.U, j.U, m.addr(i.U), m.chiMes.channel, m.chiMes.opcode)
             assert(m.isAlreadySend, s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x]", i.U, j.U, m.addr(i.U), m.chiMes.channel, m.chiMes.opcode)
@@ -214,7 +214,7 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
       /*
        * Pipe Update evictTable value
        */
-      when(io.udpMSHR.valid & !io.udpMSHR.bits.isRetry & io.udpMSHR.bits.useEvict & io.udpMSHR.bits.mSet === i.U & io.udpMSHR.bits.mshrWay === i.U) {
+      when(io.updMSHR.valid & !io.updMSHR.bits.isRetry & io.updMSHR.bits.useEvict & io.updMSHR.bits.mSet === i.U & io.updMSHR.bits.mshrWay === i.U) {
         // TODO
         assert(false.B)
       /*
@@ -230,7 +230,7 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
   /*
    * Set ready value
    */
-  io.udpMSHR.ready := true.B
+  io.updMSHR.ready := true.B
   io.resp2Slice.ready := true.B
 
 
@@ -274,11 +274,11 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
             }
             // AlreadySend
             is(MSHRState.AlreadySend) {
-              val hit     = io.udpMSHR.valid & io.udpMSHR.bits.mSet === i.U & io.udpMSHR.bits.mshrWay === j.U
-              val retry   = hit & io.udpMSHR.bits.isRetry
-              val update  = hit & io.udpMSHR.bits.isUpdate
-              val clean   = hit & io.udpMSHR.bits.isClean
-              val req     = hit & io.udpMSHR.bits.isReq
+              val hit     = io.updMSHR.valid & io.updMSHR.bits.mSet === i.U & io.updMSHR.bits.mshrWay === j.U
+              val retry   = hit & io.updMSHR.bits.isRetry
+              val update  = hit & io.updMSHR.bits.isUpdate
+              val clean   = hit & io.updMSHR.bits.isClean
+              val req     = hit & io.updMSHR.bits.isReq
               m.state     := Mux(retry, MSHRState.BeSend,
                                 Mux(update, MSHRState.WaitResp,
                                   Mux(req, MSHRState.WaitResp,

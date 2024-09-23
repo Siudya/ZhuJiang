@@ -47,7 +47,7 @@ class SliceWrapper()(implicit p: Parameters) extends DJModule {
   mshrCtl.io.resp2Slice     <> io.resp2Slice
   mshrCtl.io.pipeTask(0)    <> respPipe.io.task;  assert(!mshrCtl.io.pipeTask(PipeID.RESP).valid | mshrCtl.io.pipeTask(PipeID.RESP).bits.pipeId === PipeID.RESP)
   mshrCtl.io.pipeTask(1)    <> reqPipe.io.task;   assert(!mshrCtl.io.pipeTask(PipeID.REQ).valid  | mshrCtl.io.pipeTask(PipeID.REQ).bits.pipeId === PipeID.REQ)
-  mshrCtl.io.udpMSHR        <> fastPriorityArbDec(Seq(respPipe.io.udpMSHR, reqPipe.io.udpMSHR))
+  mshrCtl.io.updMSHR        <> fastPriorityArbDec(Seq(respPipe.io.updMSHR, reqPipe.io.updMSHR))
   mshrCtl.io.updLockMSHR    <> fastPriorityArbDec(Seq(respPipe.io.updLockMSHR, reqPipe.io.updLockMSHR))
 
   reqPipe.io.sliceId        := io.sliceId
