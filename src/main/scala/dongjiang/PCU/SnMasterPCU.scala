@@ -139,7 +139,8 @@ class SnMasterPCU(snMasId: Int, param: InterfaceParam)(implicit p: Parameters) e
        * Receive New Req
        */
       when(io.req2Node.fire & pcuGetReqID === i.U) {
-        pcu.chiMes  := reqSaveInPCU
+        pcu.indexMes      := indexSaveInPCU
+        pcu.chiMes        := reqSaveInPCU
         assert(pcu.state === PCUSM.Free)
       /*
        * Receive DBID From DataBuffer
@@ -178,6 +179,7 @@ class SnMasterPCU(snMasId: Int, param: InterfaceParam)(implicit p: Parameters) e
   reqSaveInPCU.opcode     := io.req2Node.bits.opcode
   reqSaveInPCU.tgtID      := io.req2Node.bits.tgtID
   reqSaveInPCU.expCompAck := io.req2Node.bits.expCompAck
+  assert(Mux(io.req2Node.valid, !io.req2Node.bits.expCompAck, true.B))
 
   /*
    * Set PCU Value
@@ -261,6 +263,7 @@ class SnMasterPCU(snMasId: Int, param: InterfaceParam)(implicit p: Parameters) e
   io.resp2Slice.bits.mshrWay      := pcus(pcuResp2SliceID).indexMes.mshrWay
   io.resp2Slice.bits.useEvict     := pcus(pcuResp2SliceID).indexMes.useEvict
   io.resp2Slice.bits.from.IncoId  := snMasId.U
+  io.resp2Slice.bits.to           := pcus(pcuResp2SliceID).indexMes.from
   io.resp2Slice.bits.hasData      := pcus(pcuResp2SliceID).hasData
   io.resp2Slice.bits.dbid         := pcus(pcuResp2SliceID).indexMes.dbid
   io.resp2Slice.bits.resp         := pcus(pcuResp2SliceID).chiMes.resp

@@ -41,7 +41,6 @@ class DataBuffer()(implicit p: Parameters) extends DJModule {
   val io = IO(Flipped(new DBBundle(hasDBRCReq = true)))
 
   // Del it
-  io <> DontCare
   dontTouch(io)
 
 

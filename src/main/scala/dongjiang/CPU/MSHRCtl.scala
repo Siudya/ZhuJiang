@@ -72,7 +72,6 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
   })
 
   // TODO: Delete the following code when the coding is complete
-  io <> DontCare
   dontTouch(io)
 
 // ------------------------ Module declaration ------------------------- //
@@ -121,8 +120,8 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
   /*
    * Get Block Message
    */
-  val blockByMHSR     = nodeReqMatchVec.reduce(_ | _) | PopCount(nodeReqInvVec) <= 1.U | !evictMatchVec.reduce(_ | _) | lockMatch
-  val canReceiveNode  = blockByMHSR
+  val blockByMHSR     = nodeReqMatchVec.reduce(_ | _) | evictMatchVec.reduce(_ | _) | lockMatch
+  val canReceiveNode  = !blockByMHSR & PopCount(nodeReqInvVec) > 0.U
 
 
   /*
@@ -404,13 +403,17 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
    * Read Directory
    */
   // resp
-  io.dirRead(PipeID.RESP).valid       := taskResp_s1_g.valid & !respAlreadyReadDirReg
-  io.dirRead(PipeID.RESP).bits.addr   := taskResp_s1_g.bits.addr
-  io.dirRead(PipeID.RESP).bits.pipeId := taskResp_s1_g.bits.pipeId
+  io.dirRead(PipeID.RESP).valid         := taskResp_s1_g.valid & !respAlreadyReadDirReg
+  io.dirRead(PipeID.RESP).bits.addr     := taskResp_s1_g.bits.addr
+  io.dirRead(PipeID.RESP).bits.mshrWay  := taskResp_s1_g.bits.mshrWay
+  io.dirRead(PipeID.RESP).bits.useEvict := taskResp_s1_g.bits.useEvict
+  io.dirRead(PipeID.RESP).bits.pipeId   := taskResp_s1_g.bits.pipeId
   // req
-  io.dirRead(PipeID.REQ).valid        := taskReq_s1_g.valid & !reqAlreadyReadDirReg
-  io.dirRead(PipeID.REQ).bits.addr    := taskReq_s1_g.bits.addr
-  io.dirRead(PipeID.REQ).bits.pipeId  := taskReq_s1_g.bits.pipeId
+  io.dirRead(PipeID.REQ).valid          := taskReq_s1_g.valid & !reqAlreadyReadDirReg
+  io.dirRead(PipeID.REQ).bits.addr      := taskReq_s1_g.bits.addr
+  io.dirRead(PipeID.REQ).bits.mshrWay   := taskReq_s1_g.bits.mshrWay
+  io.dirRead(PipeID.REQ).bits.useEvict  := taskReq_s1_g.bits.useEvict
+  io.dirRead(PipeID.REQ).bits.pipeId    := taskReq_s1_g.bits.pipeId
 
 
 

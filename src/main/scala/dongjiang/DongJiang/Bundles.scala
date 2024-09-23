@@ -44,11 +44,12 @@ trait HasIncoID extends DJBundle with HasFromIncoID with HasToIncoID
 trait HasDBID extends DJBundle { this: Bundle => val dbid = UInt(dbIdBits.W) }
 
 trait HasAddr extends DJBundle {this: Bundle =>
-    val addr    = UInt(addressBits.W);
-    def mTag    = parseMSHRAddress(addr)._1
-    def mSet    = parseMSHRAddress(addr)._2
-    def mBank   = parseMSHRAddress(addr)._3
-    def dirBank = getDirBank(addr)
+    val addr        = UInt(addressBits.W);
+    def mTag        = parseMSHRAddress(addr)._1
+    def mSet        = parseMSHRAddress(addr)._2
+    def mBank       = parseMSHRAddress(addr)._3
+    def dirBank     = getDirBank(addr)
+    def addrNoOff   = addr(addressBits - 1, offsetBits)
 }
 
 trait HasMSHRSet extends DJBundle { this: Bundle => val mshrSet = UInt(mshrSetBits.W) }
@@ -130,7 +131,7 @@ class Req2SliceBundle(implicit p: Parameters) extends DJBundle with HasBaseCHIMe
 class ReqAck2NodeBundle(implicit p: Parameters) extends DJBundle with HasToIncoID with HasPCUID { val retry = Bool(); def receive = !retry }
 
 // ---------------------------------------------------------------- Resp To Node Bundle ----------------------------------------------------------------------------- //
-class Resp2NodeBundle(implicit p: Parameters) extends DJBundle with HasBaseCHIMesBundle with HasAddr with HasIncoID with HasMSHRWay with HasDBID {
+class Resp2NodeBundle(implicit p: Parameters) extends DJBundle with HasBaseCHIMesBundle with HasAddr with HasIncoID with HasDBID {
     override def useSnp : Boolean = false
     override def useDBID: Boolean = false
     val needReadDB      = Bool()

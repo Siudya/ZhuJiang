@@ -33,7 +33,8 @@ object DirCtrlState {
 trait HasDirCtrlState {
   val shift = UInt(DirCtrlState.width.W)
 
-  def canRecReq = shift === DirCtrlState.Free    | shift === DirCtrlState.WaitMcp         | shift === DirCtrlState.GetResp
+// TODO:  def canRecReq = shift === DirCtrlState.Free    | shift === DirCtrlState.WaitMcp         | shift === DirCtrlState.GetResp
+  def canRecReq = shift === DirCtrlState.Free    | shift === DirCtrlState.GetResp
   def isReqFire = shift === DirCtrlState.ReqFire | shift === DirCtrlState.GetResp_ReqFire
   def isWaitMcp = shift === DirCtrlState.WaitMcp
   def isGetResp = shift === DirCtrlState.GetResp | shift === DirCtrlState.GetResp_ReqFire
@@ -41,12 +42,12 @@ trait HasDirCtrlState {
 }
 
 class DirCtrlBundle(setBits: Int)(implicit p: Parameters) extends DJBundle with HasDirCtrlState with HasMSHRWay with HasPipeID {
-  val ren   = Bool()
-  val set   = UInt(setBits.W)
+  val ren       = Bool()
+  val set       = UInt(setBits.W)
 
-  def wen   = !ren
-  def way   = Mux(useEvict, djparam.nrMSHRWays.U + mshrWay, mshrWay)
-  def mSet  = set(mshrSetBits-1, 0)
+  def wen       = !ren
+  def way       = Mux(useEvict, djparam.nrMSHRWays.U + mshrWay, mshrWay)
+  def mSet      = set(mshrSetBits-1, 0)
   require(setBits >= mshrSetBits)
 }
 
@@ -295,7 +296,7 @@ class DirectoryBase(
   io.dirResp.bits.wayOH     := Mux(hit, hitWayVec.asUInt,   Mux(hasInvWay, selInvWayVec.asUInt, Mux(replWayIsUsing, UIntToOH(selUnuseWay),              UIntToOH(replWay))))
   io.dirResp.bits.addr      := Mux(hit, addr_s3_g,          Mux(hasInvWay, 0.U,                 Mux(replWayIsUsing, metaResp_s3_g(selUnuseWay).tag,     metaResp_s3_g(replWay).tag)))
   io.dirResp.bits.metaVec   := Mux(hit, hitMetaVec,         Mux(hasInvWay, invMetasVec,         Mux(replWayIsUsing, metaResp_s3_g(selUnuseWay).metaVec, metaResp_s3_g(replWay).metaVec)))
-  io.dirResp.bits.replRetry := replRetry
+  io.dirResp.bits.replRetry := Mux(hit, false.B,            Mux(hasInvWay, false.B,             Mux(replWayIsUsing, replRetry,                          false.B)))
   io.dirResp.bits.pipeId    := pipeId_s3_g
   if(useRepl) { io.dirResp.bits.replMes := replResp_s3_g }
 
