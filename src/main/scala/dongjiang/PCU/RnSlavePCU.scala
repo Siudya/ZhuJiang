@@ -273,7 +273,7 @@ class RnSlavePCU(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) ex
        */
       }.elsewhen(io.chi.txdat.fire & pcuRecChiDatID === i.U) {
         pcu.getDataNum    := pcu.getDataNum + 1.U
-        pcu.chiMes.resp   := io.chi.rxdat.bits.Resp
+        pcu.chiMes.resp   := io.chi.txdat.bits.Resp
         assert(pcu.state === PCURS.WaitSnpResp)
       /*
        * Clean PCU Entry When Its Free
