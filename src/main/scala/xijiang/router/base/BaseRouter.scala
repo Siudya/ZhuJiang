@@ -10,8 +10,6 @@ import zhujiang.{ZJBundle, ZJModule, ZJParametersKey}
 
 import scala.collection.mutable
 
-class BaseIcnBundle(val node: Node)(implicit p: Parameters) extends ZJBundle
-
 class ChannelBundle[T <: Flit](gen: T)(implicit p: Parameters) extends ZJBundle {
   val flit = Valid(gen)
   val rsvd = Valid(UInt(niw.W))
@@ -23,6 +21,16 @@ class RingSide(local: Boolean)(implicit p: Parameters) extends ZJBundle {
   val data = new ChannelBundle(new DataFlit)
   val snoop = new ChannelBundle(new SnoopFlit)
   val ereq = if(local) Some(new ChannelBundle(new ReqFlit)) else None
+
+  def getBundle(chn: String) = {
+    chn match {
+      case "REQ" => req
+      case "RSP" => resp
+      case "DAT" => data
+      case "SNP" => snoop
+      case "ERQ" => ereq.get
+    }
+  }
 }
 
 class RouterRingIO(csn: Boolean)(implicit p: Parameters) extends ZJBundle {
@@ -30,64 +38,33 @@ class RouterRingIO(csn: Boolean)(implicit p: Parameters) extends ZJBundle {
   val rx = Input(new RingSide(csn))
 }
 
-class BaseRouter(val node: Node, ejects: Seq[String], injects: Seq[String])(implicit p: Parameters) extends ZJModule {
-  val ringNum = if(node.csnNode) 1 else 2
-  private val local = !node.csnNode
+trait BaseRouterUtils {
+  m: ZJModule =>
+  def node: Node
+  override val desiredName = node.routerStr
+
+  val local = !node.csnNode
+  val c2c = node.csnNode && node.nodeType == NodeType.C
+  private val csnRing = m.p(ZJParametersKey).csnRing
+  private val csnC2cNum = csnRing.count(_.nodeType == NodeType.C)
+
   val router = IO(new Bundle {
-    val rings = Vec(ringNum, new RouterRingIO(local))
+    val rings = Vec(2, new RouterRingIO(local))
     val chip = Input(UInt(p(ZJParametersKey).chipAddrBits.W))
     val nodeId = Output(UInt(niw.W))
+    val remoteChipIds = if(!local && !c2c && node.nodeType != NodeType.P) Some(Input(Vec(csnC2cNum, UInt(chipAddrBits.W)))) else None
+    val localChip = if(c2c) Some(Input(UInt(chipAddrBits.W))) else None
   })
+  val icn = IO(new IcnBundle(node))
 
-  private val c2c = node.csnNode && node.nodeType == NodeType.C
-  private val nid = if(node.csnNode) {
-    genNodeId(1.U(1.W), (node.nodeType % 4).U(nodeTypeBits.W), router.chip)
-  } else {
+  val nid = if(local) {
     node.nodeId.U(niw.W)
+  } else if(c2c) {
+    val mask = Cat(Fill(niw - chipAddrBits, true.B), Fill(chipAddrBits, false.B))
+    (node.nodeId.U(niw.W) & mask) | router.chip
+  } else {
+    node.nodeId.U(niw.W) | router.chip
   }
-  router.nodeId := nid
-  private val ejectReqBuf = p(ZJParametersKey).reqEjectBufDepth
-  private val ejectSnoopBuf = p(ZJParametersKey).snoopEjectBufDepth
-
-  private val reqTap = if((injects ++ ejects).contains("REQ")) Some(Module(new ChannelTap(new ReqFlit, "REQ", ringNum, ejectReqBuf, c2c = c2c))) else None
-  private val respTap = if((injects ++ ejects).contains("RSP")) Some(Module(new ChannelTap(new RespFlit, "RSP", ringNum, 0, c2c))) else None
-  private val dataTap = if((injects ++ ejects).contains("DAT")) Some(Module(new ChannelTap(new DataFlit, "DAT", ringNum, 0, c2c))) else None
-  private val snoopTap = if((injects ++ ejects).contains("SNP")) Some(Module(new ChannelTap(new SnoopFlit, "SNP", ringNum, ejectSnoopBuf, c2c = c2c))) else None
-  private val ereqTap = if((injects ++ ejects).contains("ERQ") && local) Some(Module(new ChannelTap(new ReqFlit, "REQ", ringNum, ejectReqBuf, c2c = c2c))) else None
-  private val tfbNodeRegister = if((injects ++ ejects).nonEmpty && hasTfb) Some(Module(new NodeRegister)) else None
-  tfbNodeRegister.foreach(_.io.nodeId := nid)
-
-  private def connectRing[K <: Flit](tap: Option[ChannelTap[K]], tx: ChannelBundle[K], rx: ChannelBundle[K], ridx: Int): Unit = {
-    if(tap.isDefined) {
-      tap.get.io.nid := nid
-      tap.get.io.rx(ridx) := rx
-      tx := tap.get.io.tx(ridx)
-      tap.get.io.eject.ready := false.B
-      tap.get.io.inject.valid := false.B
-      tap.get.io.inject.bits := DontCare
-      if(node.csnNode) {
-        tap.get.io.injectTapSelOH.head := true.B
-      } else {
-        val tgt = tap.get.io.inject.bits.tgt
-        tap.get.io.injectTapSelOH(0) := node.rightNodes.map(_.U === tgt).reduce(_ || _)
-        tap.get.io.injectTapSelOH(1) := node.leftNodes.map(_.U === tgt).reduce(_ || _)
-      }
-    } else {
-      tx.flit := Pipe(rx.flit)
-      tx.rsvd := Pipe(rx.rsvd)
-    }
-  }
-
-  for(ridx <- 0 until ringNum) {
-    connectRing(reqTap, router.rings(ridx).tx.req, router.rings(ridx).rx.req, ridx)
-    connectRing(respTap, router.rings(ridx).tx.resp, router.rings(ridx).rx.resp, ridx)
-    connectRing(dataTap, router.rings(ridx).tx.data, router.rings(ridx).rx.data, ridx)
-    connectRing(snoopTap, router.rings(ridx).tx.snoop, router.rings(ridx).rx.snoop, ridx)
-    if(local) connectRing(ereqTap, router.rings(ridx).tx.ereq.get, router.rings(ridx).rx.ereq.get, ridx)
-  }
-
-  val injectMap = mutable.Map[String, DecoupledIO[Flit]]()
-  val ejectMap = mutable.Map[String, DecoupledIO[Flit]]()
 
   private val flitMap = Map[String, Flit](
     "REQ" -> new ReqFlit,
@@ -96,14 +73,76 @@ class BaseRouter(val node: Node, ejects: Seq[String], injects: Seq[String])(impl
     "SNP" -> new SnoopFlit,
     "ERQ" -> new ReqFlit
   )
+  val injectsMap = mutable.Map[String, DecoupledIO[Flit]]()
 
-  private def registerInjectTap[K <: Flit](chn: String, tap: Option[ChannelTap[K]]): Unit = {
-    if(injects.contains(chn)) {
+  private val ejectBufSizeMap = Map[String, Int](
+    "REQ" -> p(ZJParametersKey).reqEjectBufDepth,
+    "RSP" -> 0,
+    "DAT" -> 0,
+    "SNP" -> p(ZJParametersKey).snoopEjectBufDepth,
+    "ERQ" -> p(ZJParametersKey).reqEjectBufDepth
+  )
+
+  def connectRing[K <: Flit](chn: String): Unit = {
+    val icnRx = icn.rx.getBundle(chn)
+    val icnTx = icn.tx.getBundle(chn)
+    val tap = if(icnRx.isDefined || icnTx.isDefined) Some(Module(new ChannelTap(flitMap(chn), chn, ejectBufSizeMap(chn), c2c))) else None
+    if(tap.isDefined) {
+      tap.get.suggestName(s"${chn.toLowerCase()}ChannelTap")
+      tap.get.io.nid := nid
+      tap.get.io.rx(0) := router.rings(0).rx.getBundle(chn)
+      tap.get.io.rx(1) := router.rings(1).rx.getBundle(chn)
+      router.rings(0).tx.getBundle(chn) := tap.get.io.tx(0)
+      router.rings(1).tx.getBundle(chn) := tap.get.io.tx(1)
+      tap.get.io.inject.valid := false.B
+      tap.get.io.inject.bits := DontCare
+      tap.get.io.eject.ready := false.B
+      tap.get.io.injectTapSelOH := DontCare
+    } else {
+      router.rings.foreach(r => {
+        r.tx.getBundle(chn).flit := Pipe(r.rx.getBundle(chn).flit)
+        r.tx.getBundle(chn).rsvd := Pipe(r.rx.getBundle(chn).rsvd)
+      })
+    }
+
+    if(icnRx.isDefined) {
       val buf = Module(new Queue(flitMap(chn), 2))
+      injectsMap.addOne(chn -> buf.io.enq)
       val mon = if(hasTfb) Some(Module(new FlitMonitor)) else None
       buf.suggestName(s"inject${chn.toLowerCase().capitalize}Buffer")
-      injectMap(chn) = buf.io.enq
+      buf.io.enq.valid := icnRx.get.valid
+      buf.io.enq.bits := icnRx.get.bits.asTypeOf(flitMap(chn))
+      icnRx.get.ready := buf.io.enq.ready
       tap.get.io.inject <> buf.io.deq
+
+      def checkTarget(n: Node): Bool = {
+        if(local) {
+          n.nodeId.U === buf.io.deq.bits.tgt
+        } else if(c2c) {
+          (n.nodeId.U | router.localChip.get) === buf.io.deq.bits.tgt
+        } else {
+          n.nodeId.U === Cat(
+            1.U(nodeNetBits.W),
+            NodeType.C.U(nodeTypeBits.W),
+            buf.io.deq.bits.tgt(chipAddrBits - 1, 0).asTypeOf(UInt(nodeNidBits.W))
+          )
+        }
+      }
+
+      tap.get.io.injectTapSelOH(0) := node.rightNodes.map(checkTarget).reduce(_ || _)
+      tap.get.io.injectTapSelOH(1) := node.leftNodes.map(checkTarget).reduce(_ || _)
+      when(tap.get.io.inject.valid) {
+        assert(PopCount(tap.get.io.injectTapSelOH) === 1.U, cf"Unknown routing path on $chn of node 0x${node.nodeId.toHexString}, flit tgt: 0x${buf.io.deq.bits.tgt}%x")
+      }
+      val tgt = WireInit(buf.io.deq.bits.tgt.asTypeOf(new NodeIdBundle))
+      if(!local && !c2c) {
+        if(csnC2cNum == 1) {
+          tgt.nodeCsnChip := router.remoteChipIds.get.head
+        } else {
+          tgt.nodeCsnChip := router.remoteChipIds.get(buf.io.deq.bits.tgt(log2Ceil(csnC2cNum) - 1, 0))
+        }
+        tap.get.io.inject.bits.tgt := tgt.asUInt
+      }
       mon.foreach(m => {
         m.suggestName(s"inject${chn.toLowerCase().capitalize}Monitor")
         m.io.clock := clock
@@ -118,21 +157,32 @@ class BaseRouter(val node: Node, ejects: Seq[String], injects: Seq[String])(impl
           assert(!m.io.fault, s"channel $chn inject wrong flit!")
         }
       })
+      if(m.p(ZJParametersKey).tfsParams.isEmpty) {
+        val ring = if(local) m.p(ZJParametersKey).localRing else m.p(ZJParametersKey).csnRing
+        node.checkLegalStaticInjectTarget(ring, chn, buf.io.deq.bits.tgt.asTypeOf(new NodeIdBundle), buf.io.deq.valid, nid, router.localChip)
+      }
     }
-  }
-  registerInjectTap("REQ", reqTap)
-  registerInjectTap("RSP", respTap)
-  registerInjectTap("DAT", dataTap)
-  registerInjectTap("SNP", snoopTap)
-  if(local) registerInjectTap("ERQ", ereqTap)
 
-  private def registerEjectTap[K <: Flit](chn: String, tap: Option[ChannelTap[K]]): Unit = {
-    if(ejects.contains(chn)) {
+    if(icnTx.isDefined) {
       val buf = Module(new Queue(flitMap(chn), 1, pipe = true))
       val mon = if(hasTfb) Some(Module(new FlitMonitor)) else None
       buf.suggestName(s"eject${chn.toLowerCase().capitalize}Buffer")
-      ejectMap(chn) = buf.io.deq
+      icnTx.get.valid := buf.io.deq.valid
+      icnTx.get.bits := buf.io.deq.bits.asTypeOf(icnTx.get.bits)
+      buf.io.deq.ready := icnTx.get.ready
       buf.io.enq <> tap.get.io.eject
+
+      val src = WireInit(tap.get.io.eject.bits.src.asTypeOf(new NodeIdBundle))
+      if(!local && !c2c && m.p(ZJParametersKey).tfsParams.isEmpty) {
+        val chipSrc = tap.get.io.eject.bits.src.asTypeOf(new NodeIdBundle).nodeCsnChip
+        val c2cHits = router.remoteChipIds.get.map(_ === chipSrc)
+        when(tap.get.io.eject.valid) {
+          assert(PopCount(c2cHits) === 1.U, cf"Invalid eject chip target $chipSrc of node 0x${nid}%x on $chn")
+        }
+        src.nodeCsnChip := PriorityEncoder(c2cHits)
+        buf.io.enq.bits.src := src.asUInt
+      }
+
       mon.foreach(m => {
         m.suggestName(s"eject${chn.toLowerCase().capitalize}Monitor")
         m.io.clock := clock
@@ -147,20 +197,17 @@ class BaseRouter(val node: Node, ejects: Seq[String], injects: Seq[String])(impl
       })
     }
   }
-  registerEjectTap("REQ", reqTap)
-  registerEjectTap("RSP", respTap)
-  registerEjectTap("DAT", dataTap)
-  registerEjectTap("SNP", snoopTap)
-  if(local) registerEjectTap("ERQ", ereqTap)
+}
 
-  def connInject(io: DecoupledIO[Data], chn: String): Unit = {
-    injectMap(chn).valid := io.valid
-    injectMap(chn).bits := io.bits.asTypeOf(injectMap(chn).bits)
-    io.ready := injectMap(chn).ready
-  }
-  def connEject(io: DecoupledIO[Data], chn: String): Unit = {
-    io.valid := ejectMap(chn).valid
-    io.bits := ejectMap(chn).bits.asTypeOf(io.bits)
-    ejectMap(chn).ready := io.ready
-  }
+class BaseRouter(val node: Node)(implicit p: Parameters) extends ZJModule
+  with BaseRouterUtils {
+  router.nodeId := nid
+  private val tfbNodeRegister = if((node.injects ++ node.ejects).nonEmpty && hasTfb) Some(Module(new NodeRegister)) else None
+  tfbNodeRegister.foreach(_.io.nodeId := nid)
+
+  connectRing("REQ")
+  connectRing("RSP")
+  connectRing("DAT")
+  connectRing("SNP")
+  if(local) connectRing("ERQ")
 }

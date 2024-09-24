@@ -13,7 +13,7 @@ case class ZJParameters(
   ringId: Int = 0,
   modulePrefix: String = "",
   chipAddrBits: Int = 3,
-  nodeNidBits: Int = 4,
+  nodeNidBits: Int = 5,
   dataBits: Int = 256,
   M: Int = 0,
   PB: Int = 0,
@@ -32,27 +32,27 @@ case class ZJParameters(
   tfsParams: Option[TrafficSimParams] = None,
   injectRsvdTimerShift: Int = 8
 ) {
-  val requestAddrBits = 48
-  val snoopAddrBits = requestAddrBits - 3
+  lazy val requestAddrBits = 48
+  lazy val snoopAddrBits = requestAddrBits - 3
 
-  val nodeTypeBits = NodeType.width
-  val nodeNetBits = 1
-  val nodeIdBits: Int = nodeNetBits + nodeTypeBits + nodeNidBits
-  val beBits: Int = dataBits / 8
-  val dataCheckBits: Int = if(DC) dataBits / 8 else 0
-  val poisonBits: Int = if(P) dataBits / 64 else 0
-  private val dwb = if(dataBits == 128) {
+  lazy val nodeTypeBits = NodeType.width
+  lazy val nodeNetBits = 1
+  lazy val nodeIdBits: Int = nodeNetBits + nodeTypeBits + nodeNidBits
+  lazy val beBits: Int = dataBits / 8
+  lazy val dataCheckBits: Int = if(DC) dataBits / 8 else 0
+  lazy val poisonBits: Int = if(P) dataBits / 64 else 0
+  private lazy val dwb = if(dataBits == 128) {
     234
   } else if(dataBits == 256) {
     383
   } else {
     681
   }
-  val reqFlitBits = 3 * (nodeIdBits - 7) + 88 + requestAddrBits + Y + M + PB + S + E.max(R)
-  val respFlitBits = 2 * (nodeIdBits - 7) + 65
-  val snoopFlitBits = 3 * (nodeIdBits - 7) + 59 + snoopAddrBits + M + E
-  val dataFlitBits = 3 * (nodeIdBits - 7) + dwb + Y + dataCheckBits + poisonBits
-  val maxFlitBits = Seq(reqFlitBits, respFlitBits, snoopFlitBits, dataFlitBits).max
+  lazy val reqFlitBits = 3 * (nodeIdBits - 7) + 88 + requestAddrBits + Y + M + PB + S + E.max(R)
+  lazy val respFlitBits = 2 * (nodeIdBits - 7) + 65
+  lazy val snoopFlitBits = 3 * (nodeIdBits - 7) + 59 + snoopAddrBits + M + E
+  lazy val dataFlitBits = 3 * (nodeIdBits - 7) + dwb + Y + dataCheckBits + poisonBits
+  lazy val maxFlitBits = Seq(reqFlitBits, respFlitBits, snoopFlitBits, dataFlitBits).max
   require(nodeIdBits >= 7 && nodeIdBits <= 11)
 
   lazy val localRing: Seq[Node] = if(localNodeParams.nonEmpty) getRing(localNodeParams, false) else Seq()
@@ -60,12 +60,14 @@ case class ZJParameters(
 
   private def getRing(nodeParams: Seq[NodeParam], csn: Boolean): Seq[Node] = {
     require(nodeParams.size >= 3)
-    var rId = 0
+    var rfId = 0
+    var riId = 0
     var hfId = 0
     var hiId = 0
     var cId = 0
     var sId = 0
     var pId = 0
+    val shmt = if(csn) chipAddrBits else 0
     val nodes = for((np, idx) <- nodeParams.zipWithIndex) yield {
       val n = Node(
         suffix = np.name,
@@ -76,16 +78,17 @@ case class ZJParameters(
         ringSize = nodeParams.size,
         oddNode = idx % 2 == 1,
         splitFlit = np.splitFlit,
-        mainMemory = np.mainMemory,
-        dmaPort = np.dmaPort
+        mainMemory = np.mainMemory
       )
+      if(csn) require(n.nodeType == NodeType.RF || n.nodeType == NodeType.HF || n.nodeType == NodeType.C || n.nodeType == NodeType.P)
       n.nodeType match {
-        case NodeType.R => n.nid = rId; rId = rId + 1
-        case NodeType.HF => n.nid = hfId; hfId = hfId + 1
+        case NodeType.RF => n.nid = rfId << shmt; rfId = rfId + 1
+        case NodeType.RI => n.nid = riId; riId = riId + 1
+        case NodeType.HF => n.nid = hfId << shmt; hfId = hfId + 1
         case NodeType.HI => n.nid = hiId; hiId = hiId + 1
         case NodeType.C => n.nid = cId; cId = cId + 1
         case NodeType.S => n.nid = sId; sId = sId + 1
-        case NodeType.P => n.nid = pId; pId = pId + 1
+        case NodeType.P => n.nid = pId << shmt; pId = pId + 1
       }
       n
     }
@@ -99,36 +102,31 @@ case class ZJParameters(
 
 trait HasZJParams {
   implicit val p: Parameters
-  val zjparam = p(ZJParametersKey)
-  val M = p(ZJParametersKey).M
-  val PB = p(ZJParametersKey).PB
-  val E = p(ZJParametersKey).E
-  val R = p(ZJParametersKey).R
-  val S = p(ZJParametersKey).S
-  val Y = p(ZJParametersKey).Y
-  val raw = p(ZJParametersKey).requestAddrBits
-  val saw = p(ZJParametersKey).snoopAddrBits
-  val niw = p(ZJParametersKey).nodeIdBits
-  val dcw = p(ZJParametersKey).dataCheckBits
-  val pw = p(ZJParametersKey).poisonBits
-  val dw = p(ZJParametersKey).dataBits
-  val bew = p(ZJParametersKey).beBits
-  val chipAddrBits = p(ZJParametersKey).chipAddrBits
-  val reqFlitBits = p(ZJParametersKey).reqFlitBits
-  val respFlitBits = p(ZJParametersKey).respFlitBits
-  val snoopFlitBits = p(ZJParametersKey).snoopFlitBits
-  val dataFlitBits = p(ZJParametersKey).dataFlitBits
-  val maxFlitBits = p(ZJParametersKey).maxFlitBits
-  val nodeNidBits = p(ZJParametersKey).nodeNidBits
-  val nodeTypeBits = p(ZJParametersKey).nodeTypeBits
-  val nodeNetBits = p(ZJParametersKey).nodeNetBits
-  val hasTfb = p(ZJParametersKey).tfbParams.isDefined
-
-  def genNodeId(net: UInt, nt: UInt, nid: UInt): UInt = {
-    val netOff = nodeNidBits + nodeTypeBits
-    val typeOff = nodeNidBits
-    ((net << netOff.U).asUInt | (nt << typeOff.U).asUInt | nid.asUInt)(niw - 1, 0)
-  }
+  val zjParams = p(ZJParametersKey)
+  lazy val M = zjParams.M
+  lazy val PB = zjParams.PB
+  lazy val E = zjParams.E
+  lazy val R = zjParams.R
+  lazy val S = zjParams.S
+  lazy val Y = zjParams.Y
+  lazy val raw = zjParams.requestAddrBits
+  lazy val saw = zjParams.snoopAddrBits
+  lazy val niw = zjParams.nodeIdBits
+  lazy val dcw = zjParams.dataCheckBits
+  lazy val pw = zjParams.poisonBits
+  lazy val dw = zjParams.dataBits
+  lazy val bew = zjParams.beBits
+  lazy val chipAddrBits = zjParams.chipAddrBits
+  lazy val reqFlitBits = zjParams.reqFlitBits
+  lazy val respFlitBits = zjParams.respFlitBits
+  lazy val snoopFlitBits = zjParams.snoopFlitBits
+  lazy val dataFlitBits = zjParams.dataFlitBits
+  lazy val maxFlitBits = zjParams.maxFlitBits
+  lazy val nodeNidBits = zjParams.nodeNidBits
+  lazy val nodeTypeBits = zjParams.nodeTypeBits
+  lazy val nodeNetBits = zjParams.nodeNetBits
+  lazy val hasTfb = zjParams.tfbParams.isDefined
+  lazy val csnNidBits = nodeNidBits - chipAddrBits
 }
 
 class ZJBundle(implicit val p: Parameters) extends Bundle with HasZJParams

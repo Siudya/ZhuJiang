@@ -30,7 +30,7 @@ class FlitMonitor()(implicit val p: Parameters) extends BlackBox with HasBlackBo
        |  input  [7:0] \t\tflitType,
        |  input  [${niw - 1}:0] \t\tnodeId,
        |  input  [${maxFlitBits - 1}:0] \tflit,
-       |  output \t\t\t\t\tfault
+       |  output reg\t\t\tfault
        |);
        |`ifndef SYNTHESIS
        |  import "DPI-C" function void tfb_flit_monitor (
@@ -38,7 +38,7 @@ class FlitMonitor()(implicit val p: Parameters) extends BlackBox with HasBlackBo
        |    input  bit \t\t\t\t\tinject,
        |    input  byte \t\t\t\tflit_type,
        |    input  bit [${maxFlitBits - 1}:0] \tflit,
-       |    output reg \t\t\t\t\tfault
+       |    output bit \t\t\t\t\tfault
        |  );
        |  wire [15:0] nid;
        |  assign nid = {${16 - niw}'h0, nodeId};

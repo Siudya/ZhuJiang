@@ -4,8 +4,32 @@ import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config.Parameters
 import xijiang.Node
-import xijiang.router.{CnRx, CnTx}
+import xijiang.router.base.{IcnBundle, IcnRxBundle, IcnTxBundle}
+import zhujiang.chi._
 import zhujiang.{ZJBundle, ZJModule, ZJParametersKey}
+
+trait C2cUtils {
+  m: ZJModule =>
+  val c2cParams = p(ZJParametersKey).c2cParams
+  val flitBitsMap = Map[String, Int](
+    "REQ" -> reqFlitBits,
+    "RSP" -> respFlitBits,
+    "DAT" -> dataFlitBits,
+    "SNP" -> snoopFlitBits
+  )
+  val txBufSizeMap = Map[String, Int](
+    "REQ" -> c2cParams.reqBufTxDepth,
+    "RSP" -> c2cParams.respBufTxDepth,
+    "DAT" -> c2cParams.dataBufTxDepth,
+    "SNP" -> c2cParams.snoopBufTxDepth,
+  )
+  val rxBufSizeMap = Map[String, Int](
+    "REQ" -> c2cParams.reqBufRxDepth,
+    "RSP" -> c2cParams.respBufRxDepth,
+    "DAT" -> c2cParams.dataBufRxDepth,
+    "SNP" -> c2cParams.snoopBufRxDepth,
+  )
+}
 
 class C2cPayload(implicit p: Parameters) extends ZJBundle {
   val flit = UInt(maxFlitBits.W)
@@ -13,8 +37,7 @@ class C2cPayload(implicit p: Parameters) extends ZJBundle {
 }
 
 class C2cRingPort(node: Node)(implicit p: Parameters) extends ZJBundle {
-  val tx = Flipped(new CnRx(node))
-  val rx = Flipped(new CnTx(node))
+  val icn = Flipped(new IcnBundle(node))
   val chip = Output(UInt(chipAddrBits.W))
 }
 
@@ -24,89 +47,75 @@ class C2cLinkPort(implicit p: Parameters) extends ZJBundle {
   val chip = Input(UInt(chipAddrBits.W))
 }
 
-class C2cPackLayerTx(node: Node)(implicit p: Parameters) extends ZJModule {
-  private val c2cParams = p(ZJParametersKey).c2cParams
+class C2cPackLayerTx(node: Node)(implicit p: Parameters) extends ZJModule with C2cUtils {
   val io = IO(new Bundle {
-    val fromRing = Flipped(new CnTx(node))
+    val fromRing = Flipped(new IcnTxBundle(node))
     val toLink = Decoupled(new C2cPayload)
   })
-  private val reqTxBuffer = Module(new Queue(UInt(reqFlitBits.W), c2cParams.reqBufTxDepth))
-  private val respTxBuffer = Module(new Queue(UInt(respFlitBits.W), c2cParams.respBufTxDepth))
-  private val dataTxBuffer = Module(new Queue(UInt(dataFlitBits.W), c2cParams.dataBufTxDepth))
-  private val snoopTxBuffer = Module(new Queue(UInt(snoopFlitBits.W), c2cParams.snoopBufTxDepth))
-  private def connRing(buf: Queue[UInt], fromRing: DecoupledIO[Data]): Unit = {
-    buf.io.enq.valid := fromRing.valid
-    buf.io.enq.bits := fromRing.bits.asUInt
-    fromRing.ready := buf.io.enq.ready
+  private val arb = Module(new RRArbiter(UInt(maxFlitBits.W), node.ejects.size))
+
+  private def connRing(chn: String): Unit = {
+    val icnPort = io.fromRing.getBundle(chn)
+    if(icnPort.isDefined) {
+      val txBuf = Module(new Queue(UInt(flitBitsMap(chn).W), txBufSizeMap(chn)))
+      txBuf.suggestName(s"${chn.toLowerCase}TxBuffer")
+      txBuf.io.enq.valid := icnPort.get.valid
+      txBuf.io.enq.bits := icnPort.get.bits.asUInt
+      icnPort.get.ready := txBuf.io.enq.ready
+      arb.io.in(ChannelEncodings.encodingsMap(chn)) <> txBuf.io.deq
+    }
   }
-  connRing(reqTxBuffer, io.fromRing.req)
-  connRing(respTxBuffer, io.fromRing.resp)
-  connRing(dataTxBuffer, io.fromRing.data)
-  connRing(snoopTxBuffer, io.fromRing.snoop)
-
-  private val arb = Module(new RRArbiter(UInt(maxFlitBits.W), 4))
-  arb.io.in(0) <> reqTxBuffer.io.deq
-  arb.io.in(1) <> respTxBuffer.io.deq
-  arb.io.in(2) <> dataTxBuffer.io.deq
-  arb.io.in(3) <> snoopTxBuffer.io.deq
-
+  node.ejects.foreach(connRing)
   io.toLink.valid := arb.io.out.valid
   io.toLink.bits.flit := arb.io.out.bits
   io.toLink.bits.cid := arb.io.chosen
   arb.io.out.ready := io.toLink.ready
 }
 
-class C2cPackLayerRx(node: Node)(implicit p: Parameters) extends ZJModule {
-  private val c2cParams = p(ZJParametersKey).c2cParams
+class C2cPackLayerRx(node: Node)(implicit p: Parameters) extends ZJModule with C2cUtils {
   val io = IO(new Bundle {
-    val toRing = Flipped(new CnRx(node))
+    val toRing = Flipped(new IcnRxBundle(node))
     val fromLink = Flipped(Decoupled(new C2cPayload))
   })
-  private val reqRxBuffer = Module(new Queue(UInt(reqFlitBits.W), c2cParams.reqBufRxDepth))
-  private val respRxBuffer = Module(new Queue(UInt(respFlitBits.W), c2cParams.respBufRxDepth))
-  private val dataRxBuffer = Module(new Queue(UInt(dataFlitBits.W), c2cParams.dataBufRxDepth))
-  private val snoopRxBuffer = Module(new Queue(UInt(snoopFlitBits.W), c2cParams.snoopBufRxDepth))
-  private def connRing(buf: Queue[UInt], toRing: DecoupledIO[Data]): Unit = {
-    toRing.valid := buf.io.deq.valid
-    toRing.bits := buf.io.deq.bits.asTypeOf(toRing.bits)
-    buf.io.deq.ready := toRing.ready
+  private def connRing(chn: String): Bool = {
+    val ready = WireInit(false.B)
+    val icnPort = io.toRing.getBundle(chn)
+    if(icnPort.isDefined) {
+      val rxBuf = Module(new Queue(UInt(flitBitsMap(chn).W), rxBufSizeMap(chn)))
+      rxBuf.suggestName(s"${chn.toLowerCase}RxBuffer")
+      icnPort.get.valid := rxBuf.io.deq.valid
+      icnPort.get.bits := rxBuf.io.deq.bits.asTypeOf(icnPort.get.bits)
+      rxBuf.io.deq.ready := icnPort.get.ready
+      val enqHit = ChannelEncodings.encodingsMap(chn).U === io.fromLink.bits.cid
+      rxBuf.io.enq.valid := io.fromLink.valid && enqHit
+      rxBuf.io.enq.bits := io.fromLink.bits.flit(flitBitsMap(chn) - 1, 0)
+      ready := rxBuf.io.enq.ready && enqHit
+    }
+    ready
   }
-  connRing(reqRxBuffer, io.toRing.req)
-  connRing(respRxBuffer, io.toRing.resp)
-  connRing(dataRxBuffer, io.toRing.data)
-  connRing(snoopRxBuffer, io.toRing.snoop)
-
-  private val chooseOH = Seq.tabulate(4)(idx => idx).map(_.U === io.fromLink.bits.cid)
-  reqRxBuffer.io.enq.valid := io.fromLink.valid && chooseOH(0)
-  reqRxBuffer.io.enq.bits := io.fromLink.bits.flit(reqFlitBits - 1, 0)
-
-  respRxBuffer.io.enq.valid := io.fromLink.valid && chooseOH(1)
-  respRxBuffer.io.enq.bits := io.fromLink.bits.flit(respFlitBits - 1, 0)
-
-  dataRxBuffer.io.enq.valid := io.fromLink.valid && chooseOH(2)
-  dataRxBuffer.io.enq.bits := io.fromLink.bits.flit(dataFlitBits - 1, 0)
-
-  snoopRxBuffer.io.enq.valid := io.fromLink.valid && chooseOH(3)
-  snoopRxBuffer.io.enq.bits := io.fromLink.bits.flit(snoopFlitBits - 1, 0)
-
-  io.fromLink.ready := Mux1H(chooseOH, Seq(
-    reqRxBuffer.io.enq.ready,
-    respRxBuffer.io.enq.ready,
-    dataRxBuffer.io.enq.ready,
-    snoopRxBuffer.io.enq.ready
-  ))
+  private val readies = node.injects.map(connRing)
+  io.fromLink.ready := Cat(readies).orR
 }
 
 class C2cPackLayer(node: Node)(implicit p: Parameters) extends ZJModule {
   val io = IO(new Bundle {
-    val ring = new C2cRingPort(node)
-    val c2c = new C2cLinkPort
+    val local = new C2cRingPort(node)
+    val remote = new C2cLinkPort
   })
   private val transmitter = Module(new C2cPackLayerTx(node))
   private val receiver = Module(new C2cPackLayerRx(node))
-  transmitter.io.fromRing <> io.ring.rx
-  io.c2c.tx <> transmitter.io.toLink
-  receiver.io.fromLink <> io.c2c.rx
-  io.ring.tx <> receiver.io.toRing
-  io.ring.chip := io.c2c.chip
+  private val txBufs = Seq.fill(p(ZJParametersKey).c2cParams.externalBuffers)(Module(new Queue(new C2cPayload, 2)))
+  private val rxBufs = Seq.fill(p(ZJParametersKey).c2cParams.externalBuffers)(Module(new Queue(new C2cPayload, 2)))
+
+  private val txDst = txBufs.map(_.io.enq) ++ Seq(io.remote.tx)
+  private val txSrc = Seq(transmitter.io.toLink) ++ txBufs.map(_.io.deq)
+  private val rxDst = Seq(receiver.io.fromLink) ++ rxBufs.map(_.io.enq)
+  private val rxSrc = rxBufs.map(_.io.deq) ++ Seq(io.remote.rx)
+  for((dst, src) <- (txDst ++ rxDst).zip(txSrc ++ rxSrc)) dst <> src
+
+  transmitter.io.fromRing <> io.local.icn.tx
+  io.remote.tx <> transmitter.io.toLink
+  receiver.io.fromLink <> io.remote.rx
+  io.local.icn.rx <> receiver.io.toRing
+  io.local.chip := io.remote.chip
 }

@@ -10,12 +10,12 @@ val defaultVersions = Map(
   "chisel-plugin" -> "6.1.0",
   "chiseltest" -> "5.0.0",
   "scala" -> "2.13.10",
-  "scalatest" -> "3.2.7"
+  "scalatest" -> "3.2.7",
 )
 
 def getVersion(dep: String, org: String = "org.chipsalliance", cross: Boolean = false) = {
   val version = sys.env.getOrElse(dep + "Version", defaultVersions(dep))
-  if (cross)
+  if(cross)
     ivy"$org:::$dep:$version"
   else
     ivy"$org::$dep:$version"
@@ -98,7 +98,6 @@ trait RocketChip
   }
 }
 
-
 object xsutils extends SbtModule with ScalafmtModule with CommonModule {
 
   override def millSourcePath = os.pwd / "xs-utils"
@@ -107,7 +106,7 @@ object xsutils extends SbtModule with ScalafmtModule with CommonModule {
 
   override def ivyDeps = super.ivyDeps() ++ Agg(
     getVersion("chisel"),
-    getVersion("chiseltest", "edu.berkeley.cs"),
+    getVersion("chiseltest", "edu.berkeley.cs")
   )
 }
 
@@ -120,11 +119,12 @@ object zhujiang extends SbtModule with ScalafmtModule with CommonModule {
   override def ivyDeps = super.ivyDeps() ++ Agg(
     getVersion("chisel"),
     getVersion("chiseltest", "edu.berkeley.cs"),
+    ivy"org.chipsalliance:llvm-firtool:1.62.1"
   )
 
   object test extends SbtModuleTests with TestModule.ScalaTest {
     override def ivyDeps = super.ivyDeps() ++ Agg(
-      getVersion("scalatest","org.scalatest")
+      getVersion("scalatest", "org.scalatest")
     )
 
     def testFramework = "org.scalatest.tools.Framework"

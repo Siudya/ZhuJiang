@@ -9,5 +9,7 @@ case class C2cParams(
   reqBufRxDepth: Int = 2,
   respBufRxDepth: Int = 2,
   dataBufRxDepth: Int = 2,
-  snoopBufRxDepth: Int = 2
+  snoopBufRxDepth: Int = 2,
+
+  externalBuffers: Int = 2
 )

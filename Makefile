@@ -26,3 +26,6 @@ tfs-top: build-dir
 
 verilog: build-dir
 	mill -i zhujiang.test.runMain zhujiang.ZhujiangTop $(RTL_AGRS) -td $(RTL_DIR)
+
+clean:
+	rm -r build/*

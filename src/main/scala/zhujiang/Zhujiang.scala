@@ -1,6 +1,6 @@
 package zhujiang
 
-import chisel3.Module
+import chisel3._
 import chisel3.experimental.{ChiselAnnotation, annotate}
 import org.chipsalliance.cde.config.Parameters
 import xijiang.router._
@@ -19,8 +19,9 @@ import xijiang.c2c.C2cLinkPort
 import zhujiang.chi.{DataFlit, ReqFlit, RespFlit}
 import zhujiang.nhl2._
 import sifive.enterprise.firrtl.NestedPrefixModulesAnnotation
-import xijiang.router.base.BaseIcnBundle
-import xijiang.{Ring, RingIO}
+import xijiang.router.base.IcnBundle
+import xijiang.Ring
+import xijiang.c2c.C2cLinkPort
 
 
 class Zhujiang(implicit p: Parameters) extends ZJModule {
@@ -54,7 +55,7 @@ class Zhujiang(implicit p: Parameters) extends ZJModule {
 //  private val csnRing = Module(new Ring(false))
 
   localRing.icnHis.get.foreach(_ <> DontCare)
-  localRing.ioChip.get := 0.U
+  localRing.io_chip := 0.U
 
   /*
    * NHL2 CHI Bundle Param
@@ -71,24 +72,24 @@ class Zhujiang(implicit p: Parameters) extends ZJModule {
   /*
    *Connect NHL2 IO <> xijiang
    */
-  val nrLocalRn = localRing.icnRns.get.length
+  val nrLocalRn = localRing.icnRfs.get.length
   val io = IO(new Bundle { val fromNHL2 = Vec(nrLocalRn, Flipped(new CHIBundleDecoupled(params))) })
-  val connectToNHL2s = Seq.fill(nrLocalRn) { Module(new ConnectToNHL2(params, zjparam.localRing.filter(_.nodeType == NodeType.R).last)) }
+  val connectToNHL2s = Seq.fill(nrLocalRn) { Module(new ConnectToNHL2(params, zjParams.localRing.filter(_.nodeType == NodeType.RF).last)) }
   connectToNHL2s.zipWithIndex.foreach {
     case (connect, i) =>
       connect.io.fromNHL2 <> io.fromNHL2(i)
-      connect.io.toRnIcn  <> localRing.icnRns.get(i)
+      connect.io.toRnIcn  <> localRing.icnRfs.get(i)
   }
 
 
   /*
    * dongjiang
    */
-  val ddrcNode  = zjparam.localRing.filter(_.mainMemory).last
-  val dcuNodes  = zjparam.localRing.filter(_.nodeType == NodeType.S).filter(!_.mainMemory)
-  require(zjparam.localRing.count(_.mainMemory) == 1)
+  val ddrcNode  = zjParams.localRing.filter(_.mainMemory).last
+  val dcuNodes  = zjParams.localRing.filter(_.nodeType == NodeType.S).filter(!_.mainMemory)
+  require(zjParams.localRing.count(_.mainMemory) == 1)
 
-  val dongjiang = Module(new DongJiang())
+  val dongjiang = Module(new DongJiang(zjParams.localRing.filter(_.nodeType == NodeType.HF).last))
   val ddrc      = Module(new FakeDDRC(ddrcNode))
   val dcus      = Seq.fill(dcuNodes.length) { Module(new DCU(dcuNodes.head)) }
 

@@ -1,6 +1,7 @@
 package DONGJIANG
 
 import zhujiang.chi._
+import xijiang.Node
 import DONGJIANG.CHI._
 import DONGJIANG.PCU._
 import DONGJIANG.CPU._
@@ -9,14 +10,14 @@ import chisel3.util._
 import org.chipsalliance.cde.config._
 import xs.utils.perf.{DebugOptions, DebugOptionsKey}
 import Utils.FastArb._
-import xijiang.router.{HnfIcn, RnIcn}
+import xijiang.router.base.IcnBundle
 import zhujiang.HasZJParams
 
 abstract class DJModule(implicit val p: Parameters) extends Module with HasDJParam
 abstract class DJBundle(implicit val p: Parameters) extends Bundle with HasDJParam
 
 
-class DongJiang()(implicit p: Parameters) extends DJModule {
+class DongJiang(localHf: Node, csnRf: Option[Node] = None, csnHf: Option[Node] = None)(implicit p: Parameters) extends DJModule {
 /*
  * TODO: Update It
  * System Architecture: (2 RNSLAVE, 1 RNMASTER, 1 SNMASTER and 2 Slice)
@@ -145,10 +146,10 @@ class DongJiang()(implicit p: Parameters) extends DJModule {
 
 // ------------------------------------------ IO declaration ----------------------------------------------//
     val io = IO(new Bundle {
-        val toLocal        = Flipped(new HnfIcn(local = true, node = localHnfNode))
+        val toLocal        = Flipped(new IcnBundle(localHf))
         val toCSNOpt       = if (hasCSNIntf) Some(new Bundle {
-            val hn         = Flipped(new HnfIcn(local = false, node = csnHnfNodeOpt.get))
-            val rn         = Flipped(new RnIcn(node = csnRnfNodeOpt.get))
+            val hn         = Flipped(new IcnBundle(csnHf.get))
+            val rn         = Flipped(new IcnBundle(csnRf.get))
         }) else None
     })
 
@@ -176,12 +177,12 @@ class DongJiang()(implicit p: Parameters) extends DJModule {
      * Connect LOCAL RING CHI IO
      */
     // tx req
-    io.toLocal.tx.req   <> localRnSlave.io.chi.txreq
+    io.toLocal.tx.req.get   <> localRnSlave.io.chi.txreq
     // tx rsp & dat
     val rspQ = Module(new Queue(new RespFlit(), entries = 2))
     val datQ = Module(new Queue(new DataFlit(), entries = 2))
-    io.toLocal.tx.resp  <> rspQ.io.enq
-    io.toLocal.tx.data  <> datQ.io.enq
+    io.toLocal.tx.resp.get  <> rspQ.io.enq
+    io.toLocal.tx.data.get  <> datQ.io.enq
     // tx rsp
     localSnMaster.io.chi.rxrsp.valid    := rspQ.io.deq.valid & fromSnNode(rspQ.io.deq.bits.SrcID)
     localRnSlave.io.chi.txrsp.valid     := rspQ.io.deq.valid & !fromSnNode(rspQ.io.deq.bits.SrcID)
@@ -196,32 +197,32 @@ class DongJiang()(implicit p: Parameters) extends DJModule {
     when(fromSnNode(datQ.io.deq.bits.SrcID)) { datQ.io.deq.ready := localSnMaster.io.chi.rxdat.ready }.otherwise { datQ.io.deq.ready := localRnSlave.io.chi.txdat.ready }
     // rx ereq & snp
     localSnMaster.io.chi.txreq          <> io.toLocal.rx.req.get
-    localRnSlave.io.chi.rxsnp           <> io.toLocal.rx.snoop
+    localRnSlave.io.chi.rxsnp           <> io.toLocal.rx.snoop.get
     localSnMaster.io.chi.rxsnp          <> DontCare
     // rx rsp & dat
-    fastArbDec(Seq(localSnMaster.io.chi.txrsp, localRnSlave.io.chi.rxrsp)) <> io.toLocal.rx.resp
-    fastArbDec(Seq(localSnMaster.io.chi.txdat, localRnSlave.io.chi.rxdat)) <> io.toLocal.rx.data
+    fastArbDec(Seq(localSnMaster.io.chi.txrsp, localRnSlave.io.chi.rxrsp)) <> io.toLocal.rx.resp.get
+    fastArbDec(Seq(localSnMaster.io.chi.txdat, localRnSlave.io.chi.rxdat)) <> io.toLocal.rx.data.get
 
     /*
      * Connect CSN CHI IO
      */
     if(hasCSNIntf) {
         // tx
-        io.toCSNOpt.get.hn.tx.req <> csnRnSlaveOpt.get.io.chi.txreq
-        io.toCSNOpt.get.hn.tx.resp <> csnRnSlaveOpt.get.io.chi.txrsp
-        io.toCSNOpt.get.hn.tx.data <> csnRnSlaveOpt.get.io.chi.txdat
+        io.toCSNOpt.get.hn.tx.req.get <> csnRnSlaveOpt.get.io.chi.txreq
+        io.toCSNOpt.get.hn.tx.resp.get <> csnRnSlaveOpt.get.io.chi.txrsp
+        io.toCSNOpt.get.hn.tx.data.get <> csnRnSlaveOpt.get.io.chi.txdat
         // rx
-        csnRnSlaveOpt.get.io.chi.rxsnp <> io.toCSNOpt.get.hn.rx.snoop
-        csnRnSlaveOpt.get.io.chi.rxrsp <> io.toCSNOpt.get.hn.rx.resp
-        csnRnSlaveOpt.get.io.chi.rxdat <> io.toCSNOpt.get.hn.rx.data
+        csnRnSlaveOpt.get.io.chi.rxsnp <> io.toCSNOpt.get.hn.rx.snoop.get
+        csnRnSlaveOpt.get.io.chi.rxrsp <> io.toCSNOpt.get.hn.rx.resp.get
+        csnRnSlaveOpt.get.io.chi.rxdat <> io.toCSNOpt.get.hn.rx.data.get
         // tx
-        csnRnMasterOpt.get.io.chi.txreq <> io.toCSNOpt.get.rn.rx.req
-        csnRnMasterOpt.get.io.chi.txrsp <> io.toCSNOpt.get.rn.rx.resp
-        csnRnMasterOpt.get.io.chi.txdat <> io.toCSNOpt.get.rn.rx.data
+        csnRnMasterOpt.get.io.chi.txreq <> io.toCSNOpt.get.rn.rx.req.get
+        csnRnMasterOpt.get.io.chi.txrsp <> io.toCSNOpt.get.rn.rx.resp.get
+        csnRnMasterOpt.get.io.chi.txdat <> io.toCSNOpt.get.rn.rx.data.get
         // rx
-        io.toCSNOpt.get.rn.tx.snoop <> csnRnMasterOpt.get.io.chi.rxsnp
-        io.toCSNOpt.get.rn.tx.resp <> csnRnMasterOpt.get.io.chi.rxrsp
-        io.toCSNOpt.get.rn.tx.data <> csnRnMasterOpt.get.io.chi.rxdat
+        io.toCSNOpt.get.rn.tx.snoop.get <> csnRnMasterOpt.get.io.chi.rxsnp
+        io.toCSNOpt.get.rn.tx.resp.get <> csnRnMasterOpt.get.io.chi.rxrsp
+        io.toCSNOpt.get.rn.tx.data .get<> csnRnMasterOpt.get.io.chi.rxdat
     }
 
     /*

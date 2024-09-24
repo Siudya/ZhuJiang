@@ -93,14 +93,14 @@ case class DJParam(
 
 
 trait HasParseZJParam extends HasZJParams {
-    val localRnfNode    = zjparam.localRing.filter(_.nodeType == NodeType.R)
-    val localHnfNode    = zjparam.localRing.filter(_.nodeType == NodeType.HF).last
-    val localSnNode     = zjparam.localRing.filter(_.nodeType == NodeType.S)
-    val hasCSN          = zjparam.csnRing.nonEmpty
-    val csnHnfNodeOpt   = if(hasCSN) Option(zjparam.csnRing.filter(_.nodeType == NodeType.HF).last) else None
-    val csnRnfNodeOpt   = if(hasCSN) Option(zjparam.csnRing.filter(_.nodeType == NodeType.R).last) else None
+    val localRnfNode    = zjParams.localRing.filter(_.nodeType == NodeType.RF)
+    val localHnfNode    = zjParams.localRing.filter(_.nodeType == NodeType.HF).last
+    val localSnNode     = zjParams.localRing.filter(_.nodeType == NodeType.S)
+    val hasCSN          = zjParams.csnRing.nonEmpty
+    val csnHnfNodeOpt   = if(hasCSN) Option(zjParams.csnRing.filter(_.nodeType == NodeType.HF).last) else None
+    val csnRnfNodeOpt   = if(hasCSN) Option(zjParams.csnRing.filter(_.nodeType == NodeType.RF).last) else None
 
-    require(zjparam.localRing.count(_.nodeType == NodeType.HF) == 1)
+    require(zjParams.localRing.count(_.nodeType == NodeType.HF) == 1)
     require(localSnNode.last.mainMemory)
     require(localHnfNode.splitFlit)
     if(hasCSN) {
@@ -109,7 +109,7 @@ trait HasParseZJParam extends HasZJParams {
     }
 
     // Local Base Node Mes
-    val nrRnfNode       = zjparam.localRing.count(_.nodeType  == NodeType.R)
+    val nrRnfNode       = zjParams.localRing.count(_.nodeType  == NodeType.RF)
     val rnfNodeIdBits   = log2Ceil(nrRnfNode)
     val rnNodeIdSeq     = localRnfNode.map(_.nodeId)
     val snNodeIdSeq     = localSnNode.map(_.nodeId)

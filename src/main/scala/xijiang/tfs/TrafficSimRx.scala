@@ -6,18 +6,6 @@ import org.chipsalliance.cde.config.Parameters
 import zhujiang.chi.Flit
 import zhujiang.{HasZJParams, ZJParametersKey}
 
-object TrafficSimRx {
-  def connTfsRx[T <: Data](rxGen: TrafficSimRx, rx: DecoupledIO[T], nodeId: UInt, chn: UInt, clock: Clock, reset: Reset): Unit = {
-    rxGen.io.rx.valid := rx.valid
-    rxGen.io.rx.bits := rx.bits.asUInt
-    rx.ready := rxGen.io.rx.ready
-    rxGen.io.nodeId := nodeId
-    rxGen.io.chn := chn
-    rxGen.io.clock := clock
-    rxGen.io.reset := reset
-  }
-}
-
 class TrafficSimRx(implicit val p: Parameters) extends BlackBox with HasBlackBoxInline with HasZJParams {
   val io = IO(new Bundle {
     val rx = Flipped(Decoupled(UInt(maxFlitBits.W)))
@@ -37,7 +25,7 @@ class TrafficSimRx(implicit val p: Parameters) extends BlackBox with HasBlackBox
        |  input  [7:0] \t\tchn,
        |  input  [${niw - 1}:0] \t\tnodeId,
        |  input \t\t\t\t\trx_valid,
-       |  output \t\t\t\t\trx_ready,
+       |  output reg\t\t\trx_ready,
        |  input [${maxFlitBits - 1}:0] \trx_bits
        |);
        |  import "DPI-C" function void tfs_get_rx_ready(

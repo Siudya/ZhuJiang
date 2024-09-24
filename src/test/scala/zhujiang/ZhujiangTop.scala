@@ -12,8 +12,8 @@ import scala.annotation.tailrec
 class ZhujiangTopConfig extends Config((site, here, up) => {
   case ZJParametersKey => ZJParameters(
     localNodeParams = Seq(
-      NodeParam(nodeType = NodeType.R, splitFlit = true),
-      NodeParam(nodeType = NodeType.R, splitFlit = true),
+      NodeParam(nodeType = NodeType.RF, splitFlit = true),
+      NodeParam(nodeType = NodeType.RF, splitFlit = true),
       NodeParam(nodeType = NodeType.HF, splitFlit = true),
       NodeParam(nodeType = NodeType.HI, splitFlit = true),
       NodeParam(nodeType = NodeType.S, splitFlit = true),

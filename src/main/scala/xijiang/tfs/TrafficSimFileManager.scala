@@ -64,15 +64,19 @@ object TrafficSimFileManager {
        |#define FLIT_SIZE ${params.maxFlitBits}
        |#define TIME_OUT ${params.tfbParams.get.timeOut}
        |#define NODE_NID_BITS ${params.nodeNidBits}
+       |#define CHIP_ID_BITS ${params.chipAddrBits}
        |#define NODE_TYPE_BITS ${params.nodeTypeBits}
        |#define NODE_NET_BITS ${params.nodeNetBits}
        |#define FLIT_BUF_SIZE ${(params.maxFlitBits + 7) / 8}
        |
-       |#define R_TYPE ${NodeType.R}
-       |#define HF_TYPE ${NodeType.HF}
-       |#define HI_TYPE ${NodeType.HI}
-       |#define C_TYPE ${NodeType.C}
-       |#define S_TYPE ${NodeType.S}
+       |#define LRF_TYPE ${NodeType.RF | (0 << params.nodeTypeBits)}
+       |#define LRI_TYPE ${NodeType.RI | (0 << params.nodeTypeBits)}
+       |#define LHF_TYPE ${NodeType.HF | (0 << params.nodeTypeBits)}
+       |#define LHI_TYPE ${NodeType.HI | (0 << params.nodeTypeBits)}
+       |#define LS_TYPE  ${NodeType.S | (0 << params.nodeTypeBits)}
+       |#define CRF_TYPE ${NodeType.RF | (1 << params.nodeTypeBits)}
+       |#define CHF_TYPE ${NodeType.HF | (1 << params.nodeTypeBits)}
+       |#define C2C_TYPE ${NodeType.C | (1 << params.nodeTypeBits)}
        |
        |#define REQ ${ChannelEncodings.REQ}
        |#define RSP ${ChannelEncodings.RSP}
@@ -168,7 +172,7 @@ object TrafficSimFileManager {
        |  txn_id = 0;
        |  auto &tfs = TrafficSim::get_instance();
        |  bool csn = get_field(node_id, NODE_NET_OFF, NODE_NET_BITS) == 1;
-       |  bool c2c = get_field(node_id, NODE_TYPE_OFF, NODE_TYPE_BITS) == C_TYPE;
+       |  bool c2c = get_field(node_id, NODE_TYPE_OFF, NODE_TYPE_BITS + NODE_NET_BITS) == C2C_TYPE;
        |  if(c2c) {
        |    pool_type = 2;
        |  } else if(csn) {
@@ -269,34 +273,41 @@ object TrafficSimFileManager {
        |    if(i == 0) legal_tgt_pool[i][ERQ] = vector<uint16_t>();
        |  }
        |
-       |  uint8_t lrn_id_num = tfb_get_nodes_size(0x00);
-       |  uint8_t lhf_id_num = tfb_get_nodes_size(0x01);
-       |  uint8_t lhi_id_num = tfb_get_nodes_size(0x02);
-       |  uint8_t lsn_id_num = tfb_get_nodes_size(0x04);
-       |  uint8_t crn_id_num = tfb_get_nodes_size(0x10);
-       |  uint8_t chf_id_num = tfb_get_nodes_size(0x11);
-       |  uint8_t c2c_id_num = tfb_get_nodes_size(0x13);
+       |  uint8_t lrf_id_num = tfb_get_nodes_size(LRF_TYPE);
+       |  uint8_t lri_id_num = tfb_get_nodes_size(LRI_TYPE);
+       |  uint8_t lhf_id_num = tfb_get_nodes_size(LHF_TYPE);
+       |  uint8_t lhi_id_num = tfb_get_nodes_size(LHI_TYPE);
+       |  uint8_t lsn_id_num = tfb_get_nodes_size(LS_TYPE);
+       |  uint8_t crf_id_num = tfb_get_nodes_size(CRF_TYPE);
+       |  uint8_t chf_id_num = tfb_get_nodes_size(CHF_TYPE);
+       |  uint8_t c2c_id_num = tfb_get_nodes_size(C2C_TYPE);
        |
-       |  uint16_t *lrn_id_arr = new uint16_t[lrn_id_num];
+       |  uint16_t *lrf_id_arr = new uint16_t[lrf_id_num];
+       |  uint16_t *lri_id_arr = new uint16_t[lri_id_num];
        |  uint16_t *lhf_id_arr = new uint16_t[lhf_id_num];
        |  uint16_t *lhi_id_arr = new uint16_t[lhi_id_num];
        |  uint16_t *lsn_id_arr = new uint16_t[lsn_id_num];
-       |  uint16_t *crn_id_arr = new uint16_t[crn_id_num];
+       |  uint16_t *crf_id_arr = new uint16_t[crf_id_num];
        |  uint16_t *chf_id_arr = new uint16_t[chf_id_num];
        |  uint16_t *c2c_id_arr = new uint16_t[c2c_id_num];
        |
-       |  tfb_get_nodes(0x00, lrn_id_arr);
-       |  tfb_get_nodes(0x01, lhf_id_arr);
-       |  tfb_get_nodes(0x02, lhi_id_arr);
-       |  tfb_get_nodes(0x04, lsn_id_arr);
-       |  tfb_get_nodes(0x10, crn_id_arr);
-       |  tfb_get_nodes(0x11, chf_id_arr);
-       |  tfb_get_nodes(0x13, c2c_id_arr);
+       |  tfb_get_nodes(LRF_TYPE, lrf_id_arr);
+       |  tfb_get_nodes(LRI_TYPE, lri_id_arr);
+       |  tfb_get_nodes(LHF_TYPE, lhf_id_arr);
+       |  tfb_get_nodes(LHI_TYPE, lhi_id_arr);
+       |  tfb_get_nodes(LS_TYPE,  lsn_id_arr);
+       |  tfb_get_nodes(CRF_TYPE, crf_id_arr);
+       |  tfb_get_nodes(CHF_TYPE, chf_id_arr);
+       |  tfb_get_nodes(C2C_TYPE, c2c_id_arr);
        |
-       |  for(uint8_t i = 0; i < lrn_id_num; i++) {
-       |    legal_tgt_pool[0][RSP].push_back(lrn_id_arr[i]);
-       |    legal_tgt_pool[0][DAT].push_back(lrn_id_arr[i]);
-       |    legal_tgt_pool[0][SNP].push_back(lrn_id_arr[i]);
+       |  for(uint8_t i = 0; i < lrf_id_num; i++) {
+       |    legal_tgt_pool[0][RSP].push_back(lrf_id_arr[i]);
+       |    legal_tgt_pool[0][DAT].push_back(lrf_id_arr[i]);
+       |    legal_tgt_pool[0][SNP].push_back(lrf_id_arr[i]);
+       |  }
+       |  for(uint8_t i = 0; i < lri_id_num; i++) {
+       |    legal_tgt_pool[0][RSP].push_back(lri_id_arr[i]);
+       |    legal_tgt_pool[0][DAT].push_back(lri_id_arr[i]);
        |  }
        |  for(uint8_t i = 0; i < lhf_id_num; i++) {
        |    legal_tgt_pool[0][REQ].push_back(lhf_id_arr[i]);
@@ -312,10 +323,10 @@ object TrafficSimFileManager {
        |    legal_tgt_pool[0][ERQ].push_back(lsn_id_arr[i]);
        |    legal_tgt_pool[0][DAT].push_back(lsn_id_arr[i]);
        |  }
-       |  for(uint8_t i = 0; i < crn_id_num; i++) {
-       |    legal_tgt_pool[2][RSP].push_back(crn_id_arr[i]);
-       |    legal_tgt_pool[2][DAT].push_back(crn_id_arr[i]);
-       |    legal_tgt_pool[2][SNP].push_back(crn_id_arr[i]);
+       |  for(uint8_t i = 0; i < crf_id_num; i++) {
+       |    legal_tgt_pool[2][RSP].push_back(crf_id_arr[i]);
+       |    legal_tgt_pool[2][DAT].push_back(crf_id_arr[i]);
+       |    legal_tgt_pool[2][SNP].push_back(crf_id_arr[i]);
        |  }
        |  for(uint8_t i = 0; i < chf_id_num; i++) {
        |    legal_tgt_pool[2][REQ].push_back(chf_id_arr[i]);
@@ -323,11 +334,8 @@ object TrafficSimFileManager {
        |    legal_tgt_pool[2][DAT].push_back(chf_id_arr[i]);
        |  }
        |  for(uint8_t i = 0; i < c2c_id_num; i++) {
-       |    uint8_t chip_id = get_field(c2c_id_arr[i], 0, NODE_NID_BITS);
-       |    uint16_t csn_remote_requester =
-       |      (1 << NODE_NET_OFF) | (R_TYPE << NODE_TYPE_OFF) | chip_id;
-       |    uint16_t csn_remote_home =
-       |      (1 << NODE_NET_OFF) | (HF_TYPE << NODE_TYPE_OFF) | chip_id;
+       |    uint16_t csn_remote_requester = (CRF_TYPE << NODE_TYPE_OFF) | i;
+       |    uint16_t csn_remote_home = (CHF_TYPE << NODE_TYPE_OFF) | i;
        |
        |    legal_tgt_pool[1][RSP].push_back(csn_remote_requester);
        |    legal_tgt_pool[1][DAT].push_back(csn_remote_requester);
@@ -338,19 +346,21 @@ object TrafficSimFileManager {
        |    legal_tgt_pool[1][DAT].push_back(csn_remote_home);
        |  }
        |  printf("tfs node manager target:\\n");
-       |  for(uint8_t i = 0; i < lrn_id_num; i++) node_mng_pool[lrn_id_arr[i]] = make_unique<NodeManager>(lrn_id_arr[i]);
+       |  for(uint8_t i = 0; i < lrf_id_num; i++) node_mng_pool[lrf_id_arr[i]] = make_unique<NodeManager>(lrf_id_arr[i]);
+       |  for(uint8_t i = 0; i < lri_id_num; i++) node_mng_pool[lri_id_arr[i]] = make_unique<NodeManager>(lri_id_arr[i]);
        |  for(uint8_t i = 0; i < lhf_id_num; i++) node_mng_pool[lhf_id_arr[i]] = make_unique<NodeManager>(lhf_id_arr[i]);
        |  for(uint8_t i = 0; i < lhi_id_num; i++) node_mng_pool[lhi_id_arr[i]] = make_unique<NodeManager>(lhi_id_arr[i]);
        |  for(uint8_t i = 0; i < lsn_id_num; i++) node_mng_pool[lsn_id_arr[i]] = make_unique<NodeManager>(lsn_id_arr[i]);
-       |  for(uint8_t i = 0; i < crn_id_num; i++) node_mng_pool[crn_id_arr[i]] = make_unique<NodeManager>(crn_id_arr[i]);
+       |  for(uint8_t i = 0; i < crf_id_num; i++) node_mng_pool[crf_id_arr[i]] = make_unique<NodeManager>(crf_id_arr[i]);
        |  for(uint8_t i = 0; i < chf_id_num; i++) node_mng_pool[chf_id_arr[i]] = make_unique<NodeManager>(chf_id_arr[i]);
        |  for(uint8_t i = 0; i < c2c_id_num; i++) node_mng_pool[c2c_id_arr[i]] = make_unique<NodeManager>(c2c_id_arr[i]);
        |
-       |  delete[] lrn_id_arr;
+       |  delete[] lrf_id_arr;
+       |  delete[] lri_id_arr;
        |  delete[] lhf_id_arr;
        |  delete[] lhi_id_arr;
        |  delete[] lsn_id_arr;
-       |  delete[] crn_id_arr;
+       |  delete[] crf_id_arr;
        |  delete[] chf_id_arr;
        |  delete[] c2c_id_arr;
        |  initialized = true;
@@ -507,7 +517,7 @@ object TrafficSimFileManager {
        |  argparser.add_argument("-c", "--cycle").help("Simulation cycles").default_value(10000).scan<'i', int>();
        |  argparser.add_argument("-r", "--reset").help("Reset cycles").default_value(100).scan<'i', int>();
        |  argparser.add_argument("-d", "--dump-wave").help("Do dump wave").flag();
-       |  argparser.add_argument("-v", "--verbose").help("Do dump wave").flag();
+       |  argparser.add_argument("-v", "--verbose").help("Print verbose information").flag();
        |}
        |
        |void SimMain::parse(int argc, char *argv[]) {

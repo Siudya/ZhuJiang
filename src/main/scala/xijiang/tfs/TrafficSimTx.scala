@@ -6,18 +6,6 @@ import org.chipsalliance.cde.config.Parameters
 import zhujiang.chi.Flit
 import zhujiang.{HasZJParams, ZJParametersKey}
 
-object TrafficSimTx {
-  def connTfsTx[T <: Data](txGen: TrafficSimTx, tx: DecoupledIO[T], nodeId: UInt, chn: UInt, clock: Clock, reset: Reset): Unit = {
-    tx.valid := txGen.io.tx.valid
-    tx.bits := txGen.io.tx.bits.asTypeOf(tx.bits)
-    txGen.io.tx.ready := tx.ready
-    txGen.io.nodeId := nodeId
-    txGen.io.chn := chn
-    txGen.io.clock := clock
-    txGen.io.reset := reset
-  }
-}
-
 class TrafficSimTx(implicit val p: Parameters) extends BlackBox with HasBlackBoxInline with HasZJParams {
   val io = IO(new Bundle {
     val tx = Decoupled(UInt(maxFlitBits.W))
@@ -32,13 +20,13 @@ class TrafficSimTx(implicit val p: Parameters) extends BlackBox with HasBlackBox
   setInline(s"$modName.sv",
     s"""
        |module $modName (
-       |  input \t\t\t\t\tclock,
-       |  input \t\t\t\t\treset,
-       |  input  [7:0] \t\tchn,
-       |  input  [${niw - 1}:0] \t\tnodeId,
-       |  output \t\t\t\t\ttx_valid,
-       |  input \t\t\t\t\ttx_ready,
-       |  output [${maxFlitBits - 1}:0] \ttx_bits
+       |  input \t\t\t\t\t\tclock,
+       |  input \t\t\t\t\t\treset,
+       |  input  [7:0] \t\t\tchn,
+       |  input  [${niw - 1}:0] \t\t\tnodeId,
+       |  output reg\t\t\t\ttx_valid,
+       |  input \t\t\t\t\t\ttx_ready,
+       |  output reg [${maxFlitBits - 1}:0] tx_bits
        |);
        |  import "DPI-C" function void tfs_get_tx_flit(
        |    input shortint \t\tnode_id,
