@@ -63,8 +63,8 @@ class DirectoryWrapper()(implicit p: Parameters) extends DJModule {
   io.earlyRReqVec.zipWithIndex.foreach {
     case(rReq, i) =>
       rReq.ready  := selfs(i).io.earlyRReq.ready & sfs(i).io.earlyRReq.ready
-      selfs(i).io.earlyRReq.valid := rReq.valid
-      sfs(i).io.earlyRReq.valid   := rReq.valid
+      selfs(i).io.earlyRReq.valid := rReq.valid & sfs(i).io.earlyRReq.ready
+      sfs(i).io.earlyRReq.valid   := rReq.valid & selfs(i).io.earlyRReq.ready
   }
 
 
