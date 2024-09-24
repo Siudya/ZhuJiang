@@ -195,6 +195,7 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
            */
           }.elsewhen(io.req2Slice.fire & canReceiveNode & i.U === io.req2Slice.bits.mSet & j.U === nodeReqInvWay) {
             m := mshrAlloc_s0
+            assert(!CHIOp.REQ.isWriteX(mshrAlloc_s0.chiMes.opcode))
             assert(m.isFree, s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x]", i.U, j.U, m.addr(i.U), m.chiMes.channel, m.chiMes.opcode)
           /*
            * Clean MSHR Entry When Its Free

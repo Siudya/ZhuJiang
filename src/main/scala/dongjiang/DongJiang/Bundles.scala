@@ -121,7 +121,7 @@ class MSHRCHIMesBundle(implicit p: Parameters) extends DJBundle with HasBaseCHIM
 }
 
 // ---------------------------------------------------------------- Req To Slice Bundle ----------------------------------------------------------------------------- //
-class Req2SliceBundle(implicit p: Parameters) extends DJBundle with HasBaseCHIMesBundle with HasPCUID with HasIncoID with HasAddr {
+class Req2SliceBundle(implicit p: Parameters) extends DJBundle with HasBaseCHIMesBundle with HasPCUID with HasIncoID with HasAddr with HasDBID {
     override def useTgt : Boolean = false
     override def useResp: Boolean = false
     override def useDBID: Boolean = false
