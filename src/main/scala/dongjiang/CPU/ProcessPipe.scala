@@ -98,15 +98,30 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
   dirResQ.io.enq.bits   := io.dirResp.bits
   assert(Mux(io.dirResp.valid, dirResQ.io.enq.ready, true.B))
 
+  // Check Get Dir Result
+  // TODO: parameterization
+  val enqShiftReg       = RegInit(0.U(3.W))
+  val alreadyGetDir     = RegInit(false.B)
+  enqShiftReg           := Cat(taskQ.io.enq.fire & taskQ.io.enq.bits.readDir, enqShiftReg(2, 1))
+  alreadyGetDir         := Mux(alreadyGetDir, !taskQ.io.enq.fire, dirResQ.io.enq.fire & !enqShiftReg(0))
+  assert(Mux(enqShiftReg(0), dirResQ.io.enq.fire | alreadyGetDir, true.B), "ProcessPipe need get dir result")
+
 
 // ---------------------------------------------------------------------------------------------------------------------- //
 // ------------------------------------- S3_Receive: Receive task and dirRes from s2 -------------------------------------//
 // ---------------------------------------------------------------------------------------------------------------------- //
   /*
+   * Reset Done Reg When Get New Task Form S2
+   */
+  val s2Fire = task_s2.valid & canGo_s2
+  val rstDone = s2Fire
+
+
+  /*
    * Recieve task_s2
    */
   task_s3_g.valid       := Mux(task_s2.valid, true.B, task_s3_g.valid & !canGo_s3)
-  taskNext_s3           := Mux(task_s2.valid & canGo_s2, task_s2.bits, task_s3_g.bits)
+  taskNext_s3           := Mux(s2Fire, task_s2.bits, task_s3_g.bits)
   task_s3_g.bits        := taskNext_s3
 
   /*
@@ -122,16 +137,9 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
   dirCanGo_s3           := canGo_s3 & task_s3_g.valid & taskNext_s3.readDir
   valid_s3              := Mux(task_s3_g.bits.readDir, task_s3_g.valid & dirRes_s3.valid, task_s3_g.valid)
 
-  /*
-   * Reset Done Reg When Get New Task Form S2
-   */
-  val s2Fire            = task_s2.valid & canGo_s2
-  val rstDone           = s2Fire
 
 
-
-
-  // ---------------------------------------------------------------------------------------------------------------------- //
+// ---------------------------------------------------------------------------------------------------------------------- //
 // --------------------------------- S3_Decode: Decode by task Message and Dir Result ------------------------------------//
 // ---------------------------------------------------------------------------------------------------------------------- //
   /*
@@ -181,7 +189,10 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
     require(width0 == width1, s"Index: $i: Decode Width $width0 =/= $width1")
   }
   decode_s3.decode(inst_s3, table = LocalReadDecode.table)
-  when(valid_s3) { assert(decode_s3.asUInt =/= 0.U, "DECODE ERROR: No inst match in decode table") }
+  when(valid_s3) { assert(decode_s3.asUInt =/= 0.U,
+    "\n\nADDR[0x%x] DECODE ERROR: No inst match in decode table\n" +
+      "INST: CHIP[0x%x] CHNL[0x%x] OP[0x%x] SRC[0x%x] OTH[0x%x] HN[0x%x] RESP[0x%x] DATA[0x%x] SNP[0x%x] FWD[0x%x] RD[0x%x]\n", task_s3_g.bits.addr,
+    inst_s3.chipType, inst_s3.channel, inst_s3.opcode, inst_s3.srcState, inst_s3.othState, inst_s3.hnState, inst_s3.respType, inst_s3.respHasData, inst_s3.snpResp, inst_s3.fwdState, inst_s3.rdResp) }
 
 
 // ---------------------------------------------------------------------------------------------------------------------- //
@@ -302,7 +313,7 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
   retry_s3    := todo_s3.wSDir & dirRes_s3.bits.s.replRetry | todo_s3.wSFDir & dirRes_s3.bits.sf.replRetry; assert(Mux(valid_s3, !retry_s3, true.B), "TODO")
   update_s3   := todo_s3.reqToMas | todo_s3.reqToSlv
   replace_s3  := todo_s3.wSDir & !hnHit & !dirRes_s3.bits.s.metaVec(0).isInvalid & !retry_s3
-  evictSF_s3  := todo_s3.wSFDir & !srcHit & !othHit & dirRes_s3.bits.s.metaVec.map(!_.isInvalid).reduce(_ | _) & !retry_s3
+  evictSF_s3  := todo_s3.wSFDir & !srcHit & !othHit & dirRes_s3.bits.sf.metaVec.map(!_.isInvalid).reduce(_ | _) & !retry_s3
   clean_s3    := !(retry_s3 | update_s3 | replace_s3 | evictSF_s3)
   assert(Mux(valid_s3, PopCount(Seq(retry_s3, update_s3, replace_s3, evictSF_s3, clean_s3)) <= 1.U, true.B))
   assert(Mux(valid_s3, !replace_s3, true.B), "TODO: set task value")
