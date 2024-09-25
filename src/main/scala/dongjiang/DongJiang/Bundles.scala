@@ -56,7 +56,7 @@ trait HasMSHRSet extends DJBundle { this: Bundle => val mshrSet = UInt(mshrSetBi
 
 class MSHRSetBundle(implicit p: Parameters) extends DJBundle with HasMSHRSet
 
-trait HasMSHRWay extends DJBundle { this: Bundle => val mshrWay = UInt(mshrWayBits.W); val useEvict = Bool(); def useMSHR = !useEvict } // UseEvictTable
+trait HasMSHRWay extends DJBundle { this: Bundle => val mshrWay = UInt(mshrWayBits.W) }
 
 trait HasMHSRIndex extends DJBundle with HasMSHRSet with HasMSHRWay { def mshrMatch(set: UInt, way: UInt): Bool = mshrSet === set & mshrWay === way }
 
@@ -180,9 +180,9 @@ trait HasDBData extends DJBundle { this: Bundle =>
 }
 
 // DataBuffer Read/Clean Req
-class DBRCReq(implicit p: Parameters)       extends DJBundle with HasDBRCOp with HasDBID with HasToIncoID
-class DBWReq(implicit p: Parameters)        extends DJBundle                             with HasFromIncoID with HasPCUID
-class DBWResp(implicit p: Parameters)       extends DJBundle                with HasDBID with HasToIncoID   with HasPCUID
+class DBRCReq    (implicit p: Parameters)   extends DJBundle with HasDBRCOp with HasDBID with HasToIncoID
+class DBWReq     (implicit p: Parameters)   extends DJBundle                             with HasFromIncoID with HasPCUID
+class DBWResp    (implicit p: Parameters)   extends DJBundle                with HasDBID with HasToIncoID   with HasPCUID
 class NodeFDBData(implicit p: Parameters)   extends DJBundle with HasDBData with HasDBID with HasToIncoID
 class NodeTDBData(implicit p: Parameters)   extends DJBundle with HasDBData with HasDBID
 

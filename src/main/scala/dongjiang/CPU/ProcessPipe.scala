@@ -209,7 +209,6 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
   taskSnp_s3.channel    := CHIChannel.SNP
   taskSnp_s3.addr       := task_s3_g.bits.addr
   taskSnp_s3.mshrWay    := task_s3_g.bits.mshrWay
-  taskSnp_s3.useEvict   := task_s3_g.bits.useEvict
   taskSnp_s3.tgtID      := othHitVec.asUInt; require(taskSnp_s3.tgtID.getWidth >= othHitVec.getWidth)
   taskSnp_s3.srcID      := DontCare
   taskSnp_s3.txnID      := DontCare
@@ -223,7 +222,6 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
   taskRD_s3             := DontCare
   taskRD_s3.addr        := task_s3_g.bits.addr
   taskRD_s3.mshrWay     := task_s3_g.bits.mshrWay
-  taskRD_s3.useEvict    := task_s3_g.bits.useEvict
   taskRD_s3.tgtID       := Mux(taskChipType === ChipType.Local, ddrcNodeId.U, DontCare); assert(Mux(valid_s3, !inst_s3.chipType === ChipType.CSN, true.B), "TODO")
   taskRD_s3.srcID       := Mux(taskChipType === ChipType.Local, hnfNodeId.U, csnHnfNodeId.U)
   taskRD_s3.opcode      := decode_s3.rdOp
@@ -328,7 +326,6 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
   io.updMSHR.bits.addr        := Mux(retry_s3, task_s3_g.bits.addr, Mux(update_s3 | clean_s3, task_s3_g.bits.addr, Mux(replace_s3, dirRes_s3.bits.s.addr, dirRes_s3.bits.sf.addr)))
   // Use In Retry or Update
   io.updMSHR.bits.mshrWay     := task_s3_g.bits.mshrWay
-  io.updMSHR.bits.useEvict    := task_s3_g.bits.useEvict
   // Use In Update // TODO: Complete hasCSNIntf
   io.updMSHR.bits.waitIntfVec := (Mux(todo_s3.reqToSlv | evictSF_s3, UIntToOH(IncoID.LOCALSLV.U), 0.U) |
                                   Mux(todo_s3.reqToMas | replace_s3, UIntToOH(IncoID.LOCALMAS.U), 0.U)).asBools

@@ -46,7 +46,6 @@ class DirCtrlBundle(setBits: Int)(implicit p: Parameters) extends DJBundle with 
   val set       = UInt(setBits.W)
 
   def wen       = !ren
-  def way       = Mux(useEvict, djparam.nrMSHRWays.U + mshrWay, mshrWay)
   def mSet      = set(mshrSetBits-1, 0)
   require(setBits >= mshrSetBits)
 }
@@ -148,7 +147,6 @@ class DirectoryBase(
   when(sramCtrlReg.isReqFire) {
     sramCtrlReg.set       := rSet
     sramCtrlReg.mshrWay   := io.dirRead.mshrWay
-    sramCtrlReg.useEvict  := io.dirRead.useEvict
     sramCtrlReg.pipeId    := io.dirRead.pipeId
   }
   assert(!(io.earlyRReq.fire & io.earlyWReq.fire))
@@ -225,8 +223,8 @@ class DirectoryBase(
       a.bits.tag  := parseDirAddress(b.bits)._1
       a.bits.bank := parseDirAddress(b.bits)._4
   }
-  addr_s2         := io.mshrResp.addrs(sramCtrlReg.way).bits
-  assert(Mux(sramCtrlReg.isGetResp & sramCtrlReg.ren, io.mshrResp.addrs(sramCtrlReg.way).valid, true.B))
+  addr_s2         := io.mshrResp.addrs(sramCtrlReg.mshrWay).bits
+  assert(Mux(sramCtrlReg.isGetResp & sramCtrlReg.ren, io.mshrResp.addrs(sramCtrlReg.mshrWay).valid, true.B))
 
 
 // ---------------------------------------------------------------------------------------------------------------------- //

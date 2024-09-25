@@ -325,7 +325,6 @@ class RnSlavePCU(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) ex
   indexSaveInPCU.addr           := Mux(respVal, io.resp2Node.bits.addr,       Mux(snpVal, io.req2Node.bits.addr,        io.chi.txreq.bits.Addr))
   indexSaveInPCU.from           := Mux(respVal, io.resp2Node.bits.from,       Mux(snpVal, io.req2Node.bits.from,        DontCare))
   indexSaveInPCU.mshrWay        := Mux(respVal, DontCare,                     Mux(snpVal, io.req2Node.bits.mshrWay,     DontCare))
-  indexSaveInPCU.useEvict       := Mux(respVal, DontCare,                     Mux(snpVal, io.req2Node.bits.useEvict,    DontCare))
   indexSaveInPCU.dbid           := Mux(respVal, io.resp2Node.bits.dbid,       Mux(snpVal, 0.U,                          0.U))
   taskSaveInPCU.opcode          := Mux(respVal, io.resp2Node.bits.opcode,     Mux(snpVal, io.req2Node.bits.opcode,      io.chi.txreq.bits.Opcode))
   taskSaveInPCU.tgtID           := Mux(respVal, io.resp2Node.bits.tgtID,      Mux(snpVal, io.req2Node.bits.tgtID,       DontCare))
@@ -516,7 +515,6 @@ class RnSlavePCU(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) ex
   io.resp2Slice.bits.to             := pcus(pcuResp2SliceID).indexMes.from
   io.resp2Slice.bits.mshrSet        := pcus(pcuResp2SliceID).indexMes.mSet
   io.resp2Slice.bits.mshrWay        := pcus(pcuResp2SliceID).indexMes.mshrWay
-  io.resp2Slice.bits.useEvict       := pcus(pcuResp2SliceID).indexMes.useEvict
   io.resp2Slice.bits.dbid           := pcus(pcuResp2SliceID).indexMes.dbid
   io.resp2Slice.bits.isSnpResp      := true.B
   io.resp2Slice.bits.isReqResp      := false.B

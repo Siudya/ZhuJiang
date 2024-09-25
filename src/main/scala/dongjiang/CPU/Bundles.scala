@@ -70,7 +70,7 @@ trait HasDirBankID extends DJBundle { val dirBankId = UInt(dirBankBits.W) }
 class DirReadMSHRBundle(implicit p: Parameters) extends DJBundle with HasPipeID with HasDirBankID with HasMSHRSet
 
 class MSHRRespDirBundle(implicit p: Parameters) extends DJBundle with HasPipeID with HasDirBankID {
-    val addrs       = Vec(djparam.nrMSHRWays + djparam.nrEvictWays, Valid(UInt(addressBits.W)))
+    val addrs       = Vec(djparam.nrMSHRWays, Valid(UInt(addressBits.W)))
 }
 
 

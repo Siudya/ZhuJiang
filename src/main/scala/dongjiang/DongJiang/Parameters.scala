@@ -60,7 +60,6 @@ case class DJParam(
                     // MSHR
                     nrMSHRSets: Int = 4,
                     nrMSHRWays: Int = 4,
-                    nrEvictWays: Int = 2,
                     // number of bank or buffer
                     nrBank: Int = 2,
                     nrDatBuf: Int = 16,
@@ -79,7 +78,6 @@ case class DJParam(
                     dirHoldMcp: Boolean = true,
                   ) {
     require(chiNodeIdBits >= 7 && chiNodeIdBits <= 11)
-    require(2 <= nrEvictWays & nrEvictWays <= nrMSHRWays)
     require(nrMpTaskQueue > 0)
     require(nrMpReqQueue > 0)
     require(nrMpRespQueue > 0)
