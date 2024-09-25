@@ -25,7 +25,6 @@ class DirectoryWrapper()(implicit p: Parameters) extends DJModule {
 
 // -------------------------- Modules declaration ------------------------//
   val selfs = Seq.fill(djparam.nrDirBank) { Module(new DirectoryBase( tagBits = sTagBits,
-                                                                      modBankBits = dirBankBits,
                                                                       sets = djparam.selfSets / djparam.nrDirBank,
                                                                       ways = djparam.selfWays,
                                                                       nrMetas = 1,
@@ -33,15 +32,17 @@ class DirectoryWrapper()(implicit p: Parameters) extends DJModule {
                                                                       mcp = djparam.dirMulticycle,
                                                                       holdMcp = djparam.dirHoldMcp)) }
 
+  selfs.zipWithIndex.foreach { case(s, i) => s.io.id := i.U }
 
   val sfs   = Seq.fill(djparam.nrDirBank) { Module(new DirectoryBase( tagBits = sfTagBits,
-                                                                      modBankBits = dirBankBits,
                                                                       sets = djparam.sfDirSets / djparam.nrDirBank,
                                                                       ways = djparam.sfDirWays,
                                                                       nrMetas = nrRnfNode,
                                                                       replPolicy = djparam.sfReplacementPolicy,
                                                                       mcp = djparam.dirMulticycle,
                                                                       holdMcp = djparam.dirHoldMcp)) }
+
+  sfs.zipWithIndex.foreach { case(sf, i) => sf.io.id := i.U }
 
 // -------------------------- Reg and Wire declaration ------------------------//
   val dirWSRegVec   = RegInit(VecInit(Seq.fill(2) { 0.U.asTypeOf(Valid(new DirWriteBaseBundle(djparam.selfWays, 1, sReplWayBits))) }))
@@ -63,8 +64,8 @@ class DirectoryWrapper()(implicit p: Parameters) extends DJModule {
   io.earlyRReqVec.zipWithIndex.foreach {
     case(rReq, i) =>
       rReq.ready  := selfs(i).io.earlyRReq.ready & sfs(i).io.earlyRReq.ready
-      selfs(i).io.earlyRReq.valid := rReq.valid & sfs(i).io.earlyRReq.ready
-      sfs(i).io.earlyRReq.valid   := rReq.valid & selfs(i).io.earlyRReq.ready
+      selfs(i).io.earlyRReq.valid := rReq.valid
+      sfs(i).io.earlyRReq.valid   := rReq.valid
   }
 
 
@@ -193,7 +194,7 @@ class DirectoryWrapper()(implicit p: Parameters) extends DJModule {
 // ------------------------------------------------------- Assertion --------------------------------------------------- //
   assert((PopCount(selfs.map(_.io.earlyRReq.valid)) + PopCount(selfs.map(_.io.earlyWReq.valid))) <= 2.U, "selfDirs: no more than two request can be entered at the same time")
   assert((PopCount(sfs.map(_.io.earlyRReq.valid)) + PopCount(sfs.map(_.io.earlyWReq.valid))) <= 2.U, "sfDirs: no more than two request can be entered at the same time")
-  assert(!(selfs.map(_.io.earlyRReq.fire).reduce(_ | _) ^ sfs.map(_.io.earlyRReq.fire).reduce(_ | _)), "selfDirs and sfDirs dirRead must be fire at the same time")
+  assert(!selfs.map(_.io.earlyRReq.fire).zip(sfs.map(_.io.earlyRReq.fire)).map { case(s, sf) => s ^ sf }.reduce(_ | _), "selfDirs and sfDirs dirRead must be fire at the same time")
 
   assert(PopCount(selfs.map(_.io.dirResp.valid)) <= 2.U, "selfDirs dirResp: no more than two resp can be output at a time")
   assert(PopCount(sfs.map(_.io.dirResp.valid)) <= 2.U, "sfDirs dirResp: no more than two resp can be output at a time")

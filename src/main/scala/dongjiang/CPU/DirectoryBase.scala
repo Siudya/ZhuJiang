@@ -46,8 +46,8 @@ class DirCtrlBundle(setBits: Int)(implicit p: Parameters) extends DJBundle with 
   val set       = UInt(setBits.W)
 
   def wen       = !ren
-  def mSet      = set(mshrSetBits-1, 0)
-  require(setBits >= mshrSetBits)
+  def mSet(dirBank: UInt) = Cat(set, dirBank)(mshrSetBits-1, 0)
+  require((setBits + dirBankBits) >= mshrSetBits)
 }
 
 
@@ -59,7 +59,6 @@ class DirEntry(tagBits: Int, nrMetas: Int = 1)(implicit p: Parameters) extends D
 
 class DirectoryBase(
                       tagBits: Int,
-                      modBankBits: Int,
                       sets: Int,
                       ways: Int = 4,
                       nrMetas: Int = 1,
@@ -77,10 +76,11 @@ class DirectoryBase(
   val setBits     = log2Ceil(sets)
   val wayBits     = log2Ceil(ways)
 
-  def parseDirAddress(x: UInt): (UInt, UInt, UInt, UInt, UInt) = parseAddress(x, 0, setBits, tagBits) // TODO: SRAM Tag dont need to store modBank
+  def parseDirAddress(x: UInt): (UInt, UInt, UInt, UInt, UInt) = parseAddress(x, dirBankBits, setBits, tagBits)
 
 // --------------------- IO declaration ------------------------//
   val io = IO(new Bundle {
+    val id        = Input(UInt(dirBankBits.W))
     val earlyRReq = Flipped(Decoupled())
     val earlyWReq = Flipped(Decoupled())
     val dirRead   = Input(new DirReadBundle)
@@ -137,6 +137,8 @@ class DirectoryBase(
    */
   val (rTag, rSet, rModBank, rBank, rOffset) = parseDirAddress(io.dirRead.addr)
   val (wTag, wSet, wModBank, wBank, wOffset) = parseDirAddress(io.dirWrite.addr)
+  assert(Mux(RegNext(io.earlyRReq.fire), io.id === rModBank, true.B))
+  assert(Mux(RegNext(io.earlyWReq.fire), io.id === wModBank, true.B))
 
 
   /*
@@ -192,7 +194,7 @@ class DirectoryBase(
    * Read MSHR Set Mes
    */
   io.readMshr.valid           := sramCtrlReg.isWaitMcp & sramCtrlReg.ren
-  io.readMshr.bits.mshrSet    := sramCtrlReg.mSet
+  io.readMshr.bits.mshrSet    := sramCtrlReg.mSet(io.id)
   io.readMshr.bits.pipeId     := sramCtrlReg.pipeId
   io.readMshr.bits.dirBankId  := DontCare
 
@@ -273,6 +275,7 @@ class DirectoryBase(
   } else {
    replWay := repl.get_replace_way(replResp_s3_g) // replace
   }
+  val replWayAddr     = Cat(metaResp_s3_g(replWay).tag, set_s3, io.id, metaResp_s3_g(replWay).bank, 0.U(offsetBits.W)); require(replWayAddr.getWidth == addressBits)
 
 
   /*
@@ -283,6 +286,7 @@ class DirectoryBase(
   val replWayIsUsing  = useWayVec(replWay)
   val selUnuseWay     = PriorityEncoder(useWayVec.map(!_))
   val replRetry       = useWayVec.asUInt.andR
+  val unUseWayAddr    = Cat(metaResp_s3_g(selUnuseWay).tag, set_s3, io.id,  metaResp_s3_g(selUnuseWay).bank, 0.U(offsetBits.W)); require(unUseWayAddr.getWidth == addressBits)
 
 
   /*
@@ -292,7 +296,7 @@ class DirectoryBase(
   io.dirResp.bits.hit       := hit
   // [Resp Mes]                         [Hit Way Mes]                      [Invalid Way Mes]                        [Unuse Way Mes]                     [Replace Way Mes]
   io.dirResp.bits.wayOH     := Mux(hit, hitWayVec.asUInt,   Mux(hasInvWay, selInvWayVec.asUInt, Mux(replWayIsUsing, UIntToOH(selUnuseWay),              UIntToOH(replWay))))
-  io.dirResp.bits.addr      := Mux(hit, addr_s3_g,          Mux(hasInvWay, 0.U,                 Mux(replWayIsUsing, metaResp_s3_g(selUnuseWay).tag,     metaResp_s3_g(replWay).tag)))
+  io.dirResp.bits.addr      := Mux(hit, addr_s3_g,          Mux(hasInvWay, 0.U,                 Mux(replWayIsUsing, unUseWayAddr,                       replWayAddr)))
   io.dirResp.bits.metaVec   := Mux(hit, hitMetaVec,         Mux(hasInvWay, invMetasVec,         Mux(replWayIsUsing, metaResp_s3_g(selUnuseWay).metaVec, metaResp_s3_g(replWay).metaVec)))
   io.dirResp.bits.replRetry := Mux(hit, false.B,            Mux(hasInvWay, false.B,             Mux(replWayIsUsing, replRetry,                          false.B)))
   io.dirResp.bits.pipeId    := pipeId_s3_g
