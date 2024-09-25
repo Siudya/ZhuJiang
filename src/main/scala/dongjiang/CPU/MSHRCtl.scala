@@ -195,7 +195,7 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
            */
           }.elsewhen(io.req2Slice.fire & canReceiveNode & i.U === io.req2Slice.bits.mSet & j.U === nodeReqInvWay) {
             m := mshrAlloc_s0
-            assert(!CHIOp.REQ.isWriteX(mshrAlloc_s0.chiMes.opcode))
+            assert(!CHIOp.REQ.isWriteX(mshrAlloc_s0.chiMes.opcode), "TODO")
             assert(m.isFree, s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x]", i.U, j.U, m.addr(i.U), m.chiMes.channel, m.chiMes.opcode)
           /*
            * Clean MSHR Entry When Its Free
@@ -316,29 +316,35 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
    * Get task_s0(req) from MSHRTable
    */
   val reqBeSendSetVec     = mshrTableReg.map(_.map(_.reqBeSend).reduce(_ | _))
-  val reqBeSendSet        = RREncoder(reqBeSendSetVec.zip(canSendVec).map{ case(a, b) => a & b })
+  val reqCanSendSetVec    = reqBeSendSetVec.zip(canSendVec).map{ case(a, b) => a & b }
+  val reqBeSendSet        = RREncoder(reqCanSendSetVec)
   val reqBeSendWay        = RREncoder(mshrTableReg(reqBeSendSet).map(_.reqBeSend))
   val taskReq             = mshrTableReg(reqBeSendSet)(reqBeSendWay)
+  val taskReqValid        = taskReq.reqBeSend & reqCanSendSetVec.reduce(_ | _)
 
   /*
    * Get task_s0(resp) from MSHRTable
    */
   val respBeSendSetVec    = mshrTableReg.map(_.map(_.respBeSend).reduce(_ | _))
-  val respBeSendSet       = RREncoder(respBeSendSetVec.zip(canSendVec).map{ case(a, b) => a & b })
+  val respCanSendSetVec   = respBeSendSetVec.zip(canSendVec).map{ case(a, b) => a & b }
+  val respBeSendSet       = RREncoder(respCanSendSetVec)
   val respBeSendWay       = RREncoder(mshrTableReg(respBeSendSet).map(_.respBeSend))
   val taskResp            = mshrTableReg(respBeSendSet)(respBeSendWay)
+  val taskRespValid       = taskResp.respBeSend & respCanSendSetVec.reduce(_ | _)
 
   /*
    * Get task_s0(evict) from MSHRTable
    */
-  val evictBeSendId       = RREncoder(evictTableReg.map {case e => e.isBeSend & canSendVec(e.set) })
+  val evictCanSendSetVec  = evictTableReg.map{ case e => e.isBeSend & canSendVec(e.set) }
+  val evictBeSendId       = RREncoder(evictCanSendSetVec)
   val taskEvict           = evictTableReg(evictBeSendId)
+  val taskEvictValid      = taskEvict.respBeSend & evictCanSendSetVec.reduce(_ | _)
 
 
   /*
    * Select resp task_s0
    */
-  taskResp_s0.valid         := taskResp.respBeSend | taskEvict.respBeSend
+  taskResp_s0.valid         := taskRespValid | taskEvictValid
   taskResp_s0.bits.readDir  := true.B // TODO
   //                                                 EvictTask            RespTask
   taskResp_s0.bits.addr     := Mux(taskEvict.isBeSend, taskEvict.addr(),  taskResp.addr(respBeSendSet))
@@ -353,7 +359,7 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
   /*
    * Select req task_s0
    */
-  taskReq_s0.valid          := taskReq.reqBeSend & !(taskResp_s0.valid & taskResp_s0.bits.dirBank === taskReq_s0.bits.dirBank)
+  taskReq_s0.valid          := taskReqValid & !(taskResp_s0.valid & taskResp_s0.bits.dirBank === taskReq_s0.bits.dirBank)
   taskReq_s0.bits.readDir   := true.B // TODO
   //                           ReqTask
   taskReq_s0.bits.addr      := taskReq.addr(reqBeSendSet)
