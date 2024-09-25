@@ -413,7 +413,7 @@ class RnSlavePCU(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) ex
   io.chi.rxrsp.bits.TgtID   := Mux(pcus(rspSelId).chiMes.isRsp, pcus(rspSelId).chiMes.srcID,  pcus(rspSelId).chiMes.srcID)
   io.chi.rxrsp.bits.SrcID   := Mux(pcus(rspSelId).chiMes.isRsp, hnfNodeId.U,                  hnfNodeId.U)
   io.chi.rxrsp.bits.TxnID   := Mux(pcus(rspSelId).chiMes.isRsp, pcus(rspSelId).chiMes.txnID,  pcus(rspSelId).chiMes.txnID)
-  io.chi.rxrsp.bits.DBID    := Mux(pcus(rspSelId).chiMes.isRsp, rspSelId,                     pcus(rspSelId).indexMes.dbid)
+  io.chi.rxrsp.bits.DBID    := Mux(pcus(rspSelId).chiMes.isRsp, rspSelId,                     rspSelId)
   io.chi.rxrsp.bits.Resp    := Mux(pcus(rspSelId).chiMes.isRsp, pcus(rspSelId).chiMes.resp,   DontCare)
 
 
