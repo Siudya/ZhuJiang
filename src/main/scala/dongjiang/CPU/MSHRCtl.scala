@@ -20,14 +20,12 @@ object MSHRState {
 }
 
 
-class MSHREntry(useAddr: Boolean = false)(implicit p: Parameters) extends DJBundle {
+class MSHREntry(implicit p: Parameters) extends DJBundle {
   // state
   val state           = UInt(MSHRState.width.W)
   // addr
   val tag             = UInt(mshrTagBits.W)
   val bank            = UInt(bankBits.W)
-  val setOpt          = if(useAddr) Some(UInt(mshrSetBits.W)) else None
-  def set             = setOpt.get
   // req mes
   val chiMes          = new MSHRCHIMesBundle()
   // resp mes
@@ -44,7 +42,8 @@ class MSHREntry(useAddr: Boolean = false)(implicit p: Parameters) extends DJBund
   def respBeSend      = isBeSend & isResp
   def reqBeSend       = isBeSend & isReq
 
-  def addr(x: UInt = setOpt.getOrElse(0.U)): UInt = Cat(tag, x, bank, 0.U(offsetBits.W))
+  def addr(x: UInt): UInt = { require(x.getWidth == mshrSetBits); Cat(tag, x, bank, 0.U(offsetBits.W)) }
+  def dirBank(x: UInt): UInt = { require(x.getWidth == mshrSetBits); getDirBank(addr(x)) }
 }
 
 
@@ -75,29 +74,31 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
   dontTouch(io)
 
 // ------------------------ Module declaration ------------------------- //
-  val reqAck_s0_q       = Module(new Queue(new ReqAck2NodeBundle(), entries = 4, flow = false, pipe = true))
+  val reqAck_s0_q           = Module(new Queue(new ReqAck2NodeBundle(), entries = 4, flow = false, pipe = true))
 
 // --------------------- Reg / Wire declaration ------------------------ //
   // mshrTable
-  val mshrTableReg      = RegInit(VecInit(Seq.fill(djparam.nrMSHRSets) { VecInit(Seq.fill(djparam.nrMSHRWays) { 0.U.asTypeOf(new MSHREntry()) }) }))
-  val mshrLockVecReg    = RegInit(VecInit(Seq.fill(djparam.nrMSHRSets) { false.B }))
+  val mshrTableReg          = RegInit(VecInit(Seq.fill(djparam.nrMSHRSets) { VecInit(Seq.fill(djparam.nrMSHRWays) { 0.U.asTypeOf(new MSHREntry()) }) }))
+  val mshrLockVecReg        = RegInit(VecInit(Seq.fill(djparam.nrMSHRSets) { false.B }))
   // Transfer Req From Node To MSHREntry
-  val mshrAlloc_s0      = WireInit(0.U.asTypeOf(new MSHREntry()))
+  val mshrAlloc_s0          = WireInit(0.U.asTypeOf(new MSHREntry()))
   // task s0
-  val canSendVec        = Wire(Vec(djparam.nrMSHRSets, Bool()))
-  val taskReq_s0        = Wire(Valid(new PipeTaskBundle()))
-  val canGoReq_s0       = Wire(Bool())
-  val taskResp_s0       = Wire(Valid(new PipeTaskBundle()))
-  val canGoResp_s0      = Wire(Bool())
+  val dirCanRecVec          = Wire(Vec(djparam.nrDirBank, Bool()))
+  val reqWillSendVecVec     = Wire(Vec(djparam.nrMSHRSets, Vec(djparam.nrMSHRWays, Bool())))
+  val respWillSendVecVec    = Wire(Vec(djparam.nrMSHRSets, Vec(djparam.nrMSHRWays, Bool())))
+  val taskReq_s0            = Wire(Valid(new PipeTaskBundle()))
+  val canGoReq_s0           = Wire(Bool())
+  val taskResp_s0           = Wire(Valid(new PipeTaskBundle()))
+  val canGoResp_s0          = Wire(Bool())
   // task s1
-  val taskReq_s1_g      = RegInit(0.U.asTypeOf(Valid(new PipeTaskBundle())))
-  val canGoReq_s1       = Wire(Bool())
-  val taskResp_s1_g     = RegInit(0.U.asTypeOf(Valid(new PipeTaskBundle())))
-  val canGoResp_s1      = Wire(Bool())
+  val taskReq_s1_g          = RegInit(0.U.asTypeOf(Valid(new PipeTaskBundle())))
+  val canGoReq_s1           = Wire(Bool())
+  val taskResp_s1_g         = RegInit(0.U.asTypeOf(Valid(new PipeTaskBundle())))
+  val canGoResp_s1          = Wire(Bool())
   val reqAlreadyReadDirReg  = RegInit(false.B)
   val respAlreadyReadDirReg = RegInit(false.B)
   // dir read mshr
-  val resp2dirRegVec    = RegInit(0.U.asTypeOf(io.mshrResp2Dir))
+  val resp2dirRegVec        = RegInit(0.U.asTypeOf(io.mshrResp2Dir))
 
 
 // ---------------------------------------------------------------------------------------------------------------------- //
@@ -155,14 +156,16 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
            * Pipe Update mshrTable value
            */
           when(io.updMSHR.valid & !io.updMSHR.bits.isRetry & io.updMSHR.bits.mSet === i.U & io.updMSHR.bits.mshrWay === j.U) {
-            m.waitIntfVec     := io.updMSHR.bits.waitIntfVec
             when(io.updMSHR.bits.isReq) {
-              m.chiMes.opcode := DontCare; assert(false.B, "TODO")
-              m.tag           := io.updMSHR.bits.mTag
-              m.bank          := io.updMSHR.bits.mBank
+              m                 := 0.U.asTypeOf(m)
+              m.chiMes.opcode   := Mux(io.updMSHR.bits.isSnpEvict, CHIOp.SNP.SnpUniqueEvict, CHIOp.REQ.Replace)
+              m.chiMes.channel  := Mux(io.updMSHR.bits.isSnpEvict, CHIChannel.SNP,           CHIChannel.REQ)
+              m.tag             := io.updMSHR.bits.mTag
+              m.bank            := io.updMSHR.bits.mBank
             }
-            assert(PopCount(m.waitIntfVec) === 0.U, s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x]", i.U, j.U, m.addr(i.U), m.chiMes.channel, m.chiMes.opcode)
-            assert(m.isAlreadySend, s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x]", i.U, j.U, m.addr(i.U), m.chiMes.channel, m.chiMes.opcode)
+            m.waitIntfVec       := io.updMSHR.bits.waitIntfVec
+            assert(PopCount(m.waitIntfVec) === 0.U, s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x] STATE[0x%x]", i.U, j.U, m.addr(i.U), m.chiMes.channel, m.chiMes.opcode, m.state)
+            assert(m.isAlreadySend, s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x] STATE[0x%x]", i.U, j.U, m.addr(i.U), m.chiMes.channel, m.chiMes.opcode, m.state)
           /*
            * Resp Update mshrTable value
            */
@@ -185,15 +188,16 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
               m.respMes.masDBID.bits    := io.resp2Slice.bits.dbid
             }
             assert(io.resp2Slice.bits.isSnpResp ^ io.resp2Slice.bits.isReqResp)
-            assert(m.waitIntfVec(io.resp2Slice.bits.from.intfId), s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x]", i.U, j.U, m.addr(i.U), m.chiMes.channel, m.chiMes.opcode)
-            assert(m.isWaitResp, s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x]", i.U, j.U, m.addr(i.U), m.chiMes.channel, m.chiMes.opcode)
+            assert(m.waitIntfVec(io.resp2Slice.bits.from.intfId), s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x] STATE[0x%x]", i.U, j.U, m.addr(i.U), m.chiMes.channel, m.chiMes.opcode, m.state)
+            assert(m.isWaitResp, s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x] STATE[0x%x]", i.U, j.U, m.addr(i.U), m.chiMes.channel, m.chiMes.opcode, m.state)
           /*
            * Receive Node Req
            */
           }.elsewhen(io.req2Slice.fire & canReceiveNode & i.U === io.req2Slice.bits.mSet & j.U === nodeReqInvWay) {
+            m := 0.U.asTypeOf(m)
             m := mshrAlloc_s0
             assert(!CHIOp.REQ.isWriteX(mshrAlloc_s0.chiMes.opcode), "TODO")
-            assert(m.isFree, s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x]", i.U, j.U, m.addr(i.U), m.chiMes.channel, m.chiMes.opcode)
+            assert(m.isFree, s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x] STATE[0x%x]", i.U, j.U, m.addr(i.U), m.chiMes.channel, m.chiMes.opcode, m.state)
           /*
            * Clean MSHR Entry When Its Free
            */
@@ -277,28 +281,28 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
    * Get Can Send Set From Dir Read Ready and mshrLockVecReg
    */
   // TODO: Consider creating a copy of shiftReg in MSHR
-  require(djparam.nrMSHRSets >= djparam.nrDirBank)
-  canSendVec.zipWithIndex.foreach { case(can, i) => can := io.earlyRReqVec(i.U(dirBankBits-1, 0)).ready & !mshrLockVecReg(i) } // TODO: if dont need to read Dir, it should not be ctrl by mshrLockVecReg
+  dirCanRecVec            := io.earlyRReqVec.map(_.ready)
+  // TODO: if dont need to read Dir, it should not be ctrl by mshrLockVecReg
+  mshrTableReg.zip(reqWillSendVecVec).zipWithIndex.foreach  { case((m, v), i) => m.zip(v).foreach { case(m, v) => v := m.reqBeSend & dirCanRecVec(m.dirBank(i.U)) & !mshrLockVecReg(i) } }
+  mshrTableReg.zip(respWillSendVecVec).zipWithIndex.foreach { case((m, v), i) => m.zip(v).foreach { case(m, v) => v := m.respBeSend & dirCanRecVec(m.dirBank(i.U)) & !mshrLockVecReg(i) } }
 
-  /*
-   * Get task_s0(req) from MSHRTable
-   */
-  val reqBeSendSetVec     = mshrTableReg.map(_.map(_.reqBeSend).reduce(_ | _))
-  val reqCanSendSetVec    = reqBeSendSetVec.zip(canSendVec).map{ case(a, b) => a & b }
-  val reqBeSendSet        = RREncoder(reqCanSendSetVec)
-  val reqBeSendWay        = RREncoder(mshrTableReg(reqBeSendSet).map(_.reqBeSend))
-  val taskReq             = mshrTableReg(reqBeSendSet)(reqBeSendWay)
-  val taskReqValid        = taskReq.reqBeSend & reqCanSendSetVec.reduce(_ | _)
 
   /*
    * Get task_s0(resp) from MSHRTable
    */
-  val respBeSendSetVec    = mshrTableReg.map(_.map(_.respBeSend).reduce(_ | _))
-  val respCanSendSetVec   = respBeSendSetVec.zip(canSendVec).map{ case(a, b) => a & b }
-  val respBeSendSet       = RREncoder(respCanSendSetVec)
-  val respBeSendWay       = RREncoder(mshrTableReg(respBeSendSet).map(_.respBeSend))
-  val taskResp            = mshrTableReg(respBeSendSet)(respBeSendWay)
-  val taskRespValid       = taskResp.respBeSend & respCanSendSetVec.reduce(_ | _)
+  val respSendSet         = RREncoder(respWillSendVecVec.map(_.reduce(_ | _))); dontTouch(respSendSet)
+  val respSendWay         = RREncoder(respWillSendVecVec(respSendSet)); dontTouch(respSendWay)
+  val taskResp            = mshrTableReg(respSendSet)(respSendWay)
+  val taskRespValid       = respWillSendVecVec.map(_.reduce(_ | _)).reduce(_ | _)
+
+
+  /*
+   * Get task_s0(req) from MSHRTable
+   */
+  val reqSendSet          = RREncoder(reqWillSendVecVec.map(_.reduce(_ | _))); dontTouch(reqSendSet)
+  val reqSendWay          = RREncoder(reqWillSendVecVec(reqSendSet)); dontTouch(reqSendWay)
+  val taskReq             = mshrTableReg(reqSendSet)(reqSendWay)
+  val taskReqValid        = reqWillSendVecVec.map(_.reduce(_ | _)).reduce(_ | _)
 
 
   /*
@@ -306,9 +310,9 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
    */
   taskResp_s0.valid         := taskRespValid
   taskResp_s0.bits.readDir  := true.B // TODO
-  taskResp_s0.bits.addr     := taskResp.addr(respBeSendSet)
+  taskResp_s0.bits.addr     := taskResp.addr(respSendSet)
   taskResp_s0.bits.pipeId   := PipeID.RESP
-  taskResp_s0.bits.mshrWay  := respBeSendWay
+  taskResp_s0.bits.mshrWay  := respSendWay
   taskResp_s0.bits.reqMes   := taskResp.chiMes
   taskResp_s0.bits.respMes  := taskResp.respMes
   canGoResp_s0              := canGoResp_s1 | !taskResp_s1_g.valid
@@ -319,10 +323,9 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
    */
   taskReq_s0.valid          := taskReqValid & !(taskResp_s0.valid & taskResp_s0.bits.dirBank === taskReq_s0.bits.dirBank)
   taskReq_s0.bits.readDir   := true.B // TODO
-  //                           ReqTask
-  taskReq_s0.bits.addr      := taskReq.addr(reqBeSendSet)
+  taskReq_s0.bits.addr      := taskReq.addr(reqSendSet)
   taskReq_s0.bits.pipeId    := PipeID.REQ
-  taskReq_s0.bits.mshrWay   := reqBeSendWay
+  taskReq_s0.bits.mshrWay   := reqSendWay
   taskReq_s0.bits.reqMes    := taskReq.chiMes
   taskReq_s0.bits.respMes   := taskReq.respMes
   canGoReq_s0               := canGoReq_s1 | !taskReq_s1_g.valid
@@ -332,8 +335,9 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
    */
   io.earlyRReqVec.map(_.valid).zipWithIndex.foreach {
     case(v, i) =>
-      v := taskResp_s0.valid & taskResp_s0.bits.dirBank === i.U | taskReq_s0.valid & taskReq_s0.bits.dirBank === i.U
+      v := (taskResp_s0.valid & canGoResp_s0 & taskResp_s0.bits.dirBank === i.U) | (taskReq_s0.valid & canGoReq_s0 & taskReq_s0.bits.dirBank === i.U)
   }
+  assert(PopCount(io.earlyRReqVec.map(_.fire)) === PopCount(Seq(taskResp_s0.valid & canGoResp_s0, taskReq_s0.valid & canGoReq_s0)))
 
 
 // ---------------------------------------------------------------------------------------------------------------------- //
@@ -403,6 +407,6 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
   // MSHR Timeout Check
   val cntMSHRReg = RegInit(VecInit(Seq.fill(djparam.nrMSHRSets) { VecInit(Seq.fill(djparam.nrMSHRWays) { 0.U(64.W) }) }))
   cntMSHRReg.zipWithIndex.foreach { case (c0, i) => c0.zipWithIndex.foreach { case(c1, j) => c1 := Mux(mshrTableReg(i)(j).isFree, 0.U, c1 + 1.U)  } }
-  cntMSHRReg.zipWithIndex.foreach { case (c0, i) => c0.zipWithIndex.foreach { case(c1, j) => assert(c1 < TIMEOUT_MSHR.U, "MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x] TIMEOUT", i.U, j.U, mshrTableReg(i)(j).addr(i.U), mshrTableReg(i)(j).chiMes.channel, mshrTableReg(i)(j).chiMes.opcode) } }
+  cntMSHRReg.zipWithIndex.foreach { case (c0, i) => c0.zipWithIndex.foreach { case(c1, j) => assert(c1 < TIMEOUT_MSHR.U, "MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x] STATE[0x%x] TIMEOUT", i.U, j.U, mshrTableReg(i)(j).addr(i.U), mshrTableReg(i)(j).chiMes.channel, mshrTableReg(i)(j).chiMes.opcode, mshrTableReg(i)(j).state) } }
 
 }

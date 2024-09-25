@@ -58,7 +58,7 @@ case class DJParam(
                     nrMpReqQueue: Int = 4,
                     nrMpRespQueue: Int = 4,
                     // MSHR
-                    nrMSHRSets: Int = 4,
+                    nrMSHRSets: Int = 2,
                     nrMSHRWays: Int = 4,
                     // number of bank or buffer
                     nrBank: Int = 2,
@@ -73,10 +73,13 @@ case class DJParam(
                     sfDirSets: Int = 32,
                     sfReplacementPolicy: String = "plru",
                     // DIR SRAM
-                    nrDirBank: Int = 2,
+                    nrDirBank: Int = 4,
                     dirMulticycle: Int = 2,
                     dirHoldMcp: Boolean = true,
                   ) {
+    require(nrDirBank >= nrMSHRSets)
+    require(isPow2(nrDirBank))
+    require(isPow2(nrMSHRSets))
     require(chiNodeIdBits >= 7 && chiNodeIdBits <= 11)
     require(nrMpTaskQueue > 0)
     require(nrMpReqQueue > 0)
@@ -187,12 +190,6 @@ trait HasDJParam extends HasParseZJParam {
     val nrDDRCRespQ     = 4
     val nrDDRCWBuf      = 4
     val ddrcWBufIdBits  = log2Ceil(nrDDRCWBuf)
-
-
-    // Slice Queue
-    val mpTaskQBits     = log2Ceil(djparam.nrMpTaskQueue)
-    val mpReqQBits      = log2Ceil(djparam.nrMpReqQueue)
-    val mpRespQBits     = log2Ceil(djparam.nrMpRespQueue)
 
     // Slice Id Bits Parameters
     val dbIdBits        = log2Ceil(djparam.nrDatBuf)

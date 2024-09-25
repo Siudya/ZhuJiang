@@ -24,7 +24,7 @@ class PipeTaskBundle(implicit p: Parameters) extends DJBundle with HasAddr with 
     val respMes         = new RespMesBundle()
 }
 
-object UpdMSHRType { val width = 2; val RETRY = "b00".U ; val UPD = "b01".U; val REPL = "b10".U; val EVICT = "b11".U }
+object UpdMSHRType { val width = 2; val RETRY = "b00".U ; val UPD = "b01".U; val REPL = "b10".U; val SNPEVICT = "b11".U }
 
 class UpdateMSHRReqBundle(implicit p: Parameters) extends DJBundle with HasAddr with HasMSHRWay {
     val updType     = UInt(UpdMSHRType.width.W)
@@ -34,9 +34,9 @@ class UpdateMSHRReqBundle(implicit p: Parameters) extends DJBundle with HasAddr 
     def isUpdate    = updType === UpdMSHRType.UPD & waitIntfVec.reduce(_ | _)
     def isClean     = updType === UpdMSHRType.UPD & !waitIntfVec.reduce(_ | _)
     def isRepl      = updType === UpdMSHRType.REPL
-    def isEvict     = updType === UpdMSHRType.EVICT
+    def isSnpEvict  = updType === UpdMSHRType.SNPEVICT
 
-    def isReq       = isRepl | isEvict
+    def isReq       = isRepl | isSnpEvict
 }
 
 class DirReadBundle(implicit p: Parameters) extends DJBundle with HasAddr with HasMSHRWay with HasPipeID
