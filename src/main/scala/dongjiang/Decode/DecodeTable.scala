@@ -65,7 +65,7 @@ import chisel3.util._
 
 object LocalReadDecode {
   def readNotSharedDirty: Seq[(UInt, UInt)] = Seq(
-    // ----------------------------------------------------------- LOCAL REQ ----------------------------------------------//
+    // ----------------------------------------------------------- LOCAL REQ --------------------------------------------------------------//
     LocalReqInst(ReadNotSharedDirty, I, I,   I) -> (ReadDown | ReadOp(ReadNoSnp)),
     LocalReqInst(ReadNotSharedDirty, I, UC,  I) -> (Snoop    | SnpOp(SnpNotSharedDirty) | retToSrc),
     LocalReqInst(ReadNotSharedDirty, I, UD,  I) -> (Snoop    | SnpOp(SnpNotSharedDirty) | retToSrc),
@@ -77,7 +77,7 @@ object LocalReadDecode {
     LocalReqInst(ReadNotSharedDirty, I, I,  SD) -> (ReadDCU  | ReadOp(ReadNoSnp)),
     LocalReqInst(ReadNotSharedDirty, I, SC, SD) -> (ReadDCU  | ReadOp(ReadNoSnp)),
 
-    // ----------------------------------------------------------- LOCAL RESP ----------------------------------------------//
+    // ----------------------------------------------------------- LOCAL RESP ------------------------------------------------------------//
     // TODO: Consider a variation of the SC/SD mapping as UC/SD In Local
     //  I  I  I
     LocalRespInst(REQ, ReadNotSharedDirty,  I,  I,  I, RD,  HasData, rd = ChiResp.UC)      -> (Commit | RDB2Src | CleanDB | WSFDir |         RespOp(CompData) | RespChnl(DAT) | Resp(ChiResp.UC)    | HnState(I)  | SrcState(UC) | OthState(I)),
@@ -108,7 +108,7 @@ object LocalReadDecode {
 
 
   def readUnique: Seq[(UInt, UInt)] = Seq(
-    // ----------------------------------------------------------- LOCAL REQ ----------------------------------------------//
+    // ----------------------------------------------------------- LOCAL REQ ----------------------------------------------------------------//
     LocalReqInst(ReadUnique, I, I,   I) -> (ReadDown | ReadOp(ReadNoSnp)),
     LocalReqInst(ReadUnique, I, UC,  I) -> (Snoop    | SnpOp(SnpUnique) | retToSrc),
     LocalReqInst(ReadUnique, I, UD,  I) -> (Snoop    | SnpOp(SnpUnique) | retToSrc),
@@ -120,7 +120,7 @@ object LocalReadDecode {
     LocalReqInst(ReadUnique, I, I,  SD) -> (ReadDCU  | ReadOp(ReadNoSnp)),
     LocalReqInst(ReadUnique, I, SC, SD) -> (ReadDCU  | ReadOp(ReadNoSnp) | SnpOp(SnpUnique)),
 
-    // ----------------------------------------------------------- LOCAL RESP ----------------------------------------------//
+    // ----------------------------------------------------------- LOCAL RESP ---------------------------------------------------------------//
     // TODO: Consider a variation of the SC/SD mapping as UC/SD In Local
     //  I  I  I
     LocalRespInst(REQ, ReadUnique,  I,  I,  I, RD,     HasData, rd = ChiResp.UC)                   -> (Commit | RDB2Src | CleanDB | WSFDir |         RespOp(CompData) | RespChnl(DAT) | Resp(ChiResp.UC)    | HnState(I)  | SrcState(UC) | OthState(I)),
@@ -152,10 +152,11 @@ object LocalReadDecode {
 
 object LoaclSnpUniqueEvict {
   def snpUniqueEvict: Seq[(UInt, UInt)] = Seq(
-    LocalRespInst(SNP, SnpUniqueEvict,  I,  I,  I, Snp,  HasData, snp = ChiResp.I)    -> (WSDir | HnState(UC) | WriteDCU),
+    // ----------------------------------------------------------- LOCAL RESP ------------------------------------------------------------//
+    LocalRespInst(SNP, SnpUniqueEvict,  I,  I,  I, Snp,  HasData, snp = ChiResp.I)    -> (WSDir | HnState(UC) | WriteDCU | WriOp(WriteNoSnpFull)),
     LocalRespInst(SNP, SnpUniqueEvict,  I,  I, SC, Snp,  HasData, snp = ChiResp.I)    -> (WSDir | HnState(UC) | CleanDB),
     LocalRespInst(SNP, SnpUniqueEvict,  I,  I, SD, Snp,  HasData, snp = ChiResp.I)    -> (WSDir | HnState(UD) | CleanDB),
-    LocalRespInst(SNP, SnpUniqueEvict,  I,  I,  I, Snp,  HasData, snp = ChiResp.I_PD) -> (WSDir | HnState(UD) | WriteDCU),
+    LocalRespInst(SNP, SnpUniqueEvict,  I,  I,  I, Snp,  HasData, snp = ChiResp.I_PD) -> (WSDir | HnState(UD) | WriteDCU | WriOp(WriteNoSnpFull))
   )
 
   def table: Seq[(UInt, UInt)] = snpUniqueEvict

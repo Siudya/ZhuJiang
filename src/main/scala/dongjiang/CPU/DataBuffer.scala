@@ -86,6 +86,7 @@ class DataBuffer()(implicit p: Parameters) extends DJModule {
 // ---------------------------------------------------------------------------------------------------------------------- //
 // ---------------------------------------------------- DATA TO NODE ---------------------------------------------------- //
 // ---------------------------------------------------------------------------------------------------------------------- //
+  // TODO: Ensure that the order of dataFDB Out is equal to the order of dbRCReq In
   val readVec     = entrys.map(_.isRead)
   val readingVec  = entrys.map(_.isReading)
   val hasReading  = readingVec.reduce(_ | _)

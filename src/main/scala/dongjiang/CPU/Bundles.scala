@@ -16,6 +16,8 @@ class RespMesBundle(implicit p: Parameters) extends DJBundle {
     val fwdState        = Valid(UInt(ChiResp.width.W))
     val slvDBID         = Valid(UInt(dbIdBits.W))
     val masDBID         = Valid(UInt(dbIdBits.W))
+
+    def noRespValid     = !slvResp.valid & !masResp.valid
 }
 
 class PipeTaskBundle(implicit p: Parameters) extends DJBundle with HasAddr with HasPipeID with HasMSHRWay {

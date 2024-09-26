@@ -237,8 +237,6 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
   taskRD_s3.expCompAck  := Mux(taskChipType === ChipType.Local, false.B, true.B)
   taskRD_s3.from.IncoId := io.sliceId
   taskRD_s3.to.IncoId   := Mux(taskChipType === ChipType.Local, IncoID.LOCALMAS.U, IncoID.CSNMAS.U)
-  taskRD_s3.replace     := false.B
-  taskRD_s3.ReadDCU     := false.B
 
   /*
    * Send Write / Dataless to SN(DDRC) / HN-F(CSN)
@@ -267,7 +265,16 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
    * Send Write to SN(DCU)
    */
   // writeDCU_s3
-  assert(Mux(valid_s3, !decode_s3.writeDCU, true.B), "TODO")
+  writeDCU_s3.addr          := getDCUAddress(task_s3_g.bits.addr, OHToUInt(dirRes_s3.bits.s.wayOH))
+  writeDCU_s3.mshrWay       := task_s3_g.bits.mshrWay
+  writeDCU_s3.channel       := CHIChannel.REQ
+  writeDCU_s3.opcode        := decode_s3.wdOp
+  writeDCU_s3.from.IncoId   := io.sliceId
+  writeDCU_s3.to.IncoId     := IncoID.LOCALMAS.U
+  writeDCU_s3.tgtID         := getSnNodeIDByBankId(task_s3_g.bits.bank)
+  writeDCU_s3.srcID         := task_s3_g.bits.reqMes.srcID
+  writeDCU_s3.dbid          := rcDBID
+
 
   /*
    * Send Write to Self Directory

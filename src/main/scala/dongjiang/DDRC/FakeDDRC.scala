@@ -29,7 +29,7 @@ class DDRCWEntry(implicit p: Parameters) extends DJBundle {
     val datVal          = Vec(nrBeat, Bool())
     val data            = Vec(nrBeat, UInt(beatBits.W))
     val index           = UInt(64.W)
-    val srcID           = UInt(djparam.chiNodeIdBits.W)
+    val srcID           = UInt(chiNodeIdBits.W)
     val txnID           = UInt(djparam.chiTxnidBits.W)
 }
 

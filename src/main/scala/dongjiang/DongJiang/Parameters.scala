@@ -43,7 +43,6 @@ case class DJParam(
                     localSnMasterIntf:  InterfaceParam =              InterfaceParam( name = "SnMaster_LOCAL", isRn = false,  isSlave = false, chipId = Some(0)),
                     csnRnSlaveIntf:     Option[InterfaceParam] = None, // Some(InterfaceParam( name = "RnSalve_CSN",    isRn = true,   isSlave = true)),
                     csnRnMasterIntf:    Option[InterfaceParam] = None, // Some(InterfaceParam( name = "RnMaster_CSN",   isRn = true,   isSlave = false, chipId = Some(1) )),
-                    chiNodeIdBits: Int = 8,
                     chiTxnidBits: Int = 12,
                     chiDBIDBits: Int = 16,
                     // ------------------------ DCU Base Mes ------------------ //
@@ -80,7 +79,6 @@ case class DJParam(
     require(nrDirBank >= nrMSHRSets)
     require(isPow2(nrDirBank))
     require(isPow2(nrMSHRSets))
-    require(chiNodeIdBits >= 7 && chiNodeIdBits <= 11)
     require(nrMpTaskQueue > 0)
     require(nrMpReqQueue > 0)
     require(nrMpRespQueue > 0)
@@ -109,6 +107,9 @@ trait HasParseZJParam extends HasZJParams {
         require(csnRnfNodeOpt.get.splitFlit)
     }
 
+    // CHI Node ID Width
+    val chiNodeIdBits   = zjParams.nodeIdBits
+
     // Local Base Node Mes
     val nrRnfNode       = zjParams.localRing.count(_.nodeType  == NodeType.RF)
     val rnfNodeIdBits   = log2Ceil(nrRnfNode)
@@ -121,6 +122,18 @@ trait HasParseZJParam extends HasZJParams {
     val csnHnfNodeId    = 0 // TODO
 
     def fromSnNode(x: UInt) = snNodeIdSeq.map(_.asUInt === x).reduce(_ | _)
+
+    def getSnNodeIDByBankId(x: UInt): UInt = {
+        val nodeID = WireInit(0xfff.U)
+        snNodeIdSeq.zipWithIndex.foreach {
+            case(id, i) =>
+                when(x === i.U) {
+                    nodeID := id.U
+                }
+        }
+        assert(nodeID =/= 0xfff.U)
+        nodeID
+    }
 
     def getMetaIdByNodeID(x: UInt): UInt = {
         val metaId = WireInit((nrRnfNode + 1).U((rnfNodeIdBits + 1).W))
@@ -178,11 +191,12 @@ trait HasDJParam extends HasParseZJParam {
     val nrDCUsEntry     = djparam.selfSets * djparam.selfWays
     val nrPerDCUEntry   = nrDCUsEntry / djparam.nrBank
     val nrDSEntry       = nrPerDCUEntry / djparam.nrDSBank
-    // DCU Index = [sSet] + [sWay] = [dsIndex] + [dsBank]
+    // DCU Index = [sSet] + [dirBank] + [sWay] = [dsIndex] + [dsBank]
     // Bank -> EREQ TgtID
     val dcuIndexBits    = log2Ceil(nrPerDCUEntry)
     val dsIndexBits     = log2Ceil(nrDSEntry)
     val dsBankBits      = log2Ceil(djparam.nrDSBank)
+    require(dcuIndexBits == (dsIndexBits + dsBankBits))
 
     // Base Fake DDRC Mes
     val nrDDRCBank      = dataBits / 64
@@ -200,16 +214,13 @@ trait HasDJParam extends HasParseZJParam {
     val offsetBits      = log2Ceil(djparam.blockBytes)
 
     // SELF DIR Parameters: [sTag] + [sSet] + [dirBank] + [bank] + [offset]
-    // [sSet] + [dirBank] = [setBis]
     val sWayBits        = log2Ceil(djparam.selfWays)
-    val sSetBits        = log2Ceil(djparam.selfSets/djparam.nrDirBank)
+    val sSetBits        = log2Ceil(djparam.selfSets  / djparam.nrBank  /djparam.nrDirBank)
     val sTagBits        = djparam.addressBits - sSetBits - dirBankBits - bankBits - offsetBits
 
     // SF DIR Parameters: [sfTag] + [sfSet] + [dirBank] + [bank] + [offset]
-    // [sfSet] + [dirBank] = [sfSetsBits]
     val sfWayBits       = log2Ceil(djparam.sfDirWays)
-
-    val sfSetBits       = log2Ceil(djparam.sfDirSets / djparam.nrDirBank)
+    val sfSetBits       = log2Ceil(djparam.sfDirSets / djparam.nrBank / djparam.nrDirBank)
     val sfTagBits       = djparam.addressBits - sfSetBits - dirBankBits - bankBits - offsetBits
 
     // MSHR TABLE Parameters: [mshrTag] + [mshrSet] + [bank] + [offset]
@@ -267,20 +278,20 @@ trait HasDJParam extends HasParseZJParam {
         (tag, set, bank)
     }
 
-     def parseDCUAddress(x: UInt): (UInt, UInt, UInt, UInt) = {
-         val (tag, set, modBank, bank, offset) = parseAddress(x, modBankBits = 0, setBits = sSetBits, tagBits = 0)
-         val sWay = offset(sWayBits-1, 0); require(sWayBits <= offsetBits)
-         val index = Cat(set, sWay)
-         // dsIndex = Cat(selfSet, selfWay)
-         // return: [1:dsIndex] [2:selfSet] [3:sliceBank] [4:selfWay]
-         (index, set, bank, sWay)
+     def parseDCUAddress(x: UInt): (UInt, UInt) = {
+         val dsBank  = x
+         val dsIndex = dsBank    >> dsBankBits
+         // return: [1:dsIndex] [2:dsBank]
+         (dsIndex(dsIndexBits - 1, 0), dsBank(dsBankBits - 1, 0))
      }
 
 
     def getDCUAddress(addr:UInt, sWay:UInt): UInt = {
-        val (index, set, bank, noWay) = parseDCUAddress(addr)
-        val dcuAddr = Cat(set, bank, 0.U((offsetBits-sWayBits).W), sWay)
-        require(dcuAddr.getWidth == sSetBits + bankBits + offsetBits)
+        require(addr.getWidth == addressBits)
+        require(sWay.getWidth == sWayBits)
+        val (sTag, sSet, dirbank, bank, offset) = parseAddress(addr, dirBankBits, sSetBits, sTagBits)
+        val dcuAddr = Cat(sSet, dirbank, sWay)
+        require(dcuAddr.getWidth == dcuIndexBits, s"${dcuAddr.getWidth} = ${sSet.getWidth} + ${dirbank.getWidth} + ${sWay.getWidth} =/= $dcuIndexBits")
         dcuAddr
     }
 

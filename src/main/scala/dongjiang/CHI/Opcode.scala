@@ -68,6 +68,7 @@ object CHIOp {
 
     def isReadX(x: UInt)      = (ReadShared <= x & x <= ReadNoSnp) | x === ReadUnique | (ReadOnceCleanInvalid <= x & x <= ReadNotSharedDirty)
     def isWriteX(x: UInt)     = WriteEvictFull <= x & x <= WriteUniquePtlStash
+    def isWriteRepl(x: UInt)  = x === Replace
   }
 
   object RSP {

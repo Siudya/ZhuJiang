@@ -61,7 +61,7 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
     val pipeTask      = Vec(2, Decoupled(new PipeTaskBundle()))
     // Update Task From MainPipe
     val updMSHR       = Flipped(Decoupled(new UpdateMSHRReqBundle()))
-    val updLockMSHR   = Flipped(Decoupled(new MSHRSetBundle))
+    val updLockMSHR   = Flipped(Decoupled(new MSHRSetBundle)) // TODO: It should be locked according to dir set but not mshr set
     // Directory Read Req
     val earlyRReqVec  = Vec(djparam.nrDirBank, Decoupled())
     val dirRead       = Vec(2, Valid(new DirReadBundle()))
@@ -186,8 +186,11 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
               m.respMes.masResp.bits    := io.resp2Slice.bits.resp
               m.respMes.masDBID.valid   := io.resp2Slice.bits.hasData
               m.respMes.masDBID.bits    := io.resp2Slice.bits.dbid
+            }.elsewhen(io.resp2Slice.bits.isWriResp) {
+              assert(PopCount(m.waitIntfVec) === 1.U)
+              assert(m.respMes.noRespValid)
+              // Nothing to do and State Will be Free
             }
-            assert(io.resp2Slice.bits.isSnpResp ^ io.resp2Slice.bits.isReqResp)
             assert(m.waitIntfVec(io.resp2Slice.bits.from.intfId), s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x] STATE[0x%x]", i.U, j.U, m.addr(i.U), m.chiMes.channel, m.chiMes.opcode, m.state)
             assert(m.isWaitResp, s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x] STATE[0x%x]", i.U, j.U, m.addr(i.U), m.chiMes.channel, m.chiMes.opcode, m.state)
           /*
@@ -268,7 +271,9 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
             // WaitResp
             is(MSHRState.WaitResp) {
               val hit     = !m.waitIntfVec.reduce(_ | _)
-              m.state     := Mux(hit, MSHRState.BeSend, MSHRState.WaitResp)
+              val noResp  = m.respMes.noRespValid
+              m.state     := Mux(hit, Mux(noResp, MSHRState.Free, MSHRState.BeSend), MSHRState.WaitResp)
+              assert(Mux(m.respMes.fwdState.valid, m.respMes.slvResp.valid, true.B))
             }
           }
       }

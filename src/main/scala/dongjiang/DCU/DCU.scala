@@ -31,7 +31,7 @@ class DCUWEntry(implicit p: Parameters) extends DJBundle {
     val data            = Vec(nrBeat, UInt(beatBits.W))
     val dsIndex         = UInt(dsIndexBits.W)
     val dsBank          = UInt(dsBankBits.W)
-    val srcID           = UInt(djparam.chiNodeIdBits.W)
+    val srcID           = UInt(chiNodeIdBits.W)
     val txnID           = UInt(djparam.chiTxnidBits.W)
 }
 
@@ -114,7 +114,7 @@ class DCU(node: Node)(implicit p: Parameters) extends DJModule {
     val selSDBID            = PriorityEncoder(wBufSDBIDVec)
 
     io.sn.rx.resp.get.valid := wBufSDBIDVec.reduce(_ | _)
-    rxRsp.Opcode            := CompDBIDResp
+    rxRsp.Opcode            := DBIDResp
     rxRsp.TgtID             := wBufRegVec(selSDBID).srcID
     rxRsp.TxnID             := wBufRegVec(selSDBID).txnID
     rxRsp.DBID              := selSDBID
@@ -136,7 +136,7 @@ class DCU(node: Node)(implicit p: Parameters) extends DJModule {
                     }
                 }
                 is(DCUWState.SendDBIDResp) {
-                    val hit = io.sn.rx.resp.get.fire & rxRsp.Opcode === CompDBIDResp & selSDBID === i.U
+                    val hit = io.sn.rx.resp.get.fire & rxRsp.Opcode === DBIDResp & selSDBID === i.U
                     when(hit) {
                         w.state := DCUWState.WaitData
                     }
