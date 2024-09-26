@@ -130,8 +130,8 @@ object Inst {
   def FwdStateIs(x: UInt) : UInt = { val temp = WireInit(0.U.asTypeOf(new InstBundle())); temp.fwdState := x;               temp.asUInt }
   def RDRespIs  (x: UInt) : UInt = { val temp = WireInit(0.U.asTypeOf(new InstBundle())); temp.rdResp := x;                 temp.asUInt }
 
-  def LocalReqInst  (op: UInt, src: UInt, oth: UInt, hn: UInt): UInt = FromLocal | Chnl(CHIChannel.REQ) | Op(op) | SrcIs(src) | OthIs(oth) | HnIs(hn)
-  def LocalRespInst (op: UInt, src: UInt, oth: UInt, hn: UInt, respType: UInt, data: Bool, snp: UInt = ChiResp.I, fwd: UInt = ChiResp.I, rd: UInt = ChiResp.I): UInt = FromLocal | Chnl(CHIChannel.REQ) | Op(op) | SrcIs(src) | OthIs(oth) | HnIs(hn) | RespIs(respType) | RespData(data) | SnpRespIs(snp) | FwdStateIs(fwd) | RDRespIs(rd)
+  def LocalReqInst (op: UInt, src: UInt, oth: UInt, hn: UInt): UInt = FromLocal | Chnl(CHIChannel.REQ) | Op(op) | SrcIs(src) | OthIs(oth) | HnIs(hn)
+  def LocalRespInst(chnl: UInt, op: UInt, src: UInt, oth: UInt, hn: UInt, respType: UInt, data: Bool, snp: UInt = ChiResp.I, fwd: UInt = ChiResp.I, rd: UInt = ChiResp.I): UInt = FromLocal | Chnl(chnl) | Op(op) | SrcIs(src) | OthIs(oth) | HnIs(hn) | RespIs(respType) | RespData(data) | SnpRespIs(snp) | FwdStateIs(fwd) | RDRespIs(rd)
 }
 
 
@@ -147,7 +147,7 @@ object Code {
   def ReadDCU          : UInt = { val temp = WireInit(0.U.asTypeOf(new DecodeBundle())); temp.readDCU := true.B;    temp.asUInt }
   def WriteDCU         : UInt = { val temp = WireInit(0.U.asTypeOf(new DecodeBundle())); temp.writeDCU := true.B;   temp.asUInt }
   def WSDir            : UInt = { val temp = WireInit(0.U.asTypeOf(new DecodeBundle())); temp.wSDir := true.B;      temp.asUInt }
-  def wSFDir           : UInt = { val temp = WireInit(0.U.asTypeOf(new DecodeBundle())); temp.wSFDir := true.B;     temp.asUInt }
+  def WSFDir           : UInt = { val temp = WireInit(0.U.asTypeOf(new DecodeBundle())); temp.wSFDir := true.B;     temp.asUInt }
 
   // other
   def RespChnl(x: UInt): UInt = { val temp = WireInit(0.U.asTypeOf(new DecodeBundle())); temp.respChnl := x;        temp.asUInt }
