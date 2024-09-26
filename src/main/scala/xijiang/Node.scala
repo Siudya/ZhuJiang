@@ -5,222 +5,263 @@ import chisel3.util._
 import org.chipsalliance.cde.config.Parameters
 import xijiang.router._
 import xijiang.router.base.BaseRouter
-import zhujiang.chi.NodeIdBundle
+import zhujiang.ZJParametersKey
+import zhujiang.chi.{NodeIdBundle, ReqAddrBundle, SnpAddrBundle}
 
 object NodeType {
-  val RF: Int = 0
-  val RI: Int = 1
-  val HF: Int = 2
-  val HI: Int = 3
-  val C: Int = 4
-  val S: Int = 5
-  val P: Int = 6
+  val CC: Int = 0
+  val RF: Int = 1
+  val RI: Int = 2
+  val HF: Int = 3
+  val HI: Int = 4
+  val C: Int = 5
+  val S: Int = 6
+  val P: Int = 7
   def width: Int = log2Ceil(P)
-  def min: Int = RF
+  def min: Int = 0
   def max: Int = P
 }
 
 case class NodeParam(
-  name: String = "",
-  nodeType: Int = NodeType.RF,
+  nodeType: Int = NodeType.P,
   splitFlit: Boolean = false,
-  mainMemory: Boolean = false
+  bankId: Int = 0, // Only applied in SN and HNF
+  mainMemory: Boolean = false, // Only applied in SN
+  cpuNum: Int = 1, // Only applied in CC
+  addressRange: (Long, Long) = (0L, 0L), // Only applied in HNI
+  defaultHni: Boolean = false // Only applied in HNI
 ) {
   if(mainMemory) require(nodeType == NodeType.S)
 }
 
 case class Node(
-  suffix: String = "",
-  nodeType: Int = NodeType.RF,
+  nodeType: Int = NodeType.P,
   csnNode: Boolean = false,
-  nodeNetBits: Int = 1,
-  nodeNidBits: Int = 4,
+  nidBits: Int = 7,
+  aidBits: Int = 3,
   ringSize: Int = 3,
-  oddNode: Boolean = false,
+  globalId: Int = 0,
   splitFlit: Boolean = false,
-  mainMemory: Boolean = false
+  bankId: Int = 0, // Only applied in SN, HNF and CRF
+  bankBits: Int = 1, // Only applied in SN, HNF and CRF
+  mainMemory: Boolean = false, // Only applied in SN
+  cpuNum: Int = 1, // Only applied in CCN
+  clusterId: Int = 0, //Only applied in CCN
+  addressRange: (Long, Long) = (0L, 0L), // Only applied in HNI
+  defaultHni: Boolean = false // Only applied in HNI
 ) {
-  var nid: Int = 0
-  var left: Node = null
-  var right: Node = null
-
-  lazy val net = if(csnNode) 1 else 0
-  lazy private val netOff = NodeType.width + nodeNidBits
-  lazy private val typeOff = nodeNidBits
   require(NodeType.min <= nodeType && nodeType <= NodeType.max)
-  lazy val nodeId = (net << netOff) | (nodeType << typeOff) | nid
 
-  lazy val (leftNodes, rightNodes) = getLeftAndRight
-  private def getLeftAndRight: (Seq[Node], Seq[Node]) = {
-    require(left != null)
-    require(right != null)
-    val otherNodesNum = ringSize - 1
-    val leftNum = if(oddNode) otherNodesNum / 2 else (otherNodesNum + 1) / 2
-    var leftNow: Node = this
-    val leftNodes = for(i <- 0 until leftNum) yield {
-      leftNow = leftNow.left
-      require(leftNow != null)
-      leftNow
-    }
+  val net = if(csnNode) 1 else 0
+  private val netOff = nidBits + aidBits
+  val nodeId = (net << netOff) | (globalId << aidBits)
 
-    val rightNum = otherNodesNum - leftNum
-    var rightNow: Node = this
-    val rightNodes = for(i <- 0 until rightNum) yield {
-      rightNow = rightNow.right
-      require(rightNow != null)
-      rightNow
-    }
-    (leftNodes, rightNodes)
-  }
+  var leftNodes: Seq[Node] = Seq()
+  var rightNodes: Seq[Node] = Seq()
 
   def genRouter(p: Parameters): BaseRouter = {
     val csnStr = if(csnNode && nodeType != NodeType.C) "c" else ""
     val (res, nodeStr) = nodeType match {
-      case NodeType.RF => (Module(new RequestRouter(this)(p)), "rnf")
-      case NodeType.RI => (Module(new RequestRouter(this)(p)), "rni")
-      case NodeType.HF => (Module(new HomeRouter(this)(p)), "hnf")
-      case NodeType.HI => (Module(new HomeRouter(this)(p)), "hni")
+      case NodeType.CC => (Module(new RxReqRouter(this)(p)), "CC")
+      case NodeType.RF => (Module(new RxReqRouter(this)(p)), "rnf")
+      case NodeType.RI => (Module(new RxReqRouter(this)(p)), "rni")
+      case NodeType.HF => (Module(new BaseRouter(this)(p)), "hnf")
+      case NodeType.HI => (Module(new BaseRouter(this)(p)), "hni")
       case NodeType.C => (Module(new ChipToChipRouter(this)(p)), "c2c")
-      case NodeType.S => (Module(new SubordinateRouter(this)(p)), "sn")
-      case _ => (Module(new PipelineRouter(this)(p)), "pip")
+      case NodeType.S => (Module(new BaseRouter(this)(p)), "sn")
+      case _ => (Module(new BaseRouter(this)(p)), "pip")
     }
-    res.suggestName(s"$csnStr$nodeStr$suffix")
+    res.suggestName(s"$csnStr${nodeStr}_0x${nodeId.toHexString}")
     res
   }
 
-  lazy val routerPrefixStr: String = if(csnNode) "Csn" else ""
-  lazy val routerStr: String = nodeType match {
-    case NodeType.RF => s"${routerPrefixStr}RequestFullRouter"
-    case NodeType.RI => s"${routerPrefixStr}RequestIoRouter"
-    case NodeType.HF => s"${routerPrefixStr}HomeFullFullRouter"
-    case NodeType.HI => s"${routerPrefixStr}HomeIoRouter"
-    case NodeType.C => s"${routerPrefixStr}C2cRouter"
-    case NodeType.S => s"${routerPrefixStr}SubordinateRouter"
-    case _ => s"${routerPrefixStr}PipelineRouter"
+  private lazy val routerPrefixStr: String = if(csnNode) "Csn" else ""
+  private lazy val icnPrefixStr: String = if(csnNode) "csn_" else ""
+  private lazy val snTypeStr: String = if(mainMemory) "mem_" else s"dcu_bank_${bankId}_"
+  private def icnStrGen(pfx: String, body: String) = s"$icnPrefixStr$pfx${body}_id_${nodeId.toHexString}"
+  private def routerStrGen(body: String) = s"Router$routerPrefixStr${body}_0x${nodeId.toHexString}"
+  lazy val (routerStr, icnStr, nodeStr): (String, String, String) = nodeType match {
+    case NodeType.CC => (routerStrGen("CpuCluster"), icnStrGen("", "ccn"), "CCN")
+    case NodeType.RF => (routerStrGen("RequestFull"), icnStrGen("", "rnf"), "RNF")
+    case NodeType.RI => (routerStrGen("RequestIo"), icnStrGen("", "rni"), "RNI")
+    case NodeType.HF => (routerStrGen("HomeFull"), icnStrGen(s"bank_${bankId}_", "hnf"), "HNF")
+    case NodeType.HI => (routerStrGen("HomeIo"), icnStrGen("", "hni"), "HNI")
+    case NodeType.C => (routerStrGen("ChipToChip"), icnStrGen("", "c2c"), "C2C")
+    case NodeType.S => (routerStrGen("Subordinate"), icnStrGen(snTypeStr, "sn"), "SN")
+    case _ => (routerStrGen("Pipeline"), icnStrGen(snTypeStr, "pip"), "PIP")
   }
 
-  lazy val icnPrefixStr: String = if(csnNode) "csn_" else ""
-  lazy val icnStr: String = nodeType match {
-    case NodeType.RF => s"${icnPrefixStr}rnf_id_${nodeId.toHexString}"
-    case NodeType.RI => s"${icnPrefixStr}rni_id_${nodeId.toHexString}"
-    case NodeType.HF => s"${icnPrefixStr}hnf_id_${nodeId.toHexString}"
-    case NodeType.HI => s"${icnPrefixStr}hni_id_${nodeId.toHexString}"
-    case NodeType.C => s"${icnPrefixStr}c2c_id_${nodeId.toHexString}"
-    case NodeType.S => if(mainMemory) s"${icnPrefixStr}mem_sn_id_${nodeId.toHexString}" else s"${icnPrefixStr}dcu_sn_id_${nodeId.toHexString}"
-    case _ => ""
-  }
-
-  lazy val nodeStr: String = nodeType match {
-    case NodeType.RF => "RNF"
-    case NodeType.RI => "RNI"
-    case NodeType.HF => "HNF"
-    case NodeType.HI => "HNI"
-    case NodeType.C => "C2C"
-    case NodeType.S => "SN"
-    case _ => "PN"
-  }
-
-  lazy val ejects: Seq[String] = {
+  lazy val (ejects, injects): (Seq[String], Seq[String]) = {
     val res = nodeType match {
-      case NodeType.RF => Seq("RSP", "DAT", "SNP")
-      case NodeType.RI => Seq("RSP", "DAT")
-      case NodeType.HF => Seq("REQ", "RSP", "DAT")
-      case NodeType.HI => Seq("REQ", "RSP", "DAT")
-      case NodeType.C => Seq("RSP", "DAT", "SNP", "REQ")
-      case NodeType.S => Seq("ERQ", "DAT")
-      case _ => Seq()
+      case NodeType.CC => (Seq("REQ", "RSP", "DAT", "SNP"), Seq("REQ", "RSP", "DAT"))
+      case NodeType.RF => (Seq("RSP", "DAT", "SNP"), Seq("REQ", "RSP", "DAT"))
+      case NodeType.RI => (Seq("RSP", "DAT"), Seq("REQ", "RSP", "DAT"))
+      case NodeType.HF => (Seq("REQ", "RSP", "DAT"), Seq("RSP", "DAT", "SNP", "ERQ"))
+      case NodeType.HI => (Seq("REQ", "RSP", "DAT"), Seq("RSP", "DAT", "ERQ"))
+      case NodeType.C => (Seq("RSP", "DAT", "SNP", "REQ"), Seq("RSP", "DAT", "SNP", "REQ"))
+      case NodeType.S => (Seq("ERQ", "DAT"), Seq("RSP", "DAT"))
+      case _ => (Seq(), Seq())
     }
-    val illegal = res.contains("REQ") && res.contains("ERQ")
-    require(!illegal, "Cannot eject from both REQ and ERQ")
+    val illegal1 = res._1.contains("REQ") && res._1.contains("ERQ")
+    val illegal2 = res._2.contains("REQ") && res._2.contains("ERQ")
+    require(!illegal1, "Cannot eject from both REQ and ERQ")
+    require(!illegal2, "Cannot inject to both REQ and ERQ")
     res
   }
 
-  lazy val injects: Seq[String] = {
-    val res = nodeType match {
-      case NodeType.RF => Seq("REQ", "RSP", "DAT")
-      case NodeType.RI => Seq("REQ", "RSP", "DAT")
-      case NodeType.HF => Seq("RSP", "DAT", "SNP", "ERQ")
-      case NodeType.HI => Seq("RSP", "DAT", "ERQ")
-      case NodeType.C => Seq("RSP", "DAT", "SNP", "REQ")
-      case NodeType.S => Seq("RSP", "DAT")
-      case _ => Seq()
+  private def getLegalTgtSeq(ring: Seq[Node], chn: String): Seq[Int] = {
+    import NodeType._
+    val legalTgtTypeSeq = nodeType match {
+      case CC => chn match {
+        case "REQ" => Seq(CC, HF, HI)
+        case "RSP" => Seq(CC, HF, HI)
+        case "DAT" => Seq(CC, RF, RI, HF, HI, S)
+        case _ => Seq[Int]()
+      }
+      case RF => chn match {
+        case "REQ" => Seq(CC, HF, HI)
+        case "RSP" => Seq(CC, HF, HI)
+        case "DAT" => Seq(CC, RF, RI, HF, HI, S)
+        case _ => Seq[Int]()
+      }
+      case RI => chn match {
+        case "REQ" => Seq(CC, HF, HI)
+        case "RSP" => Seq(CC, HF, HI)
+        case "DAT" => Seq(CC, HF, HI, S)
+        case _ => Seq[Int]()
+      }
+      case HF => chn match {
+        case "RSP" => Seq(CC, RF, RI)
+        case "DAT" => Seq(CC, RF, RI)
+        case "SNP" => Seq(CC, RF)
+        case "ERQ" => Seq(S)
+        case _ => Seq[Int]()
+      }
+      case HI => chn match {
+        case "RSP" => Seq(CC, RF, RI)
+        case "DAT" => Seq(CC, RF, RI)
+        case "ERQ" => Seq(S)
+        case _ => Seq[Int]()
+      }
+      case S => chn match {
+        case "RSP" => Seq(CC, RF, RI, HF, HI)
+        case "DAT" => Seq(CC, RF, RI, HF, HI)
+        case _ => Seq[Int]()
+      }
+      case C => chn match {
+        case "REQ" => Seq(HF)
+        case "RSP" => Seq(RF, HF)
+        case "DAT" => Seq(RF, HF)
+        case "SNP" => Seq(RF)
+        case _ => Seq[Int]()
+      }
+      case _ => Seq[Int]()
     }
-    val illegal = res.contains("REQ") && res.contains("ERQ")
-    require(!illegal, "Cannot inject to both REQ and ERQ")
-    res
+    require(legalTgtTypeSeq.nonEmpty, s"node 0x${nodeId.toHexString} has no inject channel $chn")
+    ring.filter(n => legalTgtTypeSeq.contains(n.nodeType)).map(_.nodeId).filterNot(_ == nodeId)
   }
 
-  private def getLocalLegalTarget(ring: Seq[Node]): Map[String, Seq[Int]] = {
-    nodeType match {
-      case NodeType.RF => Map[String, Seq[Int]](
-        "REQ" -> ring.filter(n => n.nodeType == NodeType.HF || n.nodeType == NodeType.HI).map(_.nodeId).filterNot(_ == nodeId),
-        "RSP" -> ring.filter(n => n.nodeType == NodeType.HF || n.nodeType == NodeType.HI).map(_.nodeId).filterNot(_ == nodeId),
-        "DAT" -> ring.filter(n => n.nodeType == NodeType.HF || n.nodeType == NodeType.HI || n.nodeType == NodeType.S || n.nodeType == NodeType.RF).map(_.nodeId).filterNot(_ == nodeId)
-      )
-      case NodeType.RI => Map[String, Seq[Int]](
-        "REQ" -> ring.filter(n => n.nodeType == NodeType.HF || n.nodeType == NodeType.HI).map(_.nodeId).filterNot(_ == nodeId),
-        "RSP" -> ring.filter(n => n.nodeType == NodeType.HF || n.nodeType == NodeType.HI).map(_.nodeId).filterNot(_ == nodeId),
-        "DAT" -> ring.filter(n => n.nodeType == NodeType.HF || n.nodeType == NodeType.HI || n.nodeType == NodeType.S).map(_.nodeId).filterNot(_ == nodeId)
-      )
-      case NodeType.HF => Map[String, Seq[Int]](
-        "RSP" -> ring.filter(n => n.nodeType == NodeType.RF || n.nodeType == NodeType.RI || n.nodeType == NodeType.S).map(_.nodeId).filterNot(_ == nodeId),
-        "DAT" -> ring.filter(n => n.nodeType == NodeType.RF || n.nodeType == NodeType.RI || n.nodeType == NodeType.S).map(_.nodeId).filterNot(_ == nodeId),
-        "SNP" -> ring.filter(n => n.nodeType == NodeType.RF).map(_.nodeId).filterNot(_ == nodeId),
-        "ERQ" -> ring.filter(n => n.nodeType == NodeType.S).map(_.nodeId).filterNot(_ == nodeId)
-      )
-      case NodeType.HI => Map[String, Seq[Int]](
-        "RSP" -> ring.filter(n => n.nodeType == NodeType.RF || n.nodeType == NodeType.RI || n.nodeType == NodeType.S).map(_.nodeId).filterNot(_ == nodeId),
-        "DAT" -> ring.filter(n => n.nodeType == NodeType.RF || n.nodeType == NodeType.RI || n.nodeType == NodeType.S).map(_.nodeId).filterNot(_ == nodeId),
-        "ERQ" -> ring.filter(n => n.nodeType == NodeType.S).map(_.nodeId).filterNot(_ == nodeId)
-      )
-      case NodeType.S => Map[String, Seq[Int]](
-        "RSP" -> ring.filter(n => n.nodeType == NodeType.HF || n.nodeType == NodeType.HI || n.nodeType == NodeType.RF || n.nodeType == NodeType.RI).map(_.nodeId).filterNot(_ == nodeId),
-        "DAT" -> ring.filter(n => n.nodeType == NodeType.RF || n.nodeType == NodeType.RI || n.nodeType == NodeType.HF || n.nodeType == NodeType.HI).map(_.nodeId).filterNot(_ == nodeId),
-      )
-      case _ => Map[String, Seq[Int]]()
-    }
-  }
-
-  private def getCsnLegalTarget(ring: Seq[Node]): Map[String, Seq[Int]] = {
-    nodeType match {
-      case NodeType.RF => Map[String, Seq[Int]](
-        "REQ" -> ring.filter(n => n.nodeType == NodeType.C).map(_.nodeId),
-        "RSP" -> ring.filter(n => n.nodeType == NodeType.C).map(_.nodeId),
-        "DAT" -> ring.filter(n => n.nodeType == NodeType.C).map(_.nodeId),
-      )
-      case NodeType.HF => Map[String, Seq[Int]](
-        "RSP" -> ring.filter(n => n.nodeType == NodeType.C).map(_.nodeId).filterNot(_ == nodeId),
-        "DAT" -> ring.filter(n => n.nodeType == NodeType.C).map(_.nodeId).filterNot(_ == nodeId),
-        "SNP" -> ring.filter(n => n.nodeType == NodeType.C).map(_.nodeId).filterNot(_ == nodeId)
-      )
-      case NodeType.C => Map[String, Seq[Int]](
-        "REQ" -> ring.filter(n => n.nodeType == NodeType.HF).map(_.nodeId).filterNot(_ == nodeId),
-        "RSP" -> ring.filter(n => n.nodeType == NodeType.HF || n.nodeType == NodeType.RF).map(_.nodeId).filterNot(_ == nodeId),
-        "DAT" -> ring.filter(n => n.nodeType == NodeType.HF || n.nodeType == NodeType.RF).map(_.nodeId).filterNot(_ == nodeId),
-        "SNP" -> ring.filter(n => n.nodeType == NodeType.RF).map(_.nodeId).filterNot(_ == nodeId),
-      )
-      case _ => Map[String, Seq[Int]]()
-    }
-  }
-
-  private def checkTarget(n: Int, tgt: NodeIdBundle, localChip: Option[UInt]): Bool = {
-    if(csnNode && nodeType == NodeType.C) {
-      (n.U(tgt.getWidth.W) | localChip.get) === tgt.asUInt
-    } else if(csnNode && nodeType != NodeType.C) {
-      n.U(tgt.getWidth.W).asTypeOf(tgt).nodeCsnChip === tgt.nodeCsnChip
-    } else {
-      n.U(tgt.getWidth.W) === tgt.asUInt
-    }
-  }
-
-  def checkLegalStaticInjectTarget(ring: Seq[Node], chn: String, tgt: NodeIdBundle, valid: Bool, nid: UInt, localChip: Option[UInt]): Unit = {
-    val targetsSeq = if(csnNode) getCsnLegalTarget(ring)(chn) else getLocalLegalTarget(ring)(chn)
-    require(targetsSeq.nonEmpty, s"targets are empty when making node 0x${nodeId.toHexString} of $chn")
-    val targetHits = targetsSeq.map(checkTarget(_, tgt, localChip))
-    val legalStr = targetsSeq.map(i => s"0x${i.toHexString} ").reduce(_ + _)
-    val legal = Cat(targetHits).orR
+  def checkLegalInjectTarget(ring: Seq[Node], chn: String, tgt: NodeIdBundle, valid: Bool, nid: UInt): Unit = {
+    val legalTgtSeq = getLegalTgtSeq(ring, chn)
+    require(legalTgtSeq.nonEmpty, s"targets are empty when making node 0x${nodeId.toHexString} of $chn")
+    val tgtHitSeq = legalTgtSeq.map(n => n.U(tgt.getWidth.W) === tgt.router)
+    val legalStr = legalTgtSeq.map(i => s"0x${i.toHexString} ").reduce(_ + _)
+    val legal = Cat(tgtHitSeq).orR
     when(valid) {
       assert(legal, cf"Illegal target id 0x${tgt.asUInt}%x of $chn flit @ node 0x${nid}%x legal target_id: $legalStr")
     }
+  }
+
+  private def hnfAddrCheck(addr: ReqAddrBundle): Bool = {
+    !addr.mmio && addr.bank(bankBits) === bankId.U
+  }
+
+  private def hniAddrCheck(addr: ReqAddrBundle, chip: UInt): Bool = {
+    val addrMin = addressRange._1.U(addr.getWidth.W)(addr.devAddr.getWidth - 1, 0)
+    val addrMax = addressRange._2.U(addr.getWidth.W)(addr.devAddr.getWidth - 1, 0)
+    if(defaultHni) {
+      addr.mmio
+    } else {
+      addr.mmio && addr.chip === chip && addrMin <= addr.devAddr && addr.devAddr < addrMax
+    }
+  }
+
+  def isReqCompleter(addr: ReqAddrBundle, chip: UInt): Bool = {
+    import NodeType._
+    nodeType match {
+      case CC => hniAddrCheck(addr, chip)
+      case HF => hnfAddrCheck(addr)
+      case HI => hniAddrCheck(addr, chip)
+      case _ => false.B
+    }
+  }
+
+  var friends = Seq[Node]()
+
+  def findSn(bank: UInt, check: Bool): UInt = {
+    require(nodeType == NodeType.HF)
+    val selOH = friends.map(n => n.bankId.U === bank)
+    val selBits = friends.map(n => n.nodeId.U((1 + nidBits + aidBits).W))
+    when(check) {
+      val legal = PopCount(selOH) === 1.U
+      assert(legal)
+    }
+    Mux1H(selOH, selBits)
+  }
+
+  def checkSnTgt(tgt: UInt): Bool = {
+    val tgtRouter = tgt & Cat(Fill(1 + nidBits, true.B), Fill(aidBits, false.B))
+    friends.map(_.nodeId.U((1 + nidBits + aidBits).W) === tgtRouter).reduce(_ || _)
+  }
+
+  lazy val leftsStr = leftNodes.map(e => "0x" + e.nodeId.toHexString).reduce((a: String, b: String) => s"$a, $b")
+  lazy val rightsStr = rightNodes.map(e => "0x" + e.nodeId.toHexString).reduce((a: String, b: String) => s"$a, $b")
+  lazy val friendsStr = friends.map(e => "0x" + e.nodeId.toHexString).reduce((a: String, b: String) => s"$a, $b")
+  override def toString = {
+    val head =
+      s"""
+         |  $routerStr {
+         |    node_id: 0x${nodeId.toHexString}
+         |    lefts: $leftsStr
+         |    rights: $rightsStr
+         |""".stripMargin
+
+    val frdsStr = if((nodeType == NodeType.HF || nodeType == NodeType.S && !mainMemory) && !csnNode) {
+      s"""    friends: $friendsStr
+         |    bank: $bankId
+         |""".stripMargin
+    } else {
+      ""
+    }
+
+    val snDevStr = if(nodeType == NodeType.S) {
+      s"""    device: ${if(mainMemory) "mem" else "dcu"}
+         |""".stripMargin
+    } else {
+      ""
+    }
+
+    val ccAttrStr = if(nodeType == NodeType.CC) {
+      s"""    mhartid: $clusterId
+         |""".stripMargin
+    } else {
+      ""
+    }
+
+    val hdAttrStr = if(nodeType == NodeType.HI) {
+      s"""    default_iocu: $defaultHni
+         |""".stripMargin
+    } else {
+      ""
+    }
+
+    val addrStr = if(nodeType == NodeType.HI && !defaultHni || nodeType == NodeType.CC) {
+      s"""    address: (0x${addressRange._1.toHexString}, 0x${(addressRange._2 - 1).toHexString})
+         |""".stripMargin
+    } else {
+      ""
+    }
+
+    head + frdsStr + snDevStr + ccAttrStr + hdAttrStr + addrStr + "  }\n"
   }
 }

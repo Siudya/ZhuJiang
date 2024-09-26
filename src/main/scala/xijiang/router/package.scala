@@ -8,112 +8,65 @@ import zhujiang.ZJParametersKey
 import zhujiang.chi._
 
 package object router {
-  class RequestRouter(node: Node)(implicit p: Parameters) extends BaseRouter(node) {
-    require(node.nodeType == NodeType.RF || node.nodeType == NodeType.RI)
-    private val nStr = if(node.nodeType == NodeType.RF) "rnf" else "rni"
+  class RxReqRouter(node: Node)(implicit p: Parameters) extends BaseRouter(node) {
+    require(node.nodeType == NodeType.CC || node.nodeType == NodeType.RF || node.nodeType == NodeType.RI)
     private val injectAddr = icn.rx.req.get.bits.asTypeOf(new ReqFlit).Addr.asTypeOf(new ReqAddrBundle)
-    if(p(ZJParametersKey).tfsParams.isEmpty) {
-      if(node.csnNode) {
-        val c2cHits = router.remoteChipIds.get.map(_ === injectAddr.chip)
-        when(icn.rx.req.get.valid) {
-          assert(PopCount(c2cHits) === 1.U, cf"Invalid REQ chip target ${injectAddr.chip} of node 0x${node.nodeId.toHexString}")
-        }
-        val c2cId = PriorityEncoder(c2cHits)
-        injectsMap("REQ").bits.tgt := Cat(
-          1.U(nodeNetBits.W),
-          NodeType.HF.U(nodeTypeBits.W),
-          0.U((nodeNidBits - chipAddrBits).W),
-          c2cId.asTypeOf(UInt(chipAddrBits.W))
-        )
-      } else {
-        val hnfCnt = p(ZJParametersKey).localRing.count(_.nodeType == NodeType.HF)
-        val hniCnt = p(ZJParametersKey).localRing.count(_.nodeType == NodeType.HI)
-        val hnfId = if(hnfCnt > 1) injectAddr.tag(log2Ceil(hnfCnt) - 1, 0).asTypeOf(UInt(nodeNidBits.W)) else 0.U(nodeNidBits.W)
-        val hniId = if(hniCnt > 1) injectAddr.tag(log2Ceil(hniCnt) - 1, 0).asTypeOf(UInt(nodeNidBits.W)) else 0.U(nodeNidBits.W)
-        val tgtHnfId = Cat(0.U(nodeNetBits.W), NodeType.HF.U(nodeTypeBits.W), hnfId)
-        val tgtHniId = Cat(0.U(nodeNetBits.W), NodeType.HI.U(nodeTypeBits.W), hniId)
-        injectsMap("REQ").bits.tgt := Mux(injectAddr.mmio, tgtHniId, tgtHnfId)
-      }
+    private val reqTarget = if(node.csnNode) {
+      val csnReqTarget = Wire(new NodeIdBundle)
+      csnReqTarget.net := true.B
+      csnReqTarget.nid := DontCare
+      csnReqTarget.aid := injectAddr.chip
+      csnReqTarget.asUInt
+    } else {
+      val defaultHni = p(ZJParametersKey).localRing.filter(r => NodeType.HI == r.nodeType && r.defaultHni).head
+      val possibleCompleterTypes = Seq(NodeType.CC, NodeType.HF, NodeType.HI)
+      val possibleCompleters = p(ZJParametersKey).localRing.filter(r => possibleCompleterTypes.contains(r.nodeType) && !r.defaultHni)
+      val completerSelOH = possibleCompleters.map(_.isReqCompleter(injectAddr, router.chip))
+      val completerId = possibleCompleters.map(_.nodeId.U(niw.W))
+      val localReqTarget = Mux(Cat(completerSelOH).orR, Mux1H(completerSelOH, completerId), defaultHni.nodeId.U)
+      localReqTarget
     }
-    print(
-      s"""
-         |  RequestNode ${nStr}_${node.nid} {
-         |    node_id: 0x${node.nodeId.toHexString}
-         |    lefts: ${node.leftNodes.map(e => "0x" + e.nodeId.toHexString).reduce((a: String, b: String) => s"$a, $b")}
-         |    rights: ${node.rightNodes.map(e => "0x" + e.nodeId.toHexString).reduce((a: String, b: String) => s"$a, $b")}
-         |  }
-         |""".stripMargin)
-
-  }
-
-  class HomeRouter(node: Node)(implicit p: Parameters) extends BaseRouter(node) {
-    require(node.nodeType == NodeType.HF || node.nodeType == NodeType.HI)
-    private val nStr = if(node.nodeType == NodeType.HF) "hnf" else "hni"
     if(p(ZJParametersKey).tfsParams.isEmpty) {
-      if(node.csnNode) {
-        injectsMap("SNP").bits.tgt := Cat(
-          1.U(nodeNetBits.W),
-          NodeType.RF.U(nodeTypeBits.W),
-          0.U((nodeNidBits - chipAddrBits).W),
-          icn.rx.snoop.get.bits.asTypeOf(new SnoopFlit).TgtID(chipAddrBits - 1, 0)
-        )
-      }
+      injectsMap("REQ").bits.tgt := reqTarget
     }
-    print(
-      s"""
-         |  HomeNode ${nStr}_${node.nid} {
-         |    node_id: 0x${node.nodeId.toHexString}
-         |    lefts: ${node.leftNodes.map(e => "0x" + e.nodeId.toHexString).reduce((a: String, b: String) => s"$a, $b")}
-         |    rights: ${node.rightNodes.map(e => "0x" + e.nodeId.toHexString).reduce((a: String, b: String) => s"$a, $b")}
-         |  }
-         |""".stripMargin)
-  }
-
-  class SubordinateRouter(node: Node)(implicit p: Parameters) extends BaseRouter(node) {
-    require(node.nodeType == NodeType.S)
-    private val nStr = if(node.mainMemory) "mem" else "dcu"
-    print(
-      s"""
-         |  SubordinateNode ${nStr}_sn_${node.nid} {
-         |    node_id: 0x${node.nodeId.toHexString}
-         |    lefts: ${node.leftNodes.map(e => "0x" + e.nodeId.toHexString).reduce((a: String, b: String) => s"$a, $b")}
-         |    rights: ${node.rightNodes.map(e => "0x" + e.nodeId.toHexString).reduce((a: String, b: String) => s"$a, $b")}
-         |  }
-         |""".stripMargin)
-  }
-
-  class PipelineRouter(node: Node)(implicit p: Parameters) extends BaseRouter(node) {
-    router.nodeId := node.nodeId.U
+    icn.clusterId.foreach(cid => cid := Cat(router.chip, node.clusterId.U((clusterIdBits - nodeAidBits).W)))
   }
 
   class ChipToChipRouter(node: Node)(implicit p: Parameters) extends BaseRouter(node) {
     require(node.csnNode && node.nodeType == NodeType.C)
-    private val csnHfNum = p(ZJParametersKey).csnRing.count(_.nodeType == NodeType.HF)
-    private val csnRfNum = p(ZJParametersKey).csnRing.count(_.nodeType == NodeType.RF)
+    private val csnHfs = p(ZJParametersKey).csnRing.filter(_.nodeType == NodeType.HF)
+    private val csnRfs = p(ZJParametersKey).csnRing.filter(_.nodeType == NodeType.RF)
     if(p(ZJParametersKey).tfsParams.isEmpty) {
       val reqTgt = WireInit(icn.rx.req.get.bits.asTypeOf(new ReqFlit).TgtID.asTypeOf(new NodeIdBundle))
-      val reqAddr = WireInit(icn.rx.req.get.bits.asTypeOf(new ReqFlit).Addr.asTypeOf(new ReqAddrBundle))
-      val reqInject = injectsMap("REQ")
-      if(csnHfNum > 1) {
-        reqTgt.nodeCsnNid := reqAddr.csnNid(log2Ceil(csnHfNum) - 1, 0).asTypeOf(UInt((nodeNidBits - chipAddrBits).W))
-        reqInject.bits.tgt := reqTgt.asUInt
+      if(csnHfs.length > 1) {
+        val reqAddr = icn.rx.req.get.bits.asTypeOf(new ReqFlit).Addr.asTypeOf(new ReqAddrBundle)
+        val reqBank = reqAddr.bank(csnHfs.head.bankBits)
+        val hfSelOH = csnHfs.map(_.bankId.U === reqBank)
+        val hfNids = csnHfs.map(_.nodeId.U.asTypeOf(new NodeIdBundle).nid)
+        when(icn.rx.req.get.valid) {
+          assert(PopCount(hfSelOH) === 1.U)
+        }
+        reqTgt.nid := Mux1H(hfSelOH, hfNids)
+      } else {
+        reqTgt.nid := 0.U
       }
 
       val snoopTgt = WireInit(icn.rx.snoop.get.bits.asTypeOf(new SnoopFlit).TgtID.asTypeOf(new NodeIdBundle))
-      val snoopAddr = WireInit(icn.rx.snoop.get.bits.asTypeOf(new SnoopFlit).Addr.asTypeOf(new SnpAddrBundle))
-      val snoopInject = injectsMap("SNP")
-      if(csnRfNum > 1) {
-        snoopTgt.nodeCsnNid := snoopAddr.csnNid(log2Ceil(csnRfNum) - 1, 0).asTypeOf(UInt((nodeNidBits - chipAddrBits).W))
-        snoopInject.bits.tgt := snoopTgt.asUInt
+      if(csnRfs.length > 1) {
+        val snpAddr = icn.rx.snoop.get.bits.asTypeOf(new SnoopFlit).Addr.asTypeOf(new SnpAddrBundle)
+        val snpBank = snpAddr.bank(csnRfs.head.bankBits)
+        val rfSelOH = csnRfs.map(_.bankId.U === snpBank)
+        val rfNids = csnRfs.map(_.nodeId.U.asTypeOf(new NodeIdBundle).nid)
+        when(icn.rx.snoop.get.valid) {
+          assert(PopCount(rfSelOH) === 1.U)
+        }
+        snoopTgt.nid := Mux1H(rfSelOH, rfNids)
+      } else {
+        snoopTgt.nid := 0.U
       }
+
+      injectsMap("REQ").bits.tgt := reqTgt.asUInt
+      injectsMap("SNP").bits.tgt := snoopTgt.asUInt
     }
-    print(
-      s"""
-         |  C2cNode c2c_${node.nid} {
-         |    node_id: 0x${node.nodeId.toHexString}
-         |    lefts: ${node.leftNodes.map(e => "0x" + e.nodeId.toHexString).reduce((a: String, b: String) => s"$a, $b")}
-         |    rights: ${node.rightNodes.map(e => "0x" + e.nodeId.toHexString).reduce((a: String, b: String) => s"$a, $b")}
-         |  }
-         |""".stripMargin)
   }
 }

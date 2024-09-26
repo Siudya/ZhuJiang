@@ -3,7 +3,7 @@ package xijiang.router.base
 import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config.Parameters
-import xijiang.Node
+import xijiang.{Node, NodeType}
 import zhujiang.ZJBundle
 import zhujiang.chi._
 
@@ -72,4 +72,5 @@ class IcnRxBundle(node: Node)(implicit p: Parameters) extends ZJBundle {
 class IcnBundle(val node: Node)(implicit p: Parameters) extends ZJBundle {
   val tx = new IcnTxBundle(node)
   val rx = new IcnRxBundle(node)
+  val clusterId = if(node.nodeType == NodeType.CC) Some(Output(UInt(clusterIdBits.W))) else None
 }

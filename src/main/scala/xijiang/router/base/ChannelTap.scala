@@ -3,10 +3,11 @@ package xijiang.router.base
 import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config.Parameters
+import xijiang.{Node, NodeType}
 import zhujiang.{ZJModule, ZJParametersKey}
-import zhujiang.chi.Flit
+import zhujiang.chi.{Flit, NodeIdBundle}
 
-class SingleChannelTap[T <: Flit](gen: T, channel: String, c2c: Boolean)(implicit p: Parameters) extends ZJModule {
+class SingleChannelTap[T <: Flit](gen: T, channel: String, node: Node)(implicit p: Parameters) extends ZJModule {
 
   private val timerBits = p(ZJParametersKey).injectRsvdTimerShift
   val io = IO(new Bundle {
@@ -14,12 +15,17 @@ class SingleChannelTap[T <: Flit](gen: T, channel: String, c2c: Boolean)(implici
     val out = Output(new ChannelBundle(gen))
     val inject = Flipped(Decoupled(gen))
     val eject = Decoupled(gen)
-    val nid = Input(UInt(niw.W))
+    val matchTag = Input(UInt(niw.W))
+    val tapIdx = Input(UInt(nodeAidBits.W))
   })
-  private val modName = if(c2c) {
-    s"C2cSingleChannelTap$channel"
+  private val local = !node.csnNode
+  private val c2c = node.nodeType == NodeType.C
+  private val modName = if(local) {
+    s"SingleChannelTapLocal$channel"
+  } else if(c2c) {
+    s"SingleChannelTapC2c$channel"
   } else {
-    s"SingleChannelTap$channel"
+    s"SingleChannelTapCsn$channel"
   }
   override val desiredName = modName
   private val normalShift = 0
@@ -35,7 +41,8 @@ class SingleChannelTap[T <: Flit](gen: T, channel: String, c2c: Boolean)(implici
   private val rsvdNext = Wire(Valid(UInt(niw.W)))
   private val injectFire = io.inject.fire
   private val ejectFire = io.eject.fire
-  private val meetRsvdSlot = io.in.rsvd.bits === io.nid
+  private val rsvdMarkVal = Cat(io.matchTag(niw - 1, nodeAidBits), io.tapIdx)
+  private val meetRsvdSlot = io.in.rsvd.bits === rsvdMarkVal
 
   when(injectFire) {
     counter := 0.U
@@ -64,46 +71,56 @@ class SingleChannelTap[T <: Flit](gen: T, channel: String, c2c: Boolean)(implici
   dontTouch(availableSlot)
   io.inject.ready := emptySlot && availableSlot
 
-  private val injectFlit = WireInit(io.inject.bits)
-  if(!c2c) injectFlit.src := io.nid
   flitNext.valid := injectFire || io.in.flit.valid && !ejectFire
-  flitNext.bits := Mux(injectFire, injectFlit, io.in.flit.bits)
+  flitNext.bits := Mux(injectFire, io.inject.bits, io.in.flit.bits)
 
   rsvdNext.valid := (state(injectRsvdShift) || io.in.rsvd.valid) && !injectFire
-  rsvdNext.bits := Mux(state(injectRsvdShift) && !io.in.rsvd.valid, io.nid, io.in.rsvd.bits)
+  rsvdNext.bits := Mux(state(injectRsvdShift) && !io.in.rsvd.valid, rsvdMarkVal, io.in.rsvd.bits)
 
   io.out.flit := Pipe(flitNext)
   io.out.rsvd := Pipe(rsvdNext)
 
-  if(c2c) {
-    io.eject.valid := io.in.flit.bits.tgt(chipAddrBits - 1, 0) === io.nid(chipAddrBits - 1, 0) && io.in.flit.valid
+  private val matcher = io.matchTag.asTypeOf(new NodeIdBundle)
+  if(local) {
+    io.eject.valid := io.in.flit.bits.tgt.asTypeOf(new NodeIdBundle).router === matcher.router && io.in.flit.valid
+  } else if(c2c) {
+    io.eject.valid := io.in.flit.bits.tgt.asTypeOf(new NodeIdBundle).chip === matcher.chip && io.in.flit.valid
   } else {
-    io.eject.valid := io.in.flit.bits.tgt === io.nid && io.in.flit.valid
+    io.eject.valid := io.in.flit.bits.tgt.asTypeOf(new NodeIdBundle) === matcher && io.in.flit.valid
   }
   io.eject.bits := io.in.flit.bits
 }
 
 class ChannelTap[T <: Flit](
   val gen: T, channel: String,
-  ejectBuf: Int = 0, c2c: Boolean = false
+  ejectBuf: Int, node: Node,
 )(implicit p: Parameters) extends ZJModule {
   val io = IO(new Bundle {
     val rx = Input(Vec(2, new ChannelBundle(gen)))
     val tx = Output(Vec(2, new ChannelBundle(gen)))
     val inject = Flipped(Decoupled(gen))
     val eject = Decoupled(gen)
-    val nid = Input(UInt(niw.W))
+    val matchTag = Input(UInt(niw.W))
     val injectTapSelOH = Input(Vec(2, Bool()))
   })
-  override val desiredName = if(c2c) s"C2cChannelTap$channel" else s"ChannelTap$channel"
-  private val taps = Seq.fill(2)(Module(new SingleChannelTap(gen, channel, c2c)))
+  private val local = !node.csnNode
+  private val c2c = node.nodeType == NodeType.C
+  override val desiredName = if(local) {
+    s"ChannelTapLocal$channel"
+  } else if(c2c) {
+    s"ChannelTapC2c$channel"
+  } else {
+    s"ChannelTapCsn$channel"
+  }
+  private val taps = Seq.fill(2)(Module(new SingleChannelTap(gen, channel, node)))
   private val ejectArb = Module(new RRArbiter(gen, 2))
   for(idx <- taps.indices) {
     taps(idx).io.in := io.rx(idx)
     io.tx(idx) := taps(idx).io.out
     taps(idx).io.inject.valid := io.inject.valid && io.injectTapSelOH(idx)
     taps(idx).io.inject.bits := io.inject.bits
-    taps(idx).io.nid := io.nid
+    taps(idx).io.matchTag := io.matchTag
+    taps(idx).io.tapIdx := idx.U
     ejectArb.io.in(idx) <> taps(idx).io.eject
   }
   io.inject.ready := Mux1H(io.injectTapSelOH, taps.map(_.io.inject.ready))
