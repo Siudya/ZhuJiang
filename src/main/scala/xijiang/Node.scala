@@ -77,18 +77,18 @@ case class Node(
 
   private lazy val routerPrefixStr: String = if(csnNode) "Csn" else ""
   private lazy val icnPrefixStr: String = if(csnNode) "csn_" else ""
-  private lazy val snTypeStr: String = if(mainMemory) "mem_" else s"dcu_bank_${bankId}_"
+  private lazy val snAttrStr: String = if(mainMemory) "mem_" else "dcu_"
   private def icnStrGen(pfx: String, body: String) = s"$icnPrefixStr$pfx${body}_id_${nodeId.toHexString}"
   private def routerStrGen(body: String) = s"Router$routerPrefixStr${body}_0x${nodeId.toHexString}"
   lazy val (routerStr, icnStr, nodeStr): (String, String, String) = nodeType match {
     case NodeType.CC => (routerStrGen("CpuCluster"), icnStrGen("", "ccn"), "CCN")
-    case NodeType.RF => (routerStrGen("RequestFull"), icnStrGen("", "rnf"), "RNF")
+    case NodeType.RF => (routerStrGen("RequestFull"), icnStrGen("", if(csnNode) s"rnf_bank_$bankId" else "rnf"), "RNF")
     case NodeType.RI => (routerStrGen("RequestIo"), icnStrGen("", "rni"), "RNI")
-    case NodeType.HF => (routerStrGen("HomeFull"), icnStrGen(s"bank_${bankId}_", "hnf"), "HNF")
+    case NodeType.HF => (routerStrGen("HomeFull"), icnStrGen("", s"hnf_bank_$bankId"), "HNF")
     case NodeType.HI => (routerStrGen("HomeIo"), icnStrGen("", "hni"), "HNI")
     case NodeType.C => (routerStrGen("ChipToChip"), icnStrGen("", "c2c"), "C2C")
-    case NodeType.S => (routerStrGen("Subordinate"), icnStrGen(snTypeStr, "sn"), "SN")
-    case _ => (routerStrGen("Pipeline"), icnStrGen(snTypeStr, "pip"), "PIP")
+    case NodeType.S => (routerStrGen("Subordinate"), icnStrGen(snAttrStr, s"sn_bank_$bankId"), "SN")
+    case _ => (routerStrGen("Pipeline"), icnStrGen("", "pip"), "PIP")
   }
 
   lazy val (ejects, injects): (Seq[String], Seq[String]) = {

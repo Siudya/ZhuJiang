@@ -64,7 +64,7 @@ object ZhujiangGlobal {
         ringSize = nodeParams.length,
         globalId = idx,
         splitFlit = np.splitFlit,
-        bankId = if(np.nodeType == NodeType.S || np.nodeType == NodeType.HF) np.bankId else 0,
+        bankId = if(np.nodeType == NodeType.S || np.nodeType == NodeType.HF || np.nodeType == NodeType.RF && csn) np.bankId else 0,
         bankBits = if(np.nodeType == NodeType.RF) {
           rnfBankBits
         } else if(np.nodeType == NodeType.HF) {
@@ -77,8 +77,14 @@ object ZhujiangGlobal {
         mainMemory = if(np.nodeType == NodeType.S) np.mainMemory else false,
         cpuNum = if(np.nodeType == NodeType.CC) np.cpuNum else 0,
         clusterId = if(np.nodeType == NodeType.CC) ccId.toInt else 0,
-        addressRange = if(np.nodeType == NodeType.CC) ccAddr else hiAddr,
-        defaultHni = if(np.nodeType == NodeType.CC) false else np.defaultHni
+        addressRange = if(np.nodeType == NodeType.CC) {
+          ccAddr
+        } else if(np.nodeType == NodeType.CC) {
+          hiAddr
+        } else {
+          (0L, 0L)
+        },
+        defaultHni = if(np.nodeType == NodeType.HI) np.defaultHni else false
       )
       if(np.nodeType == NodeType.CC) ccId = ccId + np.cpuNum
       n
