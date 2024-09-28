@@ -26,7 +26,7 @@ class Zhujiang(implicit p: Parameters) extends ZJModule {
       port <> icn
     }))
   }
-
+  makeIOs(localRing.icnCcs, true)
   makeIOs(localRing.icnRfs, true)
   makeIOs(localRing.icnRis, true)
   makeIOs(localRing.icnHfs, true)
@@ -43,7 +43,7 @@ class Zhujiang(implicit p: Parameters) extends ZJModule {
       port <> c2c
     }))
   }
-  val io_chip = IO(Input(UInt(p(ZJParametersKey).chipAddrBits.W)))
+  val io_chip = IO(Input(UInt(p(ZJParametersKey).nodeAidBits.W)))
   localRing.io_chip := io_chip
   csnRing.io_chip := io_chip
 }
