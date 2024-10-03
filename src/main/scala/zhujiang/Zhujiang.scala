@@ -7,6 +7,7 @@ import sifive.enterprise.firrtl.NestedPrefixModulesAnnotation
 import xijiang.router.base.IcnBundle
 import xijiang.Ring
 import xijiang.c2c.C2cLinkPort
+import zhujiang.device.bridge.axi.AxiBridge
 
 class Zhujiang(implicit p: Parameters) extends ZJModule {
   require(p(ZJParametersKey).tfsParams.isEmpty)
@@ -26,15 +27,25 @@ class Zhujiang(implicit p: Parameters) extends ZJModule {
       port <> icn
     }))
   }
+  private val mem = localRing.icnSns.map(_.filter(hi => hi.node.mainMemory))
+  private val dcus = localRing.icnSns.map(_.filterNot(hi => hi.node.mainMemory))
   makeIOs(localRing.icnCcs, true)
   makeIOs(localRing.icnRfs, true)
   makeIOs(localRing.icnRis, true)
   makeIOs(localRing.icnHfs, true)
   makeIOs(localRing.icnHis, true)
-  makeIOs(localRing.icnSns, true)
+  makeIOs(dcus, true)
 
   makeIOs(csnRing.icnRfs, false)
   makeIOs(csnRing.icnHfs, false)
+
+  if(mem.isDefined) {
+    val chi2axi = Module(new AxiBridge(mem.get.head.node))
+    chi2axi.icn <> mem.get.head
+    val port = IO(chi2axi.axi.cloneType)
+    port.suggestName("mem_axi")
+    port <> chi2axi.axi
+  }
 
   if(csnRing.c2cs.isDefined) {
     csnRing.c2cs.foreach(_.zipWithIndex.foreach({ case (c2c, idx) =>
