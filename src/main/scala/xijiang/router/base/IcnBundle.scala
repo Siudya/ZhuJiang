@@ -73,4 +73,20 @@ class IcnBundle(val node: Node)(implicit p: Parameters) extends ZJBundle {
   val tx = new IcnTxBundle(node)
   val rx = new IcnRxBundle(node)
   val clusterId = if(node.nodeType == NodeType.CC) Some(Output(UInt(clusterIdBits.W))) else None
+  def <>(that: DeviceIcnBundle):Unit = {
+    this.rx <> that.tx
+    that.rx <> this.tx
+    if(node.nodeType == NodeType.CC) that.clusterId.get := this.clusterId.get
+  }
+}
+
+class DeviceIcnBundle(val node: Node)(implicit p: Parameters) extends ZJBundle {
+  val tx = Flipped(new IcnRxBundle(node))
+  val rx = Flipped(new IcnTxBundle(node))
+  val clusterId = if(node.nodeType == NodeType.CC) Some(Input(UInt(clusterIdBits.W))) else None
+  def <>(that: IcnBundle):Unit = {
+    this.rx <> that.tx
+    that.rx <> this.tx
+    if(node.nodeType == NodeType.CC) this.clusterId.get := that.clusterId.get
+  }
 }

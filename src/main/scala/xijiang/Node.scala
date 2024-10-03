@@ -23,18 +23,19 @@ object NodeType {
 }
 
 case class NodeParam(
+  attr: String = "",
   nodeType: Int = NodeType.P,
   splitFlit: Boolean = false,
   bankId: Int = 0, // Only applied in SN and HNF
   mainMemory: Boolean = false, // Only applied in SN
   cpuNum: Int = 1, // Only applied in CC
   addressRange: (Long, Long) = (0L, 0L), // Only applied in HNI
-  defaultHni: Boolean = false // Only applied in HNI
-) {
-  if(mainMemory) require(nodeType == NodeType.S)
-}
+  defaultHni: Boolean = false, // Only applied in HNI
+  outstanding: Int = 16 // Only applied in HNI
+)
 
 case class Node(
+  attr: String = "",
   nodeType: Int = NodeType.P,
   csnNode: Boolean = false,
   nidBits: Int = 7,
@@ -48,7 +49,8 @@ case class Node(
   cpuNum: Int = 1, // Only applied in CCN
   clusterId: Int = 0, //Only applied in CCN
   addressRange: (Long, Long) = (0L, 0L), // Only applied in HNI
-  defaultHni: Boolean = false // Only applied in HNI
+  defaultHni: Boolean = false, // Only applied in HNI
+  outstanding: Int = 16 // Only applied in HNI, CCN and SN
 ) {
   require(NodeType.min <= nodeType && nodeType <= NodeType.max)
 
@@ -214,9 +216,9 @@ case class Node(
     friends.map(_.nodeId.U((1 + nidBits + aidBits).W) === tgtRouter).reduce(_ || _)
   }
 
-  lazy val leftsStr = leftNodes.map(e => "0x" + e.nodeId.toHexString).reduce((a: String, b: String) => s"$a, $b")
-  lazy val rightsStr = rightNodes.map(e => "0x" + e.nodeId.toHexString).reduce((a: String, b: String) => s"$a, $b")
-  lazy val friendsStr = friends.map(e => "0x" + e.nodeId.toHexString).reduce((a: String, b: String) => s"$a, $b")
+  lazy val leftsStr = if(leftNodes.nonEmpty) leftNodes.map(e => "0x" + e.nodeId.toHexString).reduce((a: String, b: String) => s"$a, $b") else ""
+  lazy val rightsStr = if(rightNodes.nonEmpty) rightNodes.map(e => "0x" + e.nodeId.toHexString).reduce((a: String, b: String) => s"$a, $b") else ""
+  lazy val friendsStr = if(friends.nonEmpty) friends.map(e => "0x" + e.nodeId.toHexString).reduce((a: String, b: String) => s"$a, $b") else ""
   override def toString = {
     val head =
       s"""
