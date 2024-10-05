@@ -95,6 +95,6 @@ class Zhujiang(implicit p: Parameters) extends ZJModule {
 
   dongjiang.io.toLocal  <> localRing.icnHfs.get.last
   ddrc.io.sn            <> localRing.icnSns.get.last
-  dcus.zip(localRing.icnSns.get.init).foreach { case(a, b) => a.io.sn <> b }
+  dcus.zip(localRing.icnSns.get.init).foreach { case(a, b) => a.io.sn(0) <> b }
 
 }

@@ -48,7 +48,7 @@ case class DJParam(
                     // ------------------------ DCU Base Mes ------------------ //
                     nrDSBank: Int = 2,
                     nrDCUWBuf: Int = 4,
-                    nrDCUReqQ: Int = 4,
+                    nrDCURBuf: Int = 4,
                     nrDCURespQ: Int = 4,
                     dcuMulticycle: Int = 2,
                     dcuHoldMcp: Boolean = true,
@@ -88,6 +88,7 @@ case class DJParam(
     require(selfReplacementPolicy == "random" || selfReplacementPolicy == "plru")
     require(sfReplacementPolicy == "random" || sfReplacementPolicy == "plru")
     require(log2Ceil(nrDCUWBuf) <= chiDBIDBits)
+    require(nrDCURespQ >= 2)
 }
 
 
@@ -188,6 +189,7 @@ trait HasDJParam extends HasParseZJParam {
 
     // Base DCU Mes
     val dcuWBufIdBits   = log2Ceil(djparam.nrDCUWBuf)
+    val dcuRBufIdBits   = log2Ceil(djparam.nrDCURBuf)
     val nrDCUsEntry     = djparam.selfSets * djparam.selfWays
     val nrPerDCUEntry   = nrDCUsEntry / djparam.nrBank
     val nrDSEntry       = nrPerDCUEntry / djparam.nrDSBank
