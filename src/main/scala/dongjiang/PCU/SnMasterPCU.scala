@@ -323,6 +323,7 @@ class SnMasterPCU(snMasId: Int, param: InterfaceParam)(implicit p: Parameters) e
   io.resp2Slice.valid             := pcuResp2SliceVec.reduce(_ | _)
   io.resp2Slice.bits              := DontCare
   io.resp2Slice.bits.isReqResp    := pcus(pcuResp2SliceID).isRead
+  io.resp2Slice.bits.isWriResp    := pcus(pcuResp2SliceID).isWrite
   io.resp2Slice.bits.mshrSet      := pcus(pcuResp2SliceID).indexMes.mSet
   io.resp2Slice.bits.mshrWay      := pcus(pcuResp2SliceID).indexMes.mshrWay
   io.resp2Slice.bits.from.IncoId  := snMasId.U

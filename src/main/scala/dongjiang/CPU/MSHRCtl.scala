@@ -156,6 +156,7 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
            * Pipe Update mshrTable value
            */
           when(io.updMSHR.valid & !io.updMSHR.bits.isRetry & io.updMSHR.bits.mSet === i.U & io.updMSHR.bits.mshrWay === j.U) {
+            // req
             when(io.updMSHR.bits.isReq) {
               m                 := 0.U.asTypeOf(m)
               m.chiMes.opcode   := Mux(io.updMSHR.bits.isSnpEvict, CHIOp.SNP.SnpUniqueEvict, CHIOp.REQ.Replace)
@@ -163,6 +164,8 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
               m.tag             := io.updMSHR.bits.mTag
               m.bank            := io.updMSHR.bits.mBank
             }
+            // req or update
+            m.respMes           := 0.U.asTypeOf(m.respMes)
             m.waitIntfVec       := io.updMSHR.bits.waitIntfVec
             assert(PopCount(m.waitIntfVec) === 0.U, s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x] STATE[0x%x]", i.U, j.U, m.addr(i.U), m.chiMes.channel, m.chiMes.opcode, m.state)
             assert(m.isAlreadySend, s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x] STATE[0x%x]", i.U, j.U, m.addr(i.U), m.chiMes.channel, m.chiMes.opcode, m.state)
@@ -187,8 +190,8 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
               m.respMes.masDBID.valid   := io.resp2Slice.bits.hasData
               m.respMes.masDBID.bits    := io.resp2Slice.bits.dbid
             }.elsewhen(io.resp2Slice.bits.isWriResp) {
-              assert(PopCount(m.waitIntfVec) === 1.U)
-              assert(m.respMes.noRespValid)
+              assert(PopCount(m.waitIntfVec) === 1.U, s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x] STATE[0x%x]", i.U, j.U, m.addr(i.U), m.chiMes.channel, m.chiMes.opcode, m.state)
+              assert(m.respMes.noRespValid, s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x] STATE[0x%x]", i.U, j.U, m.addr(i.U), m.chiMes.channel, m.chiMes.opcode, m.state)
               // Nothing to do and State Will be Free
             }
             assert(m.waitIntfVec(io.resp2Slice.bits.from.intfId), s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x] STATE[0x%x]", i.U, j.U, m.addr(i.U), m.chiMes.channel, m.chiMes.opcode, m.state)

@@ -259,8 +259,8 @@ class RnSlavePCU(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) ex
         val snp2NodeHit   = io.req2Node.fire & io.req2Node.bits.addrNoOff === pcu.indexMes.addrNoOff
         val resp2sliceHit = io.resp2Slice.fire & pcus(pcuResp2SliceID).indexMes.addrNoOff === pcu.indexMes.addrNoOff
         pcu.nid           := pcu.nid - resp2NodeHit.asUInt + snp2NodeHit.asUInt - resp2sliceHit.asUInt
-        assert((pcu.nid - resp2NodeHit.asUInt + snp2NodeHit.asUInt - resp2sliceHit.asUInt) >= 0.U)
-        assert(!(snp2NodeHit & resp2sliceHit))
+        assert((pcu.nid - resp2NodeHit.asUInt + snp2NodeHit.asUInt - resp2sliceHit.asUInt) >= 0.U, "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state)
+        assert(!(snp2NodeHit & resp2sliceHit), "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state)
         assert(Mux(pcu.chiMes.isReq & CHIOp.REQ.isWriteX(pcu.chiMes.opcode), !snp2NodeHit & !resp2sliceHit, true.B), "TODO")
       /*
        * Receive New Req
@@ -270,28 +270,28 @@ class RnSlavePCU(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) ex
         pcu.chiMes        := taskSaveInPCU
         pcu.nid           := taskNID
         pcu.nestMes       := 0.U.asTypeOf(pcu.nestMes)
-        assert(pcu.state === PCURS.Free)
+        assert(pcu.state === PCURS.Free, "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state)
       /*
        * Receive DBID From DataBuffer
        */
       }.elsewhen(io.dbSigs.wResp.fire & pcuRecDBID === i.U) {
         pcu.hasData       := true.B
         pcu.indexMes.dbid := io.dbSigs.wResp.bits.dbid
-        assert(pcu.state === PCURS.WaitDBID)
+        assert(pcu.state === PCURS.WaitDBID, "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state)
       /*
        * Receive CHI TX RSP
        */
       }.elsewhen(io.chi.txrsp.fire & pcuRecChiRspID === i.U){
         pcu.chiMes.resp   := io.chi.txrsp.bits.Resp
-        when(io.chi.txrsp.bits.Opcode === CHIOp.RSP.CompAck) { assert(pcu.state === PCURS.WaitCompAck) }
-        .otherwise                                           { assert(pcu.state === PCURS.WaitSnpResp) }
+        when(io.chi.txrsp.bits.Opcode === CHIOp.RSP.CompAck) { assert(pcu.state === PCURS.WaitCompAck, "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state) }
+        .otherwise                                           { assert(pcu.state === PCURS.WaitSnpResp, "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state) }
       /*
        * Receive CHI TX Dat
        */
       }.elsewhen(io.chi.txdat.fire & pcuRecChiDatID === i.U) {
         pcu.getDataNum    := pcu.getDataNum + 1.U
         pcu.chiMes.resp   := io.chi.txdat.bits.Resp
-        assert(pcu.state === PCURS.WaitSnpResp | pcu.state === PCURS.WaitData)
+        assert(pcu.state === PCURS.WaitSnpResp | pcu.state === PCURS.WaitData, "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state)
       /*
        * Clean PCU Entry When Its Free
        */

@@ -157,7 +157,7 @@ class Resp2SliceBundle(implicit p: Parameters) extends DJBundle with HasIncoID w
     // Indicate Requster final state in DCT
     val fwdState        = Valid(UInt(ChiResp.width.W))
 
-    def isResp          = isSnpResp | isReqResp
+    def isResp          = isSnpResp | isReqResp | isWriResp
     def isUpdate        = !isResp
 }
 
