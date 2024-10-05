@@ -42,10 +42,19 @@ object SMType {
 
 class PCUSMEntry(param: InterfaceParam)(implicit p: Parameters) extends DJBundle {
   val state         = UInt(PCUSM.width.W)
-  val indexMes      = new DJBundle with HasAddr with HasFromIncoID with HasMSHRWay with HasDBID
+  val indexMes      = new DJBundle with HasAddr with HasFromIncoID with HasMSHRWay with HasDBID {
+    val selfWay     = UInt(sWayBits.W)
+  }
   val chiMes        = new SNMASCHIMesBundle()
   val hasData       = Bool()
   val getDataNum    = UInt(beatNumBits.W)
+
+  def reqAddr(tgtId: UInt): UInt = {
+    val addr        = Wire(UInt(addressBits.W))
+    when(tgtId === ddrcNodeId.U) { addr := indexMes.addr
+    }.otherwise { addr := getDCUAddress(indexMes.addr, indexMes.selfWay) }
+    addr
+  }
 
   def isFree        = state === PCUSM.Free
   def isGetDBID     = state === PCUSM.GetDBID
@@ -200,9 +209,11 @@ class SnMasterPCU(snMasId: Int, param: InterfaceParam)(implicit p: Parameters) e
    * Receive req2Node(Snoop)
    */
   indexSaveInPCU.addr     := io.req2Node.bits.addr
+  indexSaveInPCU.selfWay  := io.req2Node.bits.selfWay
   indexSaveInPCU.mshrWay  := io.req2Node.bits.mshrWay
   indexSaveInPCU.from     := io.req2Node.bits.from
   indexSaveInPCU.dbid     := io.req2Node.bits.dbid
+  reqSaveInPCU.resp       := io.req2Node.bits.resp
   reqSaveInPCU.opcode     := io.req2Node.bits.opcode
   reqSaveInPCU.tgtID      := io.req2Node.bits.tgtID
   reqSaveInPCU.expCompAck := io.req2Node.bits.expCompAck
@@ -253,13 +264,13 @@ class SnMasterPCU(snMasId: Int, param: InterfaceParam)(implicit p: Parameters) e
   pcuReq2NodeID                 := PriorityEncoder(pcuReq2NodeVec)
 
   io.chi.txreq.valid            := pcuReq2NodeVec.reduce(_ | _)
-  io.chi.txreq.bits.Addr        := pcus(pcuReq2NodeID).indexMes.addr
+  io.chi.txreq.bits.Addr        := pcus(pcuReq2NodeID).reqAddr(io.chi.txreq.bits.TgtID)
   io.chi.txreq.bits.Opcode      := pcus(pcuReq2NodeID).chiMes.opcode
   io.chi.txreq.bits.TgtID       := pcus(pcuReq2NodeID).chiMes.tgtID
   io.chi.txreq.bits.SrcID       := hnfNodeId.U
   io.chi.txreq.bits.TxnID       := pcuReq2NodeID
   io.chi.txreq.bits.Size        := log2Ceil(djparam.blockBytes).U
-  io.chi.txreq.bits.MemAttr     := MemAttr(false.B, true.B, false.B, false.B).asUInt
+  io.chi.txreq.bits.MemAttr     := pcus(pcuReq2NodeID).chiMes.resp // Multiplex MemAttr to transfer CHI State
   io.chi.txreq.bits.ExpCompAck  := false.B
 
 

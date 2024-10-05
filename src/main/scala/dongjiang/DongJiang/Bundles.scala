@@ -141,8 +141,8 @@ class Resp2NodeBundle(implicit p: Parameters) extends DJBundle with HasBaseCHIMe
 
 // ---------------------------------------------------------------- Req To Node Bundle ----------------------------------------------------------------------------- //
 class Req2NodeBundle(implicit p: Parameters) extends DJBundle with HasBaseCHIMesBundle with HasIncoID with HasAddr with HasMSHRWay with HasDBID {
-    override def useResp: Boolean = false
     override def useChiDBID: Boolean = false
+    val selfWay         = UInt(sWayBits.W)
 }
 
 

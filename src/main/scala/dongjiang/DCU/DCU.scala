@@ -51,6 +51,7 @@ class DCUREntry(implicit p: Parameters) extends DJBundle {
     val dsBank          = UInt(dsBankBits.W)
     val srcID           = UInt(chiNodeIdBits.W)
     val txnID           = UInt(djparam.chiTxnidBits.W)
+    val resp            = UInt(ChiResp.width.W)
 }
 
 
@@ -165,6 +166,7 @@ class DCU(node: Node, nrIntf: Int = 1)(implicit p: Parameters) extends DJModule 
         rRespReg.bits.Resp      := ChiResp.UC
         rRespReg.bits.TgtID     := rBufRegVec(earlyRID).srcID
         rRespReg.bits.TxnID     := rBufRegVec(earlyRID).txnID
+        rRespReg.bits.Resp      := rBufRegVec(earlyRID).resp
     }
 
 
@@ -183,6 +185,7 @@ class DCU(node: Node, nrIntf: Int = 1)(implicit p: Parameters) extends DJModule 
                         r.dsBank    := parseDCUAddress(txReq.bits.Addr)._2
                         r.srcID     := txReq.bits.SrcID
                         r.txnID     := txReq.bits.TxnID
+                        r.resp      := txReq.bits.MemAttr(ChiResp.width - 1, 0)
                     }
                 }
                 is(DCURState.ReadSram) {

@@ -259,13 +259,24 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
    * Send Read to SN(DCU)
    */
   // readDCU_s3
-  assert(Mux(valid_s3, !decode_s3.readDCU, true.B), "TODO")
+  readDCU_s3.addr           := task_s3_g.bits.addr
+  readDCU_s3.selfWay        := OHToUInt(dirRes_s3.bits.s.wayOH)
+  readDCU_s3.mshrWay        := task_s3_g.bits.mshrWay
+  readDCU_s3.channel        := CHIChannel.REQ
+  readDCU_s3.opcode         := decode_s3.rdOp
+  readDCU_s3.from.IncoId    := io.sliceId
+  readDCU_s3.to.IncoId      := IncoID.LOCALMAS.U
+  readDCU_s3.tgtID          := getSnNodeIDByBankId(task_s3_g.bits.bank)
+  readDCU_s3.srcID          := task_s3_g.bits.reqMes.srcID
+  readDCU_s3.resp           := decode_s3.resp
+
 
   /*
    * Send Write to SN(DCU)
    */
   // writeDCU_s3
-  writeDCU_s3.addr          := getDCUAddress(task_s3_g.bits.addr, OHToUInt(dirRes_s3.bits.s.wayOH))
+  writeDCU_s3.addr          := task_s3_g.bits.addr
+  writeDCU_s3.selfWay       := OHToUInt(dirRes_s3.bits.s.wayOH)
   writeDCU_s3.mshrWay       := task_s3_g.bits.mshrWay
   writeDCU_s3.channel       := CHIChannel.REQ
   writeDCU_s3.opcode        := decode_s3.wdOp
