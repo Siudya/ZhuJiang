@@ -24,6 +24,7 @@ object DCUWState {
     val WaitData        = "b010".U
     val WriteSram       = "b011".U // Send Write Req To DataStorage And Send Comp To Src
     val Writting        = "b100".U // Write Data To DataStorage
+    val SendComp        = "b101".U
 }
 
 class DCUWEntry(implicit p: Parameters) extends DJBundle {
@@ -126,7 +127,7 @@ class DCU(node: Node, nrIntf: Int = 1)(implicit p: Parameters) extends DJModule 
     /*
      * Send DBID Or Comp To Src
      */
-    val wBufSCompVec        = wBufRegVec.map(_.state === DCUWState.Writting)
+    val wBufSCompVec        = wBufRegVec.map { case w => w.state === DCUWState.Writting | w.state === DCUWState.SendComp}
     val wBufSDBIDVec        = wBufRegVec.map(_.state === DCUWState.SendDBIDResp)
     val selSCompID          = PriorityEncoder(wBufSCompVec)
     val selSDBID            = PriorityEncoder(wBufSDBIDVec)
@@ -230,6 +231,7 @@ class DCU(node: Node, nrIntf: Int = 1)(implicit p: Parameters) extends DJModule 
                         w.state     := Mux(hit & w.isLast, DCUWState.WriteSram, w.state)
                         w.data(toBeatNum(txDat.bits.DataID)).valid  := true.B
                         w.data(toBeatNum(txDat.bits.DataID)).bits   := txDat.bits.Data
+                        w.srcID     := txDat.bits.SrcID
                     }
                 }
                 is(DCUWState.WriteSram) {
@@ -239,9 +241,20 @@ class DCU(node: Node, nrIntf: Int = 1)(implicit p: Parameters) extends DJModule 
                     }
                 }
                 is(DCUWState.Writting) {
-                    w               := 0.U.asTypeOf(w)
-                    w.state         := DCUWState.Free
-                    assert(rxRsp.fire & rxRsp.bits.Opcode === Comp & selSCompID === i.U)
+                    val hit         = rxRsp.fire & rxRsp.bits.Opcode === Comp & selSCompID === i.U
+                    when(hit) {
+                        w           := 0.U.asTypeOf(w)
+                        w.state     := DCUWState.Free
+                    }.otherwise {
+                        w.state     := DCUWState.SendComp
+                    }
+                }
+                is(DCUWState.SendComp) {
+                    val hit         = rxRsp.fire & rxRsp.bits.Opcode === Comp & selSCompID === i.U
+                    when(hit) {
+                        w           := 0.U.asTypeOf(w)
+                        w.state     := DCUWState.Free
+                    }
                 }
             }
     }
