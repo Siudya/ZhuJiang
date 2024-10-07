@@ -13,62 +13,81 @@ import org.chipsalliance.cde.config._
 import xs.utils.perf.{DebugOptions, DebugOptionsKey}
 import xijiang.router.base.IcnBundle
 import xs.utils.sram._
+import Utils.FastArb._
 
 
 object DDRCWState {
-    val width = 2
+    val width = 3
     // commom
-    val Free            = "b00".U
-    val SendDBIDResp    = "b01".U
-    val WaitData        = "b10".U
-    val WriteData       = "b11".U
+    val Free            = "b000".U
+    val SendDBIDResp    = "b001".U
+    val WaitData        = "b010".U
+    val WriteDDR        = "b011".U // Send Write Req To DataStorage And Send Comp To Src
+    val SendComp        = "b101".U
 }
 
 class DDRCWEntry(implicit p: Parameters) extends DJBundle {
     val state           = UInt(DDRCWState.width.W)
-    val datVal          = Vec(nrBeat, Bool())
-    val data            = Vec(nrBeat, UInt(beatBits.W))
+    val data            = Vec(nrBeat, Valid(UInt(beatBits.W)))
+    val index           = UInt(64.W)
+    val srcID           = UInt(chiNodeIdBits.W)
+    val txnID           = UInt(djparam.chiTxnidBits.W)
+
+    def isLast          = PopCount(data.map(_.valid)) === (nrBeat - 1).U
+}
+
+object DDRCRState {
+    val width           = 2
+    val Free            = "b00".U
+    val ReadDDR         = "b01".U
+    val GetResp         = "b10".U
+}
+
+
+class DDRCREntry(implicit p: Parameters) extends DJBundle {
+    val state           = UInt(DDRCRState.width.W)
     val index           = UInt(64.W)
     val srcID           = UInt(chiNodeIdBits.W)
     val txnID           = UInt(djparam.chiTxnidBits.W)
 }
+
 
 // TODO: DMT
 // TODO: DWT
 class FakeDDRC(node: Node)(implicit p: Parameters) extends DJModule {
 // ------------------------------------------ IO declaration --------------------------------------------- //
     val io = IO(new Bundle {
-        val sn  = Flipped(new IcnBundle(node))
+        val sn = Flipped(new IcnBundle(node))
     })
 
     require(node.splitFlit)
 
-    def getDDRCAddress(x: UInt) = x >> offsetBits
-    require(addressBits - offsetBits < 64)
+    io <> DontCare
 
 // ----------------------------------------- Reg and Wire declaration ------------------------------------ //
     // CHI
-    val txReq               = io.sn.tx.req.get.bits.asTypeOf(new ReqFlit)
-    val txDat               = io.sn.tx.data.get.bits.asTypeOf(new DataFlit)
-    val rxRsp               = WireInit(0.U.asTypeOf(new RespFlit))
-    val rxDat               = WireInit(0.U.asTypeOf(new DataFlit))
-    io.sn.rx.resp.get.bits  := rxRsp
-    io.sn.rx.data.get.bits  := rxDat
-
-    // S0
-    val reqIsW          = Wire(Bool())
-    val wBufRegVec      = RegInit(VecInit(Seq.fill(nrDDRCWBuf) { 0.U.asTypeOf(new DDRCWEntry) }))
-    val rReqQ           = Module(new Queue(new ReqFlit(), entries = nrDDRCReqQ, flow = true, pipe = true)) // TODO: Cant automatic optimization
+    val txReq               = Wire(new DecoupledIO(new ReqFlit))
+    val txDat               = Wire(new DecoupledIO(new DataFlit))
+    val rxRsp               = WireInit(0.U.asTypeOf(Decoupled(new RespFlit)))
+    val rxDat               = WireInit(0.U.asTypeOf(Decoupled(new DataFlit)))
+    // TODO
+    io.sn.tx.req.get        <> txReq
+    io.sn.tx.data.get       <> txDat
+    io.sn.rx.resp.get       <> rxRsp
+    io.sn.rx.data.get       <> rxDat
 
 
-    // S2
-    val rRespQ          = Module(new Queue(new DataFlit(), entries = nrDDRCRespQ, flow = false, pipe = true)) // TODO: Cant automatic optimization
-    val rDatQ           = Module(new Queue(Vec(nrBeat, UInt(beatBits.W)), entries = nrDDRCRespQ, flow = false, pipe = true))
-    val sendBeatNumReg  = RegInit(0.U(beatNumBits.W))
+    // ReqBuf
+    val wBufRegVec          = RegInit(VecInit(Seq.fill(nrDDRCWBuf) { 0.U.asTypeOf(new DDRCWEntry) }))
+    val rBufRegVec          = RegInit(VecInit(Seq.fill(nrDDRCRBuf) { 0.U.asTypeOf(new DDRCREntry) }))
 
-    // Fake DDR
-    val ddr             = Seq.fill(nrDDRCBank) { Module(new MemHelper()) }
+    // DataStorage
+    val ddr                 = Seq.fill(nrDDRCBank) { Module(new MemHelper()) }
 
+    // ChiRespQueue
+    val rRespQ              = Module(new Queue(new DataFlit(), entries = nrDDRCRespQ, flow = false, pipe = true))
+    val rDatQ               = Module(new Queue(Vec(nrBeat, UInt(beatBits.W)), entries = nrDDRCRespQ, flow = false, pipe = true))
+    val sendBeatNumReg      = RegInit(0.U(beatNumBits.W))
 
 
 // ---------------------------------------------------------------------------------------------------------------------- //
@@ -77,28 +96,83 @@ class FakeDDRC(node: Node)(implicit p: Parameters) extends DJModule {
     /*
      * Receive Req
      */
-    val wBufFreeVec             = wBufRegVec.map(_.state === DDRCWState.Free)
-    val selRecWID               = PriorityEncoder(wBufFreeVec)
-    reqIsW                      := isWriteX(txReq.Opcode)
+    val wBufFreeVec         = wBufRegVec.map(_.state === DDRCWState.Free)
+    val rBufFreeVec         = wBufRegVec.map(_.state === DDRCWState.Free)
+    val selRecWID           = PriorityEncoder(wBufFreeVec)
+    val selRecRID           = PriorityEncoder(rBufFreeVec)
+    val reqIsW              = isWriteX(txReq.bits.Opcode)
     when(reqIsW) {
-        io.sn.tx.req.get.ready  := wBufFreeVec.reduce(_ | _)
-        rReqQ.io.enq            <> DontCare
+        txReq.ready         := wBufFreeVec.reduce(_ | _)
     }.otherwise {
-        rReqQ.io.enq            <> io.sn.tx.req.get
+        txReq.ready         := rBufFreeVec.reduce(_ | _)
     }
 
 
     /*
-     * Send DBID To Src
+     * Send DBID Or Comp To Src
      */
+    val wBufSCompVec        = wBufRegVec.map(_.state === DDRCWState.SendComp)
     val wBufSDBIDVec        = wBufRegVec.map(_.state === DDRCWState.SendDBIDResp)
+    val selSCompID          = PriorityEncoder(wBufSCompVec)
     val selSDBID            = PriorityEncoder(wBufSDBIDVec)
 
-    io.sn.rx.resp.get.valid := wBufSDBIDVec.reduce(_ | _)
-    rxRsp.Opcode            := CompDBIDResp
-    rxRsp.TgtID             := wBufRegVec(selSDBID).srcID
-    rxRsp.TxnID             := wBufRegVec(selSDBID).txnID
-    rxRsp.DBID              := selSDBID
+    rxRsp.valid             := wBufSDBIDVec.reduce(_ | _) | wBufSCompVec.reduce(_ | _)
+    rxRsp.bits.Opcode       := Mux(wBufSCompVec.reduce(_ | _), Comp,                         DBIDResp)
+    rxRsp.bits.DBID         := Mux(wBufSCompVec.reduce(_ | _), selSCompID,                   selSDBID)
+    rxRsp.bits.TgtID        := Mux(wBufSCompVec.reduce(_ | _), wBufRegVec(selSCompID).srcID, wBufRegVec(selSDBID).srcID)
+    rxRsp.bits.TxnID        := Mux(wBufSCompVec.reduce(_ | _), wBufRegVec(selSCompID).txnID, wBufRegVec(selSDBID).txnID)
+
+
+    /*
+     * Select Buf Send Req To DDR
+     */
+    val willSendRVec         = rBufRegVec.map { case r => r.state === DDRCRState.ReadDDR  & rRespQ.io.enq.ready }
+    val willSendWVec         = wBufRegVec.map { case w => w.state === DDRCWState.WriteDDR }
+    val rDDRID               = PriorityEncoder(willSendRVec)
+    val wDDRID               = PriorityEncoder(willSendWVec)
+
+
+    ddr.foreach { case d => d.clk := clock }
+    ddr.foreach {
+        case d =>
+            d.rIdx  := rBufRegVec(rDDRID).index
+            d.ren   := willSendRVec.reduce(_ | _) & !willSendWVec.reduce(_ | _)
+    }
+    ddr.zipWithIndex.foreach {
+        case (d, i) =>
+            d.wIdx  := wBufRegVec(wDDRID).index
+            d.wen   := willSendWVec.reduce(_ | _)
+            d.wdata := Cat(wBufRegVec(wDDRID).data.map(_.bits)).asTypeOf(Vec(nrDDRCBank, UInt(64.W)))(i)
+    }
+
+    /*
+     * Read Req Buf
+     */
+    rBufRegVec.zipWithIndex.foreach {
+        case (r, i) =>
+            switch(r.state) {
+                is(DDRCRState.Free) {
+                    val hit         = txReq.fire & !reqIsW & selRecRID === i.U;
+                    assert(txReq.bits.Opcode === ReadNoSnp | !hit)
+                    when(hit) {
+                        r.state     := DDRCRState.ReadDDR
+                        r.index     := txReq.bits.Addr(addressBits - 1, offsetBits)
+                        r.srcID     := txReq.bits.SrcID
+                        r.txnID     := txReq.bits.TxnID
+                    }
+                }
+                is(DDRCRState.ReadDDR) {
+                    val hit         = ddr.map(_.ren).reduce(_ | _) & rDDRID === i.U
+                    when(hit) {
+                        r.state     := DDRCRState.GetResp
+                    }
+                }
+                is(DDRCRState.GetResp) {
+                    r               := 0.U.asTypeOf(r)
+                    r.state         := DDRCRState.Free
+                }
+            }
+    }
 
 
     /*
@@ -108,103 +182,93 @@ class FakeDDRC(node: Node)(implicit p: Parameters) extends DJModule {
         case(w, i) =>
             switch(w.state) {
                 is(DDRCWState.Free) {
-                    val hit = io.sn.tx.req.get.fire & reqIsW & selRecWID === i.U
+                    val hit = txReq.fire & reqIsW & selRecWID === i.U; assert(txReq.bits.Opcode === WriteNoSnpFull | !hit)
                     when(hit) {
                         w.state     := DDRCWState.SendDBIDResp
-                        w.index     := getDDRCAddress(txReq.Addr)
-                        w.srcID     := txReq.SrcID
-                        w.txnID     := txReq.TxnID
-                    }.otherwise {
-                        w           := 0.U.asTypeOf(w)
+                        w.index     := txReq.bits.Addr(addressBits - 1, offsetBits)
+                        w.srcID     := txReq.bits.SrcID
+                        w.txnID     := txReq.bits.TxnID
                     }
                 }
                 is(DDRCWState.SendDBIDResp) {
-                    val hit = io.sn.rx.resp.get.fire & rxRsp.Opcode === CompDBIDResp & selSDBID === i.U
+                    val hit         = rxRsp.fire & rxRsp.bits.Opcode === DBIDResp & selSDBID === i.U
                     when(hit) {
-                        w.state := DDRCWState.WaitData
+                        w.state     := DDRCWState.WaitData
                     }
                 }
                 is(DDRCWState.WaitData) {
-                    val hit = io.sn.tx.data.get.fire & txDat.TxnID === i.U
+                    val hit         = txDat.fire & txDat.bits.TxnID === i.U
                     when(hit) {
-                        w.state := Mux(PopCount(w.datVal) === (nrBeat-1).U, DDRCWState.WriteData, w.state)
-                        w.datVal(toBeatNum(txDat.DataID))   := true.B
-                        w.data(toBeatNum(txDat.DataID))     := txDat.Data
+                        w.state     := Mux(hit & w.isLast, DDRCWState.WriteDDR, w.state)
+                        w.data(toBeatNum(txDat.bits.DataID)).valid  := true.B
+                        w.data(toBeatNum(txDat.bits.DataID)).bits   := txDat.bits.Data
+                        w.srcID     := txDat.bits.SrcID
                     }
                 }
-                is(DDRCWState.WriteData) {
-                    w.state := DDRCWState.Free
+                is(DDRCWState.WriteDDR) {
+                    val hit         = ddr.map(_.wen).reduce(_ | _) & wDDRID === i.U
+                    when(hit) {
+                        w.state     := DDRCWState.SendComp
+                    }
+                }
+                is(DDRCWState.SendComp) {
+                    val hit         = rxRsp.fire & rxRsp.bits.Opcode === Comp & selSCompID === i.U
+                    when(hit) {
+                        w           := 0.U.asTypeOf(w)
+                        w.state     := DDRCWState.Free
+                    }
                 }
             }
     }
-    io.sn.tx.data.get.ready := true.B
+    txDat.ready := true.B
 
 
 
 // ---------------------------------------------------------------------------------------------------------------------- //
-// ------------------------------------------------ S1: Send Req To DDRC ------------------------------------------------ //
+// ---------------------------------------------- S1: Get Resp From DDR ------------------------------------------------- //
 // ---------------------------------------------------------------------------------------------------------------------- //
     /*
-     * Select Req Send To SRAM
+     * Get Read CHI Resp
      */
-    val wDataVec    = wBufRegVec.map(_.state === DDRCWState.WriteData)
-    val wDataId     = PriorityEncoder(wDataVec)
-    assert(PopCount(wDataVec) <= 1.U)
-
-    ddr.foreach { case d => d.clk := clock }
-    ddr.foreach {
-        case d =>
-            d.rIdx  := getDDRCAddress(rReqQ.io.deq.bits.Addr)
-            d.ren   := rReqQ.io.deq.fire
-    }
-    ddr.zipWithIndex.foreach {
-        case(d, i) =>
-            d.wIdx  := wBufRegVec(wDataId).index
-            d.wen   := wDataVec.reduce(_ | _)
-            d.wdata := Cat(wBufRegVec(wDataId).data).asTypeOf(Vec(nrDDRCBank, UInt(64.W)))(i)
-    }
-
-
-    /*
-     * Send Resp to rRespQ
-     */
-    rReqQ.io.deq.ready          := rRespQ.io.enq.ready
-    rRespQ.io.enq.valid         := rReqQ.io.deq.valid
+    val getRespVec              = rBufRegVec.map(_.state === DDRCRState.GetResp)
+    val getRespID               = PriorityEncoder(getRespVec)
+    rRespQ.io.enq.valid         := getRespVec.reduce(_ | _)
     rRespQ.io.enq.bits          := DontCare
-    rRespQ.io.enq.bits.Opcode   := CompData
+    rRespQ.io.enq.bits.Opcode   := CHIOp.DAT.CompData
     rRespQ.io.enq.bits.Resp     := ChiResp.UC
-    rRespQ.io.enq.bits.TgtID    := rReqQ.io.deq.bits.SrcID
-    rRespQ.io.enq.bits.TxnID    := rReqQ.io.deq.bits.TxnID
+    rRespQ.io.enq.bits.TgtID    := rBufRegVec(getRespID).srcID
+    rRespQ.io.enq.bits.TxnID    := rBufRegVec(getRespID).txnID
+    assert(PopCount(rBufRegVec.map(_.state === DDRCRState.GetResp))  <= 1.U)
 
 
-
-// ---------------------------------------------------------------------------------------------------------------------- //
-// ------------------------------------- S2: Receive DRRC Resp and Send RxDat ------------------------------------------- //
-// ---------------------------------------------------------------------------------------------------------------------- //
     /*
      * Receive SRAM Resp
      */
-    rDatQ.io.enq.valid  := rReqQ.io.deq.fire
-    rDatQ.io.enq.bits   := Cat(ddr.map(_.rdata)).asTypeOf(Vec(nrBeat, UInt(beatBits.W)))
+    rDatQ.io.enq.valid          := getRespVec.reduce(_ | _)
+    rDatQ.io.enq.bits.zipWithIndex.foreach { case (beat, i) =>
+        beat := Cat(ddr.map(_.rdata))(beatBits * (i + 1) - 1, beatBits * i)
+    }
 
+
+// ---------------------------------------------------------------------------------------------------------------------- //
+// ------------------------------------------------------ S2: Send RxDat ------------------------------------------------ //
+// ---------------------------------------------------------------------------------------------------------------------- //
     /*
      * Send Resp To CHI RxDat
      */
-    sendBeatNumReg      := sendBeatNumReg + io.sn.rx.data.get.fire.asUInt
-    io.sn.rx.data.get.valid := rRespQ.io.deq.valid & rDatQ.io.deq.valid
-    rxDat               := rRespQ.io.deq.bits
-    rxDat.Data          := rDatQ.io.deq.bits(sendBeatNumReg)
-    rxDat.DataID        := toDataID(sendBeatNumReg)
+    sendBeatNumReg      := sendBeatNumReg + rxDat.fire.asUInt
+    rxDat.valid         := rRespQ.io.deq.valid & rDatQ.io.deq.valid
+    rxDat.bits          := rRespQ.io.deq.bits
+    rxDat.bits.Data     := rDatQ.io.deq.bits(sendBeatNumReg)
+    rxDat.bits.DataID   := toDataID(sendBeatNumReg)
 
-    rRespQ.io.deq.ready := sendBeatNumReg === (nrBeat - 1).U & io.sn.rx.data.get.fire.asUInt
-    rDatQ.io.deq.ready  := sendBeatNumReg === (nrBeat - 1).U & io.sn.rx.data.get.fire.asUInt
+    rRespQ.io.deq.ready := sendBeatNumReg === (nrBeat - 1).U & rxDat.fire
+    rDatQ.io.deq.ready  := sendBeatNumReg === (nrBeat - 1).U & rxDat.fire
 
 
 
-// ----------------------------------------------------- Assertion ------------------------------------------------------ //
-    assert(Mux(io.sn.tx.req.get.valid, txReq.Addr(offsetBits - 1, 0) === 0.U, true.B))
-
-    assert(Mux(io.sn.tx.req.get.valid, txReq.Size === log2Ceil(djparam.blockBytes).U, true.B))
+// ------------------------------------------------------------ Assertion ----------------------------------------------- //
+    assert(Mux(txReq.valid, txReq.bits.Size === log2Ceil(djparam.blockBytes).U, true.B))
 
     assert(Mux(rDatQ.io.enq.valid, rDatQ.io.enq.ready, true.B))
 
