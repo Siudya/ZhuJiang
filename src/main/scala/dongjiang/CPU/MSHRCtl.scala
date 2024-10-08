@@ -26,6 +26,7 @@ class MSHREntry(implicit p: Parameters) extends DJBundle {
   // addr
   val tag             = UInt(mshrTagBits.W)
   val bank            = UInt(bankBits.W)
+  val lockDirSet      = Bool()
   // req mes
   val chiMes          = new MSHRCHIMesBundle()
   // resp mes
@@ -108,7 +109,19 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
    * Get MSHR Mes
    */
   // mshrTableReg
-  val nodeReqMatchVec = mshrTableReg(io.req2Slice.bits.mSet).map { case m => m.isValid & m.tag === io.req2Slice.bits.mTag & m.bank === io.req2Slice.bits.mBank }
+  val nodeReqMatchVec = mshrTableReg(io.req2Slice.bits.mSet).map { case m =>
+    val hit = Wire(Bool())
+    when(m.lockDirSet) {
+      if(maxDirSetBits > mshrSetBits) {
+        hit := m.tag(maxDirSetBits - mshrSetBits - 1, 0) === io.req2Slice.bits.mTag(maxDirSetBits - mshrSetBits - 1, 0)
+      } else {
+        hit := true.B
+      }
+    }.otherwise {
+      hit := m.tag === io.req2Slice.bits.mTag & m.bank === io.req2Slice.bits.mBank
+    }
+    hit & m.isValid
+  }
   val nodeReqInvVec   = mshrTableReg(io.req2Slice.bits.mSet).map(_.isFree)
   val nodeReqInvWay   = PriorityEncoder(nodeReqInvVec)
   // mshrLockVecReg
@@ -157,12 +170,13 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
            */
           when(io.updMSHR.valid & !io.updMSHR.bits.isRetry & io.updMSHR.bits.mSet === i.U & io.updMSHR.bits.mshrWay === j.U) {
             // req
-            when(io.updMSHR.bits.isReq) {
+            when(io.updMSHR.bits.hasNewReq) {
               m                 := 0.U.asTypeOf(m)
-              m.chiMes.opcode   := Mux(io.updMSHR.bits.isSnpEvict, CHIOp.SNP.SnpUniqueEvict, CHIOp.REQ.Replace)
-              m.chiMes.channel  := Mux(io.updMSHR.bits.isSnpEvict, CHIChannel.SNP,           CHIChannel.REQ)
+              m.chiMes.opcode   := io.updMSHR.bits.opcode
+              m.chiMes.channel  := io.updMSHR.bits.channel
               m.tag             := io.updMSHR.bits.mTag
               m.bank            := io.updMSHR.bits.mBank
+              m.lockDirSet      := io.updMSHR.bits.lockDirSet
             }
             // req or update
             m.respMes           := 0.U.asTypeOf(m.respMes)
@@ -265,11 +279,9 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
               val retry   = hit & io.updMSHR.bits.isRetry
               val update  = hit & io.updMSHR.bits.isUpdate
               val clean   = hit & io.updMSHR.bits.isClean
-              val req     = hit & io.updMSHR.bits.isReq
               m.state     := Mux(retry, MSHRState.BeSend,
                                 Mux(update, MSHRState.WaitResp,
-                                  Mux(req, MSHRState.WaitResp,
-                                    Mux(clean, MSHRState.Free, MSHRState.AlreadySend))))
+                                    Mux(clean, MSHRState.Free, MSHRState.AlreadySend)))
             }
             // WaitResp
             is(MSHRState.WaitResp) {

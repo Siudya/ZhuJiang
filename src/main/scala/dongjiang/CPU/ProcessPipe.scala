@@ -76,9 +76,8 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
   // s3 execute signals: Execute specific tasks
   val done_s3_g           = RegInit(0.U.asTypeOf(new OperationsBundle()))
   val done_s3_g_updMSHR   = RegInit(false.B)
-  val done_s3_g_repl      = RegInit(false.B)
   val done_s3_g_sfEvict   = RegInit(false.B)
-  val reqBeSend_s3        = Wire(Vec(7, new Req2NodeBundle()))
+  val reqBeSend_s3        = Wire(Vec(6, new Req2NodeBundle()))
 
 
 
@@ -288,6 +287,22 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
 
 
   /*
+   * Send Write to SN(DCU)
+   */
+  // writeDCU_s3
+  taskRepl_s3.addr          := dirRes_s3.bits.s.addr
+  taskRepl_s3.selfWay       := OHToUInt(dirRes_s3.bits.s.wayOH)
+  taskRepl_s3.mshrWay       := task_s3_g.bits.mshrWay
+  taskRepl_s3.channel       := CHIChannel.REQ
+  taskRepl_s3.opcode        := CHIOp.REQ.Replace
+  taskRepl_s3.from.IncoId   := io.sliceId
+  taskRepl_s3.to.IncoId     := IncoID.LOCALMAS.U
+  taskRepl_s3.tgtID         := getSnNodeIDByBankId(task_s3_g.bits.bank)
+  taskRepl_s3.srcID         := hnfNodeId.U
+  taskRepl_s3.dbid          := rcDBID
+
+
+  /*
    * Send Write to Self Directory
    */
   wSDir_s3.addr             := task_s3_g.bits.addr
@@ -355,27 +370,31 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
    *
    */
   todo_s3_retry       := todo_s3.wSDir & dirRes_s3.bits.s.replRetry | todo_s3.wSFDir & dirRes_s3.bits.sf.replRetry; assert(Mux(valid_s3, !todo_s3_retry, true.B), "TODO")
-  todo_s3_updateMSHR  := todo_s3.reqToMas | todo_s3.reqToSlv
   todo_s3_replace     := todo_s3.wSDir & !hnHit & !dirRes_s3.bits.s.metaVec(0).isInvalid & !todo_s3_retry
   todo_s3_sfEvict     := todo_s3.wSFDir & !srcHit & !othHit & dirRes_s3.bits.sf.metaVec.map(!_.isInvalid).reduce(_ | _) & !todo_s3_retry
-  todo_s3_cleanMSHR   := !(todo_s3_retry | todo_s3_updateMSHR | todo_s3_replace | todo_s3_sfEvict)
-  assert(Mux(valid_s3, PopCount(Seq(todo_s3_retry, todo_s3_updateMSHR, todo_s3_replace, todo_s3_sfEvict, todo_s3_cleanMSHR)) === 1.U, true.B))
-  assert(Mux(valid_s3, !todo_s3_replace, true.B), "TODO: set task value")
+  todo_s3_updateMSHR  := todo_s3.reqToMas | todo_s3.reqToSlv | todo_s3_replace | todo_s3_sfEvict
+  todo_s3_cleanMSHR   := !(todo_s3_retry | todo_s3_updateMSHR)
+  assert(Mux(valid_s3, PopCount(Seq(todo_s3_retry, todo_s3_updateMSHR, todo_s3_cleanMSHR)) === 1.U, true.B))
+  assert(Mux(valid_s3, PopCount(Seq(todo_s3_replace, todo_s3_sfEvict)) <= 1.U, true.B))
+  assert(Mux(valid_s3 & todo_s3_replace, todo_s3.writeDCU, true.B))
 
   /*
    * Update MSHR Mes or let task retry
    */
-  //                                                Retry                                                            Update / Clean                            Replace                EvictSF
-  io.updMSHR.bits.updType     := Mux(todo_s3_retry, UpdMSHRType.RETRY,   Mux(todo_s3_updateMSHR | todo_s3_cleanMSHR, UpdMSHRType.UPD,     Mux(todo_s3_replace, UpdMSHRType.REPL,      UpdMSHRType.SNPEVICT)))
-  io.updMSHR.bits.addr        := Mux(todo_s3_retry, task_s3_g.bits.addr, Mux(todo_s3_updateMSHR | todo_s3_cleanMSHR, task_s3_g.bits.addr, Mux(todo_s3_replace, dirRes_s3.bits.s.addr, dirRes_s3.bits.sf.addr)))
-  // Use In Retry or Update
+  io.updMSHR.bits.addr        := Mux(todo_s3_replace | todo_s3_sfEvict, Mux(todo_s3_replace, dirRes_s3.bits.s.addr, dirRes_s3.bits.sf.addr), task_s3_g.bits.addr)
+  io.updMSHR.bits.updType     := Mux(todo_s3_retry, UpdMSHRType.RETRY, UpdMSHRType.UPD)
   io.updMSHR.bits.mshrWay     := task_s3_g.bits.mshrWay
   // Use In Update // TODO: Complete hasCSNIntf
   io.updMSHR.bits.waitIntfVec := (Mux(todo_s3.reqToSlv | todo_s3_sfEvict, UIntToOH(IncoID.LOCALSLV.U), 0.U) |
                                   Mux(todo_s3.reqToMas | todo_s3_replace, UIntToOH(IncoID.LOCALMAS.U), 0.U)).asBools
   require(!hasCSNIntf)
+  // Use In New Req
+  io.updMSHR.bits.hasNewReq   := todo_s3_replace | todo_s3_sfEvict
+  io.updMSHR.bits.opcode      := Mux(todo_s3_replace, CHIOp.REQ.Replace, CHIOp.SNP.SnpUniqueEvict)
+  io.updMSHR.bits.channel     := Mux(todo_s3_replace, CHIChannel.REQ,    CHIChannel.SNP)
+  io.updMSHR.bits.lockDirSet  := todo_s3_replace
   // Common
-  io.updMSHR.valid            := valid_s3 & (todo_s3_retry | todo_s3_updateMSHR | todo_s3_replace | todo_s3_sfEvict | todo_s3_cleanMSHR) & !done_s3_g_updMSHR
+  io.updMSHR.valid            := valid_s3 & (todo_s3_retry | todo_s3_updateMSHR | todo_s3_cleanMSHR) & !done_s3_g_updMSHR
   done_s3_g_updMSHR           := Mux(rstDone, false.B, done_s3_g_updMSHR | io.updMSHR.fire)
   val updDone                 = io.updMSHR.fire | done_s3_g_updMSHR
 
@@ -387,22 +406,20 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
    * Send Req to Node
    */
   val canSendReq    = valid_s3 & !todo_s3_retry
-  val reqDoneList   = Seq(done_s3_g.snoop, done_s3_g.readDown, done_s3_g.writeDown, done_s3_g.readDCU, done_s3_g.writeDCU, done_s3_g_repl, done_s3_g_sfEvict)
+  val reqDoneList   = Seq(done_s3_g.snoop, done_s3_g.readDown, done_s3_g.writeDown, done_s3_g.readDCU, done_s3_g.writeDCU, done_s3_g_sfEvict)
   val reqTodoList   = Seq(todo_s3.snoop     & !done_s3_g.snoop,
                           todo_s3.readDown  & !done_s3_g.readDown,
                           todo_s3.writeDown & !done_s3_g.writeDown,
                           todo_s3.readDCU   & !done_s3_g.readDCU,
                           todo_s3.writeDCU  & !done_s3_g.writeDCU,
-                          todo_s3_replace   & !done_s3_g_repl,
                           todo_s3_sfEvict   & !done_s3_g_sfEvict)
   val toBeSendId    = PriorityEncoder(reqTodoList)
   reqBeSend_s3(0)   := taskSnp_s3
   reqBeSend_s3(1)   := taskRD_s3
   reqBeSend_s3(2)   := taskWD_s3
   reqBeSend_s3(3)   := readDCU_s3
-  reqBeSend_s3(4)   := writeDCU_s3
-  reqBeSend_s3(5)   := 0.U.asTypeOf(new Req2NodeBundle()) // TODO: replace_s3
-  reqBeSend_s3(6)   := taskSnpEvict_s3
+  reqBeSend_s3(4)   := Mux(todo_s3_replace, taskRepl_s3, writeDCU_s3) // writeDCU transfer to taskRepl_s3
+  reqBeSend_s3(5)   := taskSnpEvict_s3
   io.req2Node.valid := canSendReq & reqTodoList.reduce(_ | _)
   io.req2Node.bits  := reqBeSend_s3(toBeSendId)
   reqDoneList.zipWithIndex.foreach { case(d, i) => d := Mux(rstDone, false.B, d | (io.req2Node.fire & toBeSendId === i.U)) }
