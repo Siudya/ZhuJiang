@@ -57,6 +57,7 @@ object ZhujiangGlobal {
       val ccAddr = ((ccId << 16) + mmioBase, ((ccId + np.cpuNum) << 16) + mmioBase)
       val hiAddr = (np.addressRange._1 + mmioBase, np.addressRange._2 + mmioBase)
       val n = Node(
+        attr = np.attr,
         nodeType = np.nodeType,
         csnNode = csn,
         nidBits = nodeNidBits,
@@ -84,7 +85,8 @@ object ZhujiangGlobal {
         } else {
           (0L, 0L)
         },
-        defaultHni = if(np.nodeType == NodeType.HI) np.defaultHni else false
+        defaultHni = if(np.nodeType == NodeType.HI) np.defaultHni else false,
+        outstanding = if(np.nodeType == NodeType.HI || np.nodeType == NodeType.CC || np.nodeType == NodeType.S) np.outstanding else 0,
       )
       if(np.nodeType == NodeType.CC) ccId = ccId + np.cpuNum
       n
