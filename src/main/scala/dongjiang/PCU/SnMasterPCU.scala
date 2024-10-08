@@ -102,9 +102,9 @@ class SnMasterPCU(snMasId: Int, param: InterfaceParam)(implicit p: Parameters) e
       switch(pcu.state) {
         // State: Free
         is(PCUSM.Free) {
-          val reqHit    = io.req2Node.fire & isReadX(io.req2Node.bits.opcode) & pcuGetReqID === i.U
-          val writeHit  = io.req2Node.fire & isWriteX(io.req2Node.bits.opcode) & pcuGetReqID === i.U
-          val replHit   = io.req2Node.fire & isReplace(io.req2Node.bits.opcode) & pcuGetReqID === i.U
+          val reqHit    = io.req2Node.fire & isReadX(io.req2Node.bits.opcode) & pcuGetReqID === i.U; assert(!reqHit | io.req2Node.bits.opcode === ReadNoSnp)
+          val writeHit  = io.req2Node.fire & isWriteX(io.req2Node.bits.opcode) & pcuGetReqID === i.U; assert(!writeHit | io.req2Node.bits.opcode === WriteNoSnpFull)
+          val replHit   = io.req2Node.fire & isReplace(io.req2Node.bits.opcode) & pcuGetReqID === i.U; assert(!replHit | io.req2Node.bits.opcode === Replace)
           pcu.state     := Mux(reqHit, PCUSM.GetDBID,
                             Mux(writeHit, PCUSM.Req2Node,
                               Mux(replHit, PCUSM.Req2Node, pcu.state)))
@@ -112,7 +112,8 @@ class SnMasterPCU(snMasId: Int, param: InterfaceParam)(implicit p: Parameters) e
         // State: GetDBID
         is(PCUSM.GetDBID) {
           val hit       = io.dbSigs.wReq.fire & pcuGetDBID === i.U
-          pcu.state     := Mux(hit, Mux(pcu.isRead, PCUSM.WaitDBID, PCUSM.Req2Node), pcu.state)
+          pcu.state     := Mux(hit, PCUSM.WaitDBID, pcu.state)
+          assert(pcu.isRead | !hit)
         }
         // State: WaitDBID
         is(PCUSM.WaitDBID) {
@@ -126,8 +127,8 @@ class SnMasterPCU(snMasId: Int, param: InterfaceParam)(implicit p: Parameters) e
         }
         // State: WaitNodeResp
         is(PCUSM.WaitNodeData) {
-          val rxDathit  = io.chi.rxdat.fire & io.chi.rxdat.bits.TxnID === i.U
-          pcu.state     := Mux(rxDathit & pcu.isLastBeat, PCUSM.Resp2Slice, pcu.state)
+          val rxDatHit  = io.chi.rxdat.fire & io.chi.rxdat.bits.TxnID === i.U
+          pcu.state     := Mux(rxDatHit & pcu.isLastBeat, PCUSM.Resp2Slice, pcu.state)
         }
         // State: Resp2Slice
         is(PCUSM.Resp2Slice) {
@@ -157,7 +158,7 @@ class SnMasterPCU(snMasId: Int, param: InterfaceParam)(implicit p: Parameters) e
         }
         // State: Replace2Node
         is(PCUSM.Replace2Node) {
-          val hit       = io.chi.txreq.fire & pcuReq2NodeID === i.U; assert(io.chi.txreq.bits.Opcode === Replace | !hit, "SNMAS PCU[0x%x] STATE[0x%x] OP[0x%x] ADDR[0x%x] TGTID[0x%x]", i.U, pcu.state, pcu.chiMes.opcode, pcu.indexMes.addr, pcu.chiMes.tgtID)
+          val hit       = io.chi.txreq.fire & pcuReq2NodeID === i.U; assert(!hit | pcu.isRepl, "SNMAS PCU[0x%x] STATE[0x%x] OP[0x%x] ADDR[0x%x] TGTID[0x%x]", i.U, pcu.state, pcu.chiMes.opcode, pcu.indexMes.addr, pcu.chiMes.tgtID)
           pcu.state     := Mux(hit, PCUSM.WaitReplDBID, pcu.state)
         }
         // State: WaitReplDBID
@@ -380,5 +381,5 @@ class SnMasterPCU(snMasId: Int, param: InterfaceParam)(implicit p: Parameters) e
     0.U(64.W)
   }))
   cntReg.zip(pcus).foreach { case (c, p) => c := Mux(p.isFree, 0.U, c + 1.U) }
-  cntReg.zipWithIndex.foreach { case (c, i) => assert(c < TIMEOUT_SMPCU.U, "SNMAS PCU[0x%x] ADDR[0x%x] OP[0x%x] TIMEOUT", i.U, pcus(i).indexMes.addr, pcus(i).chiMes.opcode) }
+  cntReg.zipWithIndex.foreach { case (c, i) => assert(c < TIMEOUT_SMPCU.U, "SNMAS PCU[0x%x] STATE[0x%x] ADDR[0x%x] OP[0x%x] TIMEOUT", i.U, pcus(i).state, pcus(i).indexMes.addr, pcus(i).chiMes.opcode) }
 }
