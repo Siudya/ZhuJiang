@@ -212,12 +212,12 @@ class RnSlavePCU(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) ex
         }
         // State: DBIDResp2Node
         is(PCURS.DBIDResp2Node) {
-          val hit       = io.chi.rxrsp.fire & io.chi.rxrsp.bits.DBID === pcu.indexMes.dbid
+          val hit       = io.chi.rxrsp.fire & io.chi.rxrsp.bits.DBID === i.U
           pcu.state     := Mux(hit, PCURS.WaitData, pcu.state)
         }
         // State: WaitData
         is(PCURS.WaitData) {
-          val hit       = io.chi.txdat.fire & io.chi.txdat.bits.DBID === pcu.indexMes.dbid
+          val hit       = io.chi.txdat.fire & io.chi.txdat.bits.TxnID === i.U
           pcu.state     := Mux(hit & pcu.isLastBeat, PCURS.Req2Slice, pcu.state)
         }
         // State: Snp2Node
