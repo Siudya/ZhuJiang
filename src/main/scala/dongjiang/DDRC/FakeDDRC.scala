@@ -202,7 +202,6 @@ class FakeDDRC(node: Node)(implicit p: Parameters) extends DJModule {
                         w.state     := Mux(hit & w.isLast, DDRCWState.WriteDDR, w.state)
                         w.data(toBeatNum(txDat.bits.DataID)).valid  := true.B
                         w.data(toBeatNum(txDat.bits.DataID)).bits   := txDat.bits.Data
-                        w.srcID     := txDat.bits.SrcID
                     }
                 }
                 is(DDRCWState.WriteDDR) {
@@ -272,4 +271,5 @@ class FakeDDRC(node: Node)(implicit p: Parameters) extends DJModule {
 
     assert(Mux(rDatQ.io.enq.valid, rDatQ.io.enq.ready, true.B))
 
+    assert(Mux(txReq.valid, txReq.bits.Opcode === ReadNoSnp | txReq.bits.Opcode === WriteNoSnpFull, true.B))
 }

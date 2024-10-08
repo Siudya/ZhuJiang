@@ -202,9 +202,9 @@ trait HasDJParam extends HasParseZJParam {
 
     // Base Fake DDRC Mes
     val nrDDRCBank      = dataBits / 64
-    val nrDDRCReqQ      = 4
-    val nrDDRCRespQ     = 4
+    val nrDDRCRBuf      = 4
     val nrDDRCWBuf      = 4
+    val nrDDRCRespQ     = 4
     val ddrcWBufIdBits  = log2Ceil(nrDDRCWBuf)
 
     // Slice Id Bits Parameters
@@ -224,6 +224,9 @@ trait HasDJParam extends HasParseZJParam {
     val sfWayBits       = log2Ceil(djparam.sfDirWays)
     val sfSetBits       = log2Ceil(djparam.sfDirSets / djparam.nrBank / djparam.nrDirBank)
     val sfTagBits       = djparam.addressBits - sfSetBits - dirBankBits - bankBits - offsetBits
+
+    // DIR SET MAX
+    val maxDirSetBits   = max(sSetBits, sfSetBits)
 
     // MSHR TABLE Parameters: [mshrTag] + [mshrSet] + [bank] + [offset]
     val mshrWayBits     = log2Ceil(djparam.nrMSHRWays)

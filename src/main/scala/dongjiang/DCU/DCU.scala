@@ -15,29 +15,10 @@ import xijiang.router.base.IcnBundle
 import xs.utils.sram._
 import Utils.FastArb._
 
-
-object DCUWState {
-    val width = 3
-    // commom
-    val Free            = "b000".U
-    val SendDBIDResp    = "b001".U
-    val WaitData        = "b010".U
-    val WriteSram       = "b011".U // Send Write Req To DataStorage And Send Comp To Src
-    val Writting        = "b100".U // Write Data To DataStorage
-    val SendComp        = "b101".U
-}
-
-class DCUWEntry(implicit p: Parameters) extends DJBundle {
-    val state           = UInt(DCUWState.width.W)
-    val data            = Vec(nrBeat, Valid(UInt(beatBits.W)))
-    val dsIndex         = UInt(dsIndexBits.W)
-    val dsBank          = UInt(dsBankBits.W)
-    val srcID           = UInt(chiNodeIdBits.W)
-    val txnID           = UInt(djparam.chiTxnidBits.W)
-
-    def isLast          = PopCount(data.map(_.valid)) === (nrBeat - 1).U
-}
-
+/*
+ * Read Req:
+ * Free ----> ReadSram ----> Reading
+ */
 object DCURState {
     val width           = 2
     val Free            = "b00".U
@@ -54,6 +35,39 @@ class DCUREntry(implicit p: Parameters) extends DJBundle {
     val txnID           = UInt(djparam.chiTxnidBits.W)
     val resp            = UInt(ChiResp.width.W)
 }
+
+
+/*
+ * Write Req:
+ * Free ----> SendDBIDResp ----> WaitData -----> WriteSram -----> Writting -----> (SendComp) -----> Free
+ *                                                           ^
+ *                                                    WaitReplReadDone
+ */
+object DCUWState {
+    val width = 3
+    // commom
+    val Free            = "b000".U
+    val SendDBIDResp    = "b001".U
+    val WaitData        = "b010".U
+    val WriteSram       = "b011".U // Send Write Req To DataStorage And Send Comp To Src
+    val Writting        = "b100".U // Write Data To DataStorage
+    val SendComp        = "b101".U
+}
+
+class DCUWEntry(implicit p: Parameters) extends DJBundle {
+    val state           = UInt(DCUWState.width.W)
+    val replRState      = UInt(DCURState.width.W)
+    val data            = Vec(nrBeat, Valid(UInt(beatBits.W)))
+    val dsIndex         = UInt(dsIndexBits.W)
+    val dsBank          = UInt(dsBankBits.W)
+    val srcID           = UInt(chiNodeIdBits.W)
+    val txnID           = UInt(djparam.chiTxnidBits.W)
+    val ddrDBID         = UInt(djparam.chiDBIDBits.W)
+
+    def canWrite        = replRState === DCURState.Free
+    def isLast          = PopCount(data.map(_.valid)) === (nrBeat - 1).U
+}
+
 
 
 // TODO: DMT
@@ -117,7 +131,8 @@ class DCU(node: Node, nrIntf: Int = 1)(implicit p: Parameters) extends DJModule 
     val selRecWID           = PriorityEncoder(wBufFreeVec)
     val selRecRID           = PriorityEncoder(rBufFreeVec)
     val reqIsW              = isWriteX(txReq.bits.Opcode)
-    when(reqIsW) {
+    val reqIsRepl           = isReplace(txReq.bits.Opcode)
+    when(reqIsW | reqIsRepl) {
         txReq.ready         := wBufFreeVec.reduce(_ | _)
     }.otherwise {
         txReq.ready         := rBufFreeVec.reduce(_ | _)
@@ -144,15 +159,20 @@ class DCU(node: Node, nrIntf: Int = 1)(implicit p: Parameters) extends DJModule 
      */
     sramRReadyVec           := ds.map(_.io.earlyRReq.ready)
     sramWReadyVec           := ds.map(_.io.earlyWReq.ready)
-    val willSendRVec         = rBufRegVec.map { case r => r.state === DCURState.ReadSram & sramRReadyVec(r.dsBank) & (!rRespReg.valid | rRespCanGo) }
-    val willSendWVec         = wBufRegVec.map { case w => w.state === DCUWState.WriteSram & sramWReadyVec(w.dsBank) }
-    val earlyRID            = PriorityEncoder(willSendRVec)
+
+    val willSendRVec        = rBufRegVec.map { case r => r.state === DCURState.ReadSram      & sramRReadyVec(r.dsBank) & (!rRespReg.valid | rRespCanGo) }
+    val willSendReplVec     = wBufRegVec.map { case r => r.replRState === DCURState.ReadSram & sramRReadyVec(r.dsBank) & (!rRespReg.valid | rRespCanGo) & !willSendRVec.reduce(_ | _) }
+    val willSendWVec        = wBufRegVec.map { case w => w.state === DCUWState.WriteSram     & w.canWrite & sramWReadyVec(w.dsBank) }
+
     val earlyWID            = PriorityEncoder(willSendWVec)
+    val earlyRID            = PriorityEncoder(willSendRVec)
+    val earlyReplID         = PriorityEncoder(willSendReplVec)
+    val earlyRepl           = !willSendRVec.reduce(_ | _) & willSendReplVec.reduce(_ | _)
 
     ds.zipWithIndex.foreach {
         case(d, i) =>
-            d.io.earlyRReq.valid := willSendRVec.reduce(_ | _) & rBufRegVec(earlyRID).dsBank === i.U
-            d.io.earlyWReq.valid := willSendWVec.reduce(_ | _) & wBufRegVec(earlyWID).dsBank === i.U
+            d.io.earlyRReq.valid := (willSendRVec.reduce(_ | _) | willSendReplVec.reduce(_ | _)) & rBufRegVec(earlyRID).dsBank === i.U
+            d.io.earlyWReq.valid := willSendWVec.reduce(_ | _)                                   & wBufRegVec(earlyWID).dsBank === i.U
     }
 
 
@@ -163,10 +183,10 @@ class DCU(node: Node, nrIntf: Int = 1)(implicit p: Parameters) extends DJModule 
     rRespReg.valid              := Mux(earlyRValid, true.B, rRespReg.valid & !rRespCanGo)
     rRespCanGo                  := rRespQ.io.enq.ready
     when(earlyRValid & rRespCanGo) {
-        rRespReg.bits.Opcode    := CHIOp.DAT.CompData
-        rRespReg.bits.TgtID     := rBufRegVec(earlyRID).srcID
-        rRespReg.bits.TxnID     := rBufRegVec(earlyRID).txnID
-        rRespReg.bits.Resp      := rBufRegVec(earlyRID).resp
+        rRespReg.bits.Opcode    := Mux(earlyRepl, CHIOp.DAT.NonCopyBackWrData,      CHIOp.DAT.CompData)
+        rRespReg.bits.TgtID     := Mux(earlyRepl, ddrcNodeId.U,                     rBufRegVec(earlyRID).srcID)
+        rRespReg.bits.TxnID     := Mux(earlyRepl, wBufRegVec(earlyReplID).ddrDBID,  rBufRegVec(earlyRID).txnID)
+        rRespReg.bits.Resp      := Mux(earlyRepl, 0.U,                              rBufRegVec(earlyRID).resp)
     }
 
 
@@ -177,8 +197,7 @@ class DCU(node: Node, nrIntf: Int = 1)(implicit p: Parameters) extends DJModule 
         case (r, i) =>
             switch(r.state) {
                 is(DCURState.Free) {
-                    val hit         = txReq.fire & !reqIsW & selRecRID === i.U
-                    assert(txReq.bits.Opcode === ReadNoSnp | !hit)
+                    val hit         = txReq.fire & !reqIsW & !reqIsRepl & selRecRID === i.U
                     when(hit) {
                         r.state     := DCURState.ReadSram
                         r.dsIndex   := parseDCUAddress(txReq.bits.Addr)._1
@@ -189,7 +208,7 @@ class DCU(node: Node, nrIntf: Int = 1)(implicit p: Parameters) extends DJModule 
                     }
                 }
                 is(DCURState.ReadSram) {
-                    val hit         = ds.map(_.io.earlyRReq.fire).reduce(_ | _) & earlyRID === i.U
+                    val hit         = ds.map(_.io.earlyRReq.fire).reduce(_ | _) & earlyRID === i.U & !earlyRepl
                     when(hit) {
                         r.state     := DCURState.Reading
                     }
@@ -203,13 +222,13 @@ class DCU(node: Node, nrIntf: Int = 1)(implicit p: Parameters) extends DJModule 
 
 
     /*
-     * Write Req Buf
+     * Write Req Buf Write State
      */
     wBufRegVec.zipWithIndex.foreach {
         case(w, i) =>
             switch(w.state) {
                 is(DCUWState.Free) {
-                    val hit = txReq.fire & reqIsW & selRecWID === i.U
+                    val hit         = txReq.fire & (reqIsW | reqIsRepl) & selRecWID === i.U
                     when(hit) {
                         w.state     := DCUWState.SendDBIDResp
                         w.dsIndex   := parseDCUAddress(txReq.bits.Addr)._1
@@ -230,7 +249,6 @@ class DCU(node: Node, nrIntf: Int = 1)(implicit p: Parameters) extends DJModule 
                         w.state     := Mux(hit & w.isLast, DCUWState.WriteSram, w.state)
                         w.data(toBeatNum(txDat.bits.DataID)).valid  := true.B
                         w.data(toBeatNum(txDat.bits.DataID)).bits   := txDat.bits.Data
-                        w.srcID     := txDat.bits.SrcID
                     }
                 }
                 is(DCUWState.WriteSram) {
@@ -258,6 +276,33 @@ class DCU(node: Node, nrIntf: Int = 1)(implicit p: Parameters) extends DJModule 
             }
     }
     txDat.ready := true.B
+
+
+    /*
+     * Write Req Buf Replace Read State
+     */
+    wBufRegVec.zipWithIndex.foreach {
+        case (r, i) =>
+            switch(r.replRState) {
+                is(DCURState.Free) {
+                    val hit          = txReq.fire & reqIsRepl & selRecWID === i.U
+                    when(hit) {
+                        r.replRState := DCURState.ReadSram
+                        r.ddrDBID    := txReq.bits.ReturnTxnID
+                    }
+                }
+                is(DCURState.ReadSram) {
+                    val hit         = ds.map(_.io.earlyRReq.fire).reduce(_ | _) & earlyReplID === i.U & earlyRepl
+                    when(hit) {
+                        r.replRState := DCURState.Reading
+                    }
+                }
+                is(DCURState.Reading) {
+                    r.ddrDBID        := 0.U
+                    r.replRState     := DCURState.Free
+                }
+            }
+    }
 
 
 
@@ -331,6 +376,6 @@ class DCU(node: Node, nrIntf: Int = 1)(implicit p: Parameters) extends DJModule 
 
     assert(Mux(rDatQ.io.enq.valid, rDatQ.io.enq.ready, true.B))
 
-    assert(Mux(txReq.valid, txReq.bits.Opcode === ReadNoSnp | txReq.bits.Opcode === WriteNoSnpFull, true.B))
+    assert(Mux(txReq.valid, txReq.bits.Opcode === ReadNoSnp | txReq.bits.Opcode === WriteNoSnpFull | txReq.bits.Opcode === Replace, true.B))
 
 }
