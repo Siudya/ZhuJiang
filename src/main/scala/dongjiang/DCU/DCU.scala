@@ -164,7 +164,6 @@ class DCU(node: Node, nrIntf: Int = 1)(implicit p: Parameters) extends DJModule 
     rRespCanGo                  := rRespQ.io.enq.ready
     when(earlyRValid & rRespCanGo) {
         rRespReg.bits.Opcode    := CHIOp.DAT.CompData
-        rRespReg.bits.Resp      := ChiResp.UC
         rRespReg.bits.TgtID     := rBufRegVec(earlyRID).srcID
         rRespReg.bits.TxnID     := rBufRegVec(earlyRID).txnID
         rRespReg.bits.Resp      := rBufRegVec(earlyRID).resp
@@ -178,7 +177,7 @@ class DCU(node: Node, nrIntf: Int = 1)(implicit p: Parameters) extends DJModule 
         case (r, i) =>
             switch(r.state) {
                 is(DCURState.Free) {
-                    val hit         = txReq.fire & !reqIsW & selRecRID === i.U;
+                    val hit         = txReq.fire & !reqIsW & selRecRID === i.U
                     assert(txReq.bits.Opcode === ReadNoSnp | !hit)
                     when(hit) {
                         r.state     := DCURState.ReadSram
@@ -210,7 +209,7 @@ class DCU(node: Node, nrIntf: Int = 1)(implicit p: Parameters) extends DJModule 
         case(w, i) =>
             switch(w.state) {
                 is(DCUWState.Free) {
-                    val hit = txReq.fire & reqIsW & selRecWID === i.U; assert(txReq.bits.Opcode === WriteNoSnpFull | !hit)
+                    val hit = txReq.fire & reqIsW & selRecWID === i.U
                     when(hit) {
                         w.state     := DCUWState.SendDBIDResp
                         w.dsIndex   := parseDCUAddress(txReq.bits.Addr)._1
@@ -331,5 +330,7 @@ class DCU(node: Node, nrIntf: Int = 1)(implicit p: Parameters) extends DJModule 
     assert(Mux(txReq.valid, txReq.bits.Size === log2Ceil(djparam.blockBytes).U, true.B))
 
     assert(Mux(rDatQ.io.enq.valid, rDatQ.io.enq.ready, true.B))
+
+    assert(Mux(txReq.valid, txReq.bits.Opcode === ReadNoSnp | txReq.bits.Opcode === WriteNoSnpFull, true.B))
 
 }
