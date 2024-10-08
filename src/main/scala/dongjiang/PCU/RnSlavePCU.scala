@@ -192,7 +192,7 @@ class RnSlavePCU(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) ex
           val rxDatHit  = io.chi.rxdat.fire & io.chi.rxdat.bits.DBID === i.U & toBeatNum(io.chi.rxdat.bits.DataID) === (nrBeat - 1).U
           val rxRspHit  = io.chi.rxrsp.fire & io.chi.rxrsp.bits.DBID === i.U
           val expAck    = pcu.chiMes.expCompAck
-          pcu.state     := Mux(rxDatHit | rxRspHit, Mux(expAck, PCURS.WaitCompAck, PCURS.Resp2Node), pcu.state)
+          pcu.state     := Mux(rxDatHit | rxRspHit, Mux(expAck, PCURS.WaitCompAck, PCURS.Free), pcu.state)
         }
         // State: WaitCompAck
         is(PCURS.WaitCompAck) {
