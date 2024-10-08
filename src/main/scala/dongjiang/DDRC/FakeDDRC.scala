@@ -97,7 +97,7 @@ class FakeDDRC(node: Node)(implicit p: Parameters) extends DJModule {
      * Receive Req
      */
     val wBufFreeVec         = wBufRegVec.map(_.state === DDRCWState.Free)
-    val rBufFreeVec         = wBufRegVec.map(_.state === DDRCWState.Free)
+    val rBufFreeVec         = rBufRegVec.map(_.state === DDRCRState.Free)
     val selRecWID           = PriorityEncoder(wBufFreeVec)
     val selRecRID           = PriorityEncoder(rBufFreeVec)
     val reqIsW              = isWriteX(txReq.bits.Opcode)

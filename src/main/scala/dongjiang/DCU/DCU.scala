@@ -127,7 +127,7 @@ class DCU(node: Node, nrIntf: Int = 1)(implicit p: Parameters) extends DJModule 
      * Receive Req
      */
     val wBufFreeVec         = wBufRegVec.map(_.state === DCUWState.Free)
-    val rBufFreeVec         = wBufRegVec.map(_.state === DCUWState.Free)
+    val rBufFreeVec         = rBufRegVec.map(_.state === DCURState.Free)
     val selRecWID           = PriorityEncoder(wBufFreeVec)
     val selRecRID           = PriorityEncoder(rBufFreeVec)
     val reqIsW              = isWriteX(txReq.bits.Opcode)
