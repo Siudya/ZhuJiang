@@ -18,6 +18,7 @@ abstract class BaseCtrlMachine[
   node: Node,
   outstanding: Int,
   ioDataBits: Int,
+  slvBusDataBits: Int,
   compareTag: (UInt, UInt) => Bool
 )(implicit p: Parameters) extends ZJModule {
   val icn = IO(new Bundle {
@@ -128,4 +129,13 @@ abstract class BaseCtrlMachine[
     plmnu.dbidResp := icn.tx.resp.bits.Opcode === RspOpcode.DBIDResp || plu.dbidResp
     plmnu.comp := icn.tx.resp.bits.Opcode === RspOpcode.Comp || plu.comp
   }
+
+  private val busDataBytes = slvBusDataBits / 8
+  private val bufDataBytes = ioDataBits / 8
+  private val segNum = busDataBytes / bufDataBytes
+  private val segIdx = if(segNum > 1) payload.info.addr(log2Ceil(busDataBytes) - 1, log2Ceil(bufDataBytes)) else 0.U
+  private val maskVec = Wire(Vec(segNum, UInt(bufDataBytes.W)))
+  maskVec.zipWithIndex.foreach({ case (a, b) => a := Mux(b.U === segIdx, payload.info.mask.getOrElse(0.U), 0.U) })
+  val slvMask = maskVec.asUInt
+  val slvData = Fill(segNum, payload.info.data.getOrElse(0.U(ioDataBits.W)))
 }

@@ -169,9 +169,11 @@ case class ZJParameters(
   P: Boolean = false,
   clusterIdBits: Int = 8,
   bankOff: Int = 12,
-  ccnSpaceBits: Int = 16,
+  cpuSpaceBits: Int = 16,
+  cpuDevSpaceBits: Int = 8,
   snoopEjectBufDepth: Int = 8,
   reqEjectBufDepth: Int = 8,
+  externalInterruptNum:Int = 32,
   localNodeParams: Seq[NodeParam] = Seq(),
   csnNodeParams: Seq[NodeParam] = Seq(),
   dmaParams: DmaParams = DmaParams(),
@@ -237,6 +239,8 @@ trait HasZJParams {
 
 class ZJBundle(implicit val p: Parameters) extends Bundle with HasZJParams
 
-class ZJModule(implicit val p: Parameters) extends Module with HasZJParams
+class ZJModule(implicit val p: Parameters) extends Module with HasZJParams {
+  override def resetType = Module.ResetType.Asynchronous
+}
 
 class ZJRawModule(implicit val p: Parameters) extends RawModule with HasZJParams
