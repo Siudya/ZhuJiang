@@ -7,6 +7,7 @@ import sifive.enterprise.firrtl.NestedPrefixModulesAnnotation
 import xijiang.router.base.IcnBundle
 import xijiang.Ring
 import xijiang.c2c.C2cLinkPort
+import zhujiang.device.async.{IcnAsyncBundle, IcnSideAsyncModule}
 import zhujiang.device.bridge.axi.AxiBridge
 
 class Zhujiang(implicit p: Parameters) extends ZJModule {
@@ -29,7 +30,6 @@ class Zhujiang(implicit p: Parameters) extends ZJModule {
   }
   private val mem = localRing.icnSns.map(_.filter(hi => hi.node.mainMemory))
   private val dcus = localRing.icnSns.map(_.filterNot(hi => hi.node.mainMemory))
-  makeIOs(localRing.icnCcs, true)
   makeIOs(localRing.icnRfs, true)
   makeIOs(localRing.icnRis, true)
   makeIOs(localRing.icnHfs, true)
@@ -53,6 +53,14 @@ class Zhujiang(implicit p: Parameters) extends ZJModule {
       port.suggestName(s"c2c_link_$idx")
       port <> c2c
     }))
+  }
+  for(cc <- localRing.icnCcs.get) {
+    val async = Module(new IcnSideAsyncModule(cc.node))
+    val port = IO(new IcnAsyncBundle(cc.node))
+    async.io.icn <> cc
+    port <> async.io.async
+    async.suggestName(s"async_id_${cc.node.nodeId}")
+    port.suggestName("async_" + cc.node.icnStr)
   }
   val io_chip = IO(Input(UInt(p(ZJParametersKey).nodeAidBits.W)))
   localRing.io_chip := io_chip
