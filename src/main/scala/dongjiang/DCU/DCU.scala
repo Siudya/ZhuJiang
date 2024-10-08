@@ -78,7 +78,7 @@ class DCUWEntry(implicit p: Parameters) extends DJBundle {
 class DCU(node: Node, nrIntf: Int = 1)(implicit p: Parameters) extends DJModule {
 // ------------------------------------------ IO declaration --------------------------------------------- //
     val io = IO(new Bundle {
-        val sn = Vec(nrIntf, Flipped(new IcnBundle(node)))
+        val sn = Vec(nrIntf, Flipped(new IcnBundle(node, true)))
     })
 
     require(node.splitFlit)
