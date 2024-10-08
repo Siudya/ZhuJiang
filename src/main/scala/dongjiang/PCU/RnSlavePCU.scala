@@ -247,7 +247,7 @@ class RnSlavePCU(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) ex
 
 
 // ---------------------------------------------------------------------------------------------------------------------- //
-// ---------------------------------------------- PCU: Update PCU Entry Value  ----------------------------------------- //
+// ---------------------------------------------- PCU: Update PCU Entry Value ------------------------------------------- //
 // ---------------------------------------------------------------------------------------------------------------------- //
   pcus.zipWithIndex.foreach {
     case (pcu, i) =>
@@ -482,8 +482,8 @@ class RnSlavePCU(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) ex
   val snpShouldSendVec  = pcus(pcuSendSnpID).chiMes.snpMetaVec
   val snpBeSendVec      = snpShouldSendVec ^ snpAlreadySendVecReg
   val snpTgtID          = getNodeIDByMetaId(PriorityEncoder(snpBeSendVec))
-  snpIsLast             := PopCount(snpBeSendVec) === 1.U
-  snpAlreadySendVecReg  := Mux(io.chi.rxsnp.fire, Mux(snpIsLast, 0.U, snpAlreadySendVecReg | getMetaIdByNodeID(snpTgtID)), snpAlreadySendVecReg)
+  snpIsLast             := PopCount(snpBeSendVec.asBools) === 1.U; dontTouch(snpIsLast)
+  snpAlreadySendVecReg  := Mux(io.chi.rxsnp.fire, Mux(snpIsLast, 0.U, snpAlreadySendVecReg | UIntToOH(getMetaIdByNodeID(snpTgtID))), snpAlreadySendVecReg)
 
   /*
    * Send Snp to Node
