@@ -13,7 +13,7 @@ import Utils.FastArb._
  *
  * Write Req: [Free] -----> [Req2Node] -----> [WaitNodeDBID] -----> [RCDB] -----> [WriteData2Node] -----> [WaitNodeComp] -----> [Resp2Slice]
  *
- * Replace:   [Free] -----> [Req2Node] -----> [WaitNodeDBID] -----> [Replace2Node] -----> [WaitNodeComp] -----> [Resp2Slice]
+ * Replace:   [Free] -----> [Req2Node] -----> [WaitNodeDBID] -----> [Replace2Node] -----> [WaitReplDBID] -----> [RCDB] -----> [WriteData2Node] -----> [WaitNodeComp] -----> [Resp2Slice]
  */
 
 object PCUSM {
@@ -30,6 +30,7 @@ object PCUSM {
   val WriteData2Node  = "b1000".U
   val WaitNodeComp    = "b1001".U
   val Replace2Node    = "b1010".U
+  val WaitReplDBID    = "b1011".U
 }
 
 object SMType {
@@ -48,6 +49,7 @@ class PCUSMEntry(param: InterfaceParam)(implicit p: Parameters) extends DJBundle
   val chiMes        = new SNMASCHIMesBundle()
   val hasData       = Bool()
   val getDataNum    = UInt(beatNumBits.W)
+  val alrGetComp    = Bool() // Already Get Comp
 
   def reqAddr(tgtId: UInt): UInt = {
     val addr        = Wire(UInt(addressBits.W))
@@ -59,13 +61,14 @@ class PCUSMEntry(param: InterfaceParam)(implicit p: Parameters) extends DJBundle
   def isFree        = state === PCUSM.Free
   def isGetDBID     = state === PCUSM.GetDBID
   def isReq2Node    = state === PCUSM.Req2Node
+  def isRepl2Node   = state === PCUSM.Replace2Node
   def isResp2Slice  = state === PCUSM.Resp2Slice
   def isWaitDBData  = state === PCUSM.WriteData2Node
   def isRCDB        = state === PCUSM.RCDB
   def isLastBeat    = getDataNum === (nrBeat - 1).U
   def isRead        = isReadX(chiMes.opcode)
   def isWrite       = isWriteX(chiMes.opcode)
-  def isReplace     = isWriteRepl(chiMes.opcode)
+  def isRepl        = isReplace(chiMes.opcode)
 }
 
 class SnMasterPCU(snMasId: Int, param: InterfaceParam)(implicit p: Parameters) extends PCUBaseIO(isSlv = false, hasReq2Slice = false, hasDBRCReq = true) {
@@ -101,7 +104,7 @@ class SnMasterPCU(snMasId: Int, param: InterfaceParam)(implicit p: Parameters) e
         is(PCUSM.Free) {
           val reqHit    = io.req2Node.fire & isReadX(io.req2Node.bits.opcode) & pcuGetReqID === i.U
           val writeHit  = io.req2Node.fire & isWriteX(io.req2Node.bits.opcode) & pcuGetReqID === i.U
-          val replHit   = io.req2Node.fire & isWriteRepl(io.req2Node.bits.opcode) & pcuGetReqID === i.U; assert(!replHit)
+          val replHit   = io.req2Node.fire & isReplace(io.req2Node.bits.opcode) & pcuGetReqID === i.U
           pcu.state     := Mux(reqHit, PCUSM.GetDBID,
                             Mux(writeHit, PCUSM.Req2Node,
                               Mux(replHit, PCUSM.Req2Node, pcu.state)))
@@ -134,7 +137,7 @@ class SnMasterPCU(snMasId: Int, param: InterfaceParam)(implicit p: Parameters) e
         // State: WaitNodeDBID
         is(PCUSM.WaitNodeDBID) {
           val hit       = io.chi.rxrsp.fire & io.chi.rxrsp.bits.TxnID === i.U
-          pcu.state     := Mux(hit, Mux(pcu.isWrite, PCUSM.RCDB, PCUSM.Replace2Node), pcu.state)
+          pcu.state     := Mux(hit, Mux(pcu.isRepl, PCUSM.Replace2Node, PCUSM.RCDB), pcu.state)
         }
         // State: RCDB
         is(PCUSM.RCDB) {
@@ -149,7 +152,18 @@ class SnMasterPCU(snMasId: Int, param: InterfaceParam)(implicit p: Parameters) e
         // State: WaitNodeComp
         is(PCUSM.WaitNodeComp) {
           val hit       = io.chi.rxrsp.fire & io.chi.rxrsp.bits.TxnID === i.U
-          pcu.state     := Mux(hit, PCUSM.Resp2Slice, pcu.state)
+          val canGo     = !pcu.isRepl | pcu.alrGetComp
+          pcu.state     := Mux(hit & canGo,  PCUSM.Resp2Slice, pcu.state)
+        }
+        // State: Replace2Node
+        is(PCUSM.Replace2Node) {
+          val hit       = io.chi.txreq.fire & pcuReq2NodeID === i.U; assert(io.chi.txreq.bits.Opcode === Replace | !hit, "SNMAS PCU[0x%x] STATE[0x%x] OP[0x%x] ADDR[0x%x] TGTID[0x%x]", i.U, pcu.state, pcu.chiMes.opcode, pcu.indexMes.addr, pcu.chiMes.tgtID)
+          pcu.state     := Mux(hit, PCUSM.WaitReplDBID, pcu.state)
+        }
+        // State: WaitReplDBID
+        is(PCUSM.WaitReplDBID) {
+          val hit       = io.chi.rxrsp.fire & io.chi.rxrsp.bits.TxnID === i.U
+          pcu.state     := Mux(hit, PCUSM.RCDB, pcu.state)
         }
       }
   }
@@ -166,33 +180,44 @@ class SnMasterPCU(snMasId: Int, param: InterfaceParam)(implicit p: Parameters) e
       when(io.req2Node.fire & pcuGetReqID === i.U) {
         pcu.indexMes      := indexSaveInPCU
         pcu.chiMes        := reqSaveInPCU
-        assert(pcu.state === PCUSM.Free)
+        assert(pcu.state === PCUSM.Free, "SNMAS PCU[0x%x] STATE[0x%x] OP[0x%x] ADDR[0x%x] TGTID[0x%x]", i.U, pcu.state, pcu.chiMes.opcode, pcu.indexMes.addr, pcu.chiMes.tgtID)
       /*
        * Receive DBID From DataBuffer
        */
       }.elsewhen(io.dbSigs.wResp.fire & pcuRecDBID === i.U) {
         pcu.hasData       := true.B
         pcu.indexMes.dbid := io.dbSigs.wResp.bits.dbid
-        assert(pcu.state === PCUSM.WaitDBID)
+        assert(pcu.state === PCUSM.WaitDBID, "SNMAS PCU[0x%x] STATE[0x%x] OP[0x%x] ADDR[0x%x] TGTID[0x%x]", i.U, pcu.state, pcu.chiMes.opcode, pcu.indexMes.addr, pcu.chiMes.tgtID)
       /*
        * Receive Data And Resp From CHI RxDat
        */
       }.elsewhen(io.chi.rxdat.fire & io.chi.rxdat.bits.TxnID === i.U) {
         pcu.getDataNum    := pcu.getDataNum + 1.U
         pcu.chiMes.resp   := io.chi.rxdat.bits.Resp
-        assert(pcu.state === PCUSM.WaitNodeData)
+        assert(io.chi.rxdat.bits.Opcode === CHIOp.DAT.CompData, "SNMAS PCU[0x%x] STATE[0x%x] OP[0x%x] ADDR[0x%x] TGTID[0x%x]", i.U, pcu.state, pcu.chiMes.opcode, pcu.indexMes.addr, pcu.chiMes.tgtID)
+        assert(pcu.isRead, "SNMAS PCU[0x%x] STATE[0x%x] OP[0x%x] ADDR[0x%x] TGTID[0x%x]", i.U, pcu.state, pcu.chiMes.opcode, pcu.indexMes.addr, pcu.chiMes.tgtID)
+        assert(pcu.state === PCUSM.WaitNodeData, "SNMAS PCU[0x%x] STATE[0x%x] OP[0x%x] ADDR[0x%x] TGTID[0x%x]", i.U, pcu.state, pcu.chiMes.opcode, pcu.indexMes.addr, pcu.chiMes.tgtID)
       /*
        * Receive DBID or Comp From CHI RxRsp
        */
       }.elsewhen(io.chi.rxrsp.fire & io.chi.rxrsp.bits.TxnID === i.U) {
-        pcu.chiMes.chiDBID := io.chi.rxrsp.bits.DBID
-        assert(pcu.state === PCUSM.WaitNodeDBID | pcu.state === PCUSM.WaitNodeComp)
+        when(io.chi.rxrsp.bits.Opcode === CHIOp.RSP.DBIDResp) {
+          pcu.chiMes.chiDBID := io.chi.rxrsp.bits.DBID
+          assert(pcu.state === PCUSM.WaitReplDBID | pcu.state === PCUSM.WaitNodeDBID, "SNMAS PCU[0x%x] STATE[0x%x] OP[0x%x] ADDR[0x%x] TGTID[0x%x]", i.U, pcu.state, pcu.chiMes.opcode, pcu.indexMes.addr, pcu.chiMes.tgtID)
+        }
+        when(io.chi.rxrsp.bits.Opcode === CHIOp.RSP.Comp) {
+          pcu.alrGetComp  := true.B
+          assert(Mux(!pcu.isRepl | pcu.alrGetComp, pcu.state === PCUSM.WaitNodeComp,
+            pcu.state === PCUSM.WaitReplDBID | pcu.state === PCUSM.RCDB | pcu.state === PCUSM.WriteData2Node |  pcu.state === PCUSM.WaitNodeComp),
+            "SNMAS PCU[0x%x] STATE[0x%x] OP[0x%x] ADDR[0x%x] TGTID[0x%x]", i.U, pcu.state, pcu.chiMes.opcode, pcu.indexMes.addr, pcu.chiMes.tgtID)
+        }
+
       /*
        * Receive Data From DataBuffer
        */
       }.elsewhen(io.dbSigs.dataFDB.fire & pcu.isWaitDBData & io.dbSigs.dataFDB.bits.dbid === pcu.indexMes.dbid) {
         pcu.getDataNum    := pcu.getDataNum + 1.U
-        assert(pcu.state === PCUSM.WriteData2Node)
+        assert(pcu.state === PCUSM.WriteData2Node, "SNMAS PCU[0x%x] STATE[0x%x] OP[0x%x] ADDR[0x%x] TGTID[0x%x]", i.U, pcu.state, pcu.chiMes.opcode, pcu.indexMes.addr, pcu.chiMes.tgtID)
       /*
        * Clean PCU Entry When Its Free
        */
@@ -260,18 +285,23 @@ class SnMasterPCU(snMasId: Int, param: InterfaceParam)(implicit p: Parameters) e
 // ---------------------------------------------------------------------------------------------------------------------- //
 // -------------------------------------------------- Send Req To Node -------------------------------------------------- //
 // ---------------------------------------------------------------------------------------------------------------------- //
-  val pcuReq2NodeVec            = pcus.map(_.isReq2Node)
+  val pcuReq2NodeVec            = pcus.map { case p => p.isReq2Node | p.isRepl2Node }
   pcuReq2NodeID                 := PriorityEncoder(pcuReq2NodeVec)
+
+  val writeDDR                  = pcus(pcuReq2NodeID).isReq2Node & pcus(pcuReq2NodeID).isRepl
 
   io.chi.txreq.valid            := pcuReq2NodeVec.reduce(_ | _)
   io.chi.txreq.bits.Addr        := pcus(pcuReq2NodeID).reqAddr(io.chi.txreq.bits.TgtID)
-  io.chi.txreq.bits.Opcode      := pcus(pcuReq2NodeID).chiMes.opcode
-  io.chi.txreq.bits.TgtID       := pcus(pcuReq2NodeID).chiMes.tgtID
-  io.chi.txreq.bits.SrcID       := hnfNodeId.U
+  //                                             Send Write To DDR                    Send Req To DDR / DCU
+  io.chi.txreq.bits.Opcode      := Mux(writeDDR, WriteNoSnpFull,                      pcus(pcuReq2NodeID).chiMes.opcode)
+  io.chi.txreq.bits.TgtID       := Mux(writeDDR, ddrcNodeId.U,                        pcus(pcuReq2NodeID).chiMes.tgtID)
   io.chi.txreq.bits.TxnID       := pcuReq2NodeID
+  io.chi.txreq.bits.SrcID       := hnfNodeId.U
   io.chi.txreq.bits.Size        := log2Ceil(djparam.blockBytes).U
-  io.chi.txreq.bits.MemAttr     := pcus(pcuReq2NodeID).chiMes.resp // Multiplex MemAttr to transfer CHI State
-  io.chi.txreq.bits.ExpCompAck  := false.B
+  io.chi.txreq.bits.MemAttr     := pcus(pcuReq2NodeID).chiMes.resp // Multiplex MemAttr to transfer CHI State // Use in Read Req
+  // only use in replace
+  io.chi.txreq.bits.ReturnNID   := ddrcNodeId.U
+  io.chi.txreq.bits.ReturnTxnID := pcus(pcuReq2NodeID).chiMes.chiDBID
 
 
 // ---------------------------------------------------------------------------------------------------------------------- //
@@ -334,7 +364,7 @@ class SnMasterPCU(snMasId: Int, param: InterfaceParam)(implicit p: Parameters) e
   io.resp2Slice.valid             := pcuResp2SliceVec.reduce(_ | _)
   io.resp2Slice.bits              := DontCare
   io.resp2Slice.bits.isReqResp    := pcus(pcuResp2SliceID).isRead
-  io.resp2Slice.bits.isWriResp    := pcus(pcuResp2SliceID).isWrite
+  io.resp2Slice.bits.isWriResp    := pcus(pcuResp2SliceID).isWrite | pcus(pcuResp2SliceID).isRepl
   io.resp2Slice.bits.mshrSet      := pcus(pcuResp2SliceID).indexMes.mSet
   io.resp2Slice.bits.mshrWay      := pcus(pcuResp2SliceID).indexMes.mshrWay
   io.resp2Slice.bits.from.IncoId  := snMasId.U

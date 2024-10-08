@@ -68,6 +68,7 @@ trait HasPipeID extends Bundle { this: Bundle => val pipeId = UInt(PipeID.width.
 trait HasPCUID extends DJBundle { this: Bundle => val pcuId = UInt(pcuIdBits.W) }
 
 // ---------------------------------------------------------------- CHI Base Mes Bundle ----------------------------------------------------------------------------- //
+// TODO: Check Unuse singnals
 trait HasBaseCHIMesBundle extends DJBundle with HasCHIChannel { this: Bundle =>
     // CHI ID
     def useTgt          : Boolean = true
