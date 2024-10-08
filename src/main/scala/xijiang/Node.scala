@@ -160,7 +160,12 @@ case class Node(
       case _ => Seq[Int]()
     }
     require(legalTgtTypeSeq.nonEmpty, s"node 0x${nodeId.toHexString} has no inject channel $chn")
-    ring.filter(n => legalTgtTypeSeq.contains(n.nodeType)).map(_.nodeId).filterNot(_ == nodeId)
+    val res = ring.filter(n => legalTgtTypeSeq.contains(n.nodeType)).map(_.nodeId).filterNot(_ == nodeId)
+    if(nodeType == NodeType.S && !mainMemory) {
+      res ++ ring.filter(n => n.nodeType == NodeType.S && n.mainMemory)
+    } else {
+      res
+    }
   }
 
   def checkLegalInjectTarget(ring: Seq[Node], chn: String, tgt: NodeIdBundle, valid: Bool, nid: UInt): Unit = {
