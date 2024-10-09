@@ -104,6 +104,7 @@ class PCURSEntry(param: InterfaceParam)(implicit p: Parameters) extends DJBundle
   val chiMes        = new RNSLVCHIMesBundle()
   val hasData       = Bool()
   val getDataNum    = UInt(beatNumBits.W)
+  val getSnpRespOH  = UInt(nrRnfNode.W)
 
   def isFree        = state === PCURS.Free
   def isReqBeSend   = state === PCURS.Req2Slice & !nestMes.asUInt.orR & nid === 0.U
@@ -155,6 +156,7 @@ class RnSlavePCU(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) ex
 // ---------------------------------------------------------------------------------------------------------------------- //
   pcus.zipWithIndex.foreach {
     case (pcu, i) =>
+      // ------------------------------------------- Update PCU Values -------------------------------------------------- //
       /*
        * Receive New Req
        */
@@ -172,19 +174,19 @@ class RnSlavePCU(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) ex
         pcu.indexMes.dbid := io.dbSigs.wResp.bits.dbid
         assert(pcu.state === PCURS.WaitDBID, "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state)
       /*
-       * Receive CHI TX RSP
+       * Receive CHI TX Rsp
        */
       }.elsewhen(io.chi.txrsp.fire & pcuRecChiRspID === i.U){
-        pcu.chiMes.resp   := io.chi.txrsp.bits.Resp
+        pcu.chiMes.resp   := Mux(pcu.chiMes.isSnp & pcu.chiMes.retToSrc, io.chi.txrsp.bits.Resp, pcu.chiMes.resp)
         when(io.chi.txrsp.bits.Opcode === CHIOp.RSP.CompAck) { assert(pcu.state === PCURS.WaitCompAck, "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state) }
-        .otherwise                                           { assert(pcu.state === PCURS.WaitSnpResp, "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state) }
+        .otherwise                                           { assert(pcu.state === PCURS.Snp2NodeIng | pcu.state === PCURS.WaitSnpResp, "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state) }
       /*
        * Receive CHI TX Dat
        */
       }.elsewhen(io.chi.txdat.fire & pcuRecChiDatID === i.U) {
         pcu.getDataNum    := pcu.getDataNum + 1.U
         pcu.chiMes.resp   := io.chi.txdat.bits.Resp
-        assert(pcu.state === PCURS.WaitSnpResp | pcu.state === PCURS.WaitData, "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state)
+        assert(Mux(pcu.chiMes.isSnp & pcu.chiMes.retToSrc, pcu.state === PCURS.Snp2NodeIng | pcu.state === PCURS.WaitSnpResp, pcu.state === PCURS.WaitData), "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state)
       /*
        * Clean PCU Entry When Its Free
        */
@@ -192,9 +194,8 @@ class RnSlavePCU(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) ex
         pcu               := 0.U.asTypeOf(pcu)
       }
 
-      /*
-       * Set Task NID Value When Get Resp2Node
-       */
+
+      // ------------------------------------- Set Task NID Value When Get Resp2Node ------------------------------------- //
       when((io.chi.txreq.fire | io.req2Node.fire | io.resp2Node.fire) & pcuFreeID === i.U) {
         pcu.nid           := taskNID
       }.elsewhen(!pcu.isFree & pcu.chiMes.isReq) {
@@ -207,6 +208,29 @@ class RnSlavePCU(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) ex
         assert(Mux(pcu.chiMes.isReq & CHIOp.REQ.isWriteX(pcu.chiMes.opcode), !snp2NodeHit & !resp2sliceHit, true.B), "TODO")
       }.elsewhen(pcu.isFree) {
         pcu.nid           := 0.U
+      }
+
+
+      // ---------------------------------------------- Record Snp Resp --------------------------------------------------- //
+      when(pcu.chiMes.isSnp) {
+        when(pcu.state === PCURS.Snp2NodeIng | pcu.state === PCURS.WaitSnpResp) {
+          val rspHit        = io.chi.txrsp.fire & pcuRecChiRspID === i.U
+          val datHit        = io.chi.txdat.fire & pcuRecChiDatID === i.U & pcu.isLastBeat
+          val rspId         = getMetaIdByNodeID(io.chi.txrsp.bits.SrcID)
+          val datId         = getMetaIdByNodeID(io.chi.txdat.bits.SrcID)
+          pcu.getSnpRespOH  := pcu.getSnpRespOH | (UIntToOH(rspId) & rspHit) | (UIntToOH(datId) & datHit)
+          // assert
+          val getSnpRespVec = Wire(Vec(nrRnfNode, Bool()))
+          val tgtSnpVec     = Wire(Vec(nrRnfNode, Bool()))
+          getSnpRespVec     := pcu.getSnpRespOH.asBools
+          tgtSnpVec         := pcu.chiMes.tgtID(nrRnfNode - 1, 0).asBools
+          assert(Mux(rspHit, !getSnpRespVec(rspId), true.B), "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state)
+          assert(Mux(datHit, !getSnpRespVec(datId), true.B), "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state)
+          assert(Mux(rspHit, tgtSnpVec(rspId),      true.B), "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state)
+          assert(Mux(datHit, tgtSnpVec(datId),      true.B), "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state)
+        }.otherwise {
+          pcu.getSnpRespOH  := 0.U
+        }
       }
   }
 
@@ -292,8 +316,9 @@ class RnSlavePCU(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) ex
         is(PCURS.WaitSnpResp) {
           val rspHit    = io.chi.txrsp.fire & pcuRecChiRspID === i.U
           val datHit    = io.chi.txdat.fire & pcuRecChiDatID === i.U
-          pcu.state     := Mux(rspHit, PCURS.Resp2Slice,
-                            Mux(datHit & pcu.isLastBeat, PCURS.Resp2Slice, pcu.state))
+          val isLastRsp = PopCount(pcu.getSnpRespOH ^ pcu.chiMes.tgtID) === 1.U
+          pcu.state     := Mux(rspHit & isLastRsp, PCURS.Resp2Slice,
+                            Mux(datHit & pcu.isLastBeat & isLastRsp, PCURS.Resp2Slice, pcu.state))
         }
         // State: Resp2Slice
         is(PCURS.Resp2Slice) {
@@ -483,7 +508,7 @@ class RnSlavePCU(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) ex
    */
   val snpShouldSendVec  = pcus(pcuSendSnpID).chiMes.snpMetaVec
   val snpBeSendVec      = snpShouldSendVec ^ snpAlreadySendVecReg
-  val snpTgtID          = getNodeIDByMetaId(PriorityEncoder(snpBeSendVec))
+  val snpTgtID          = getNodeIDByMetaId(PriorityEncoder(snpBeSendVec), 0)
   snpIsLast             := PopCount(snpBeSendVec.asBools) === 1.U; dontTouch(snpIsLast)
   snpAlreadySendVecReg  := Mux(io.chi.rxsnp.fire, Mux(snpIsLast, 0.U, snpAlreadySendVecReg | UIntToOH(getMetaIdByNodeID(snpTgtID))), snpAlreadySendVecReg)
 
