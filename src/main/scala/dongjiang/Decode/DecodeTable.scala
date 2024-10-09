@@ -152,6 +152,17 @@ object LocalReadDecode {
 
 object LoaclDatalessDecode {
   def evict: Seq[(UInt, UInt)] = Seq(
+    LocalReqInst(Evict, I,  I,  I) -> NothingTODO,
+    LocalReqInst(Evict, I, UC,  I) -> NothingTODO,
+    LocalReqInst(Evict, I, UD,  I) -> NothingTODO,
+    LocalReqInst(Evict, I, SC,  I) -> NothingTODO,
+    LocalReqInst(Evict, I, SC, SC) -> NothingTODO,
+    LocalReqInst(Evict, I, SC, SD) -> NothingTODO,
+    LocalReqInst(Evict, I,  I, SC) -> NothingTODO,
+    LocalReqInst(Evict, I,  I, SD) -> NothingTODO,
+    LocalReqInst(Evict, I,  I, UC) -> NothingTODO,
+    LocalReqInst(Evict, I,  I, UD) -> NothingTODO,
+
     LocalReqInst(Evict, UC,  I,  I) -> (Commit | WSFDir |         RespOp(Comp) | RespChnl(RSP) | Resp(ChiResp.I) | HnState(I)  | SrcState(I) | OthState(I)),
     LocalReqInst(Evict, SC,  I,  I) -> (Commit | WSFDir |         RespOp(Comp) | RespChnl(RSP) | Resp(ChiResp.I) | HnState(I)  | SrcState(I) | OthState(I)),
     LocalReqInst(Evict, SC, SC,  I) -> (Commit | WSFDir |         RespOp(Comp) | RespChnl(RSP) | Resp(ChiResp.I) | HnState(I)  | SrcState(I) | OthState(SC)),
@@ -167,6 +178,17 @@ object LoaclDatalessDecode {
 
 object LoaclWriteDecode {
   def writeBackFull: Seq[(UInt, UInt)] = Seq(
+    LocalReqInst(WriteBackFull,  I,  I,  I, HasData) -> CleanDB,
+    LocalReqInst(WriteBackFull,  I, UC,  I, HasData) -> CleanDB,
+    LocalReqInst(WriteBackFull,  I, UD,  I, HasData) -> CleanDB,
+    LocalReqInst(WriteBackFull,  I, SC,  I, HasData) -> CleanDB,
+    LocalReqInst(WriteBackFull,  I, SC, SC, HasData) -> CleanDB,
+    LocalReqInst(WriteBackFull,  I, SC, SD, HasData) -> CleanDB,
+    LocalReqInst(WriteBackFull,  I,  I, SC, HasData) -> CleanDB,
+    LocalReqInst(WriteBackFull,  I,  I, SD, HasData) -> CleanDB,
+    LocalReqInst(WriteBackFull,  I,  I, UC, HasData) -> CleanDB,
+    LocalReqInst(WriteBackFull,  I,  I, UD, HasData) -> CleanDB,
+
     LocalReqInst(WriteBackFull, UD,  I,  I, HasData) -> (WSFDir | WSDir | SrcState(I) | OthState(I)  | HnState(UD) | WriteDCU | WriOp(WriteNoSnpFull)),
     LocalReqInst(WriteBackFull, UC,  I,  I, HasData) -> (WSFDir | WSDir | SrcState(I) | OthState(I)  | HnState(UC) | WriteDCU | WriOp(WriteNoSnpFull)),
     LocalReqInst(WriteBackFull, SC,  I,  I, HasData) -> (WSFDir | WSDir | SrcState(I) | OthState(I)  | HnState(UC) | WriteDCU | WriOp(WriteNoSnpFull)),
