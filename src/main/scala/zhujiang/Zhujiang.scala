@@ -65,8 +65,7 @@ class Zhujiang(implicit p: Parameters) extends ZJModule {
     addressBits = raw,
     dataBits    = dw,
     dataCheck   = dcw > 0,
-    txnIdBits   = 12,
-    dbIdBits    = 16
+    issue       = "G"
   )
 
   /*

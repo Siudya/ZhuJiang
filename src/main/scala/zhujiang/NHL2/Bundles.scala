@@ -11,46 +11,61 @@ import zhujiang.chi._
 import scala.collection.immutable.ListMap
 
 case class CHIBundleParameters(
-    nodeIdBits: Int,
-    addressBits: Int,
-    dataBits: Int,
-    dataCheck: Boolean,
-    txnIdBits: Int = 12,     // issueB: 8, issueE: 12
-    dbIdBits: Int = 12,      // issueB: 8, issueE: 12
-    reqOpcodeBits: Int = 7, // issueB: 6, issueE: 7
-    rspOpcodeBits: Int = 5, // issueB: 4, issueE: 5
-    datOpcodeBits: Int = 4  // issueB: 3, issueE: 4
-// TODO: has snoop
-) {
+                                nodeIdBits: Int,
+                                addressBits: Int,
+                                dataBits: Int,
+                                dataCheck: Boolean,
+                                issue: String = "G"
+                                // TODO: has snoop
+                              ) {
+    val txnIdBits: Int = issue match {
+        case "B"       => 8
+        case "E" | "G" => 12
+        case _         => 12
+    }
+    val dbIdBits: Int = issue match {
+        case "B"       => 8
+        case "E" | "G" => 12
+        case _         => 12
+    }
+    val reqOpcodeBits: Int = issue match {
+        case "B"       => 6
+        case "E" | "G" => 7
+        case _         => 7
+    }
+    val rspOpcodeBits: Int = issue match {
+        case "B"       => 4
+        case "E" | "G" => 5
+        case _         => 5
+    }
+    val datOpcodeBits: Int = issue match {
+        case "B"       => 3
+        case "E" | "G" => 4
+        case _         => 4
+    }
     require(nodeIdBits >= 7 && nodeIdBits <= 11)
     require(addressBits >= 44 && addressBits <= 52)
     require(isPow2(dataBits))
     require(dataBits == 128 || dataBits == 256 || dataBits == 512)
 }
 
+
 object CHIBundleParameters {
     def apply(
-        nodeIdBits: Int = 7,
-        addressBits: Int = 48,
-        dataBits: Int = 256,
-        dataCheck: Boolean = false,
-        txnIdBits: Int = 8,
-        dbIdBits: Int = 8,
-        reqOpcodeBits: Int = 6,
-        rspOpcodeBits: Int = 4,
-        datOpcodeBits: Int = 3
-    ): CHIBundleParameters = new CHIBundleParameters(
-        nodeIdBits = nodeIdBits,
+               nodeIdBits: Int = 9,
+               addressBits: Int = 48,
+               dataBits: Int = 256,
+               dataCheck: Boolean = false,
+               issue: String = "G"
+             ): CHIBundleParameters = new CHIBundleParameters(
+        nodeIdBits  = nodeIdBits,
         addressBits = addressBits,
-        dataBits = dataBits,
-        dataCheck = dataCheck,
-        txnIdBits = txnIdBits,
-        dbIdBits = dbIdBits,
-        reqOpcodeBits = reqOpcodeBits,
-        rspOpcodeBits = rspOpcodeBits,
-        datOpcodeBits = datOpcodeBits
+        dataBits    = dataBits,
+        dataCheck   = dataCheck,
+        issue       = issue
     )
 }
+
 
 class CHIBundleREQ(params: CHIBundleParameters)(implicit p: Parameters) extends ZJBundle {
     val channelName = "'REQ' channel"
