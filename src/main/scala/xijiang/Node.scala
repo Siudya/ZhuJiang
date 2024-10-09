@@ -175,7 +175,7 @@ case class Node(
       )
       case NodeType.S => Map[String, Seq[Int]](
         "RSP" -> ring.filter(n => n.nodeType == NodeType.HF || n.nodeType == NodeType.HI || n.nodeType == NodeType.RF || n.nodeType == NodeType.RI).map(_.nodeId).filterNot(_ == nodeId),
-        "DAT" -> ring.filter(n => n.nodeType == NodeType.RF || n.nodeType == NodeType.RI || n.nodeType == NodeType.HF || n.nodeType == NodeType.HI).map(_.nodeId).filterNot(_ == nodeId),
+        "DAT" -> ring.filter(n => n.nodeType == NodeType.RF || n.nodeType == NodeType.RI || n.nodeType == NodeType.HF || n.nodeType == NodeType.HI || (n.nodeType == NodeType.S & n.mainMemory)).map(_.nodeId).filterNot(_ == nodeId),
       )
       case _ => Map[String, Seq[Int]]()
     }
