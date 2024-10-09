@@ -165,6 +165,22 @@ object LoaclDatalessDecode {
 }
 
 
+object LoaclWriteDecode {
+  def writeBackFull: Seq[(UInt, UInt)] = Seq(
+    LocalReqInst(WriteBackFull, UD,  I,  I, HasData) -> (WSFDir | WSDir | SrcState(I) | OthState(I)  | HnState(UD) | WriteDCU | WriOp(WriteNoSnpFull)),
+    LocalReqInst(WriteBackFull, UC,  I,  I, HasData) -> (WSFDir | WSDir | SrcState(I) | OthState(I)  | HnState(UC) | WriteDCU | WriOp(WriteNoSnpFull)),
+    LocalReqInst(WriteBackFull, SC,  I,  I, HasData) -> (WSFDir | WSDir | SrcState(I) | OthState(I)  | HnState(UC) | WriteDCU | WriOp(WriteNoSnpFull)),
+    LocalReqInst(WriteBackFull, SC, SC,  I, HasData) -> (WSFDir | WSDir | SrcState(I) | OthState(SC) | HnState(SC) | WriteDCU | WriOp(WriteNoSnpFull)),
+    LocalReqInst(WriteBackFull, SC, SC, SC, HasData) -> (WSFDir |         SrcState(I) | OthState(SC) | HnState(SC) | CleanDB),
+    LocalReqInst(WriteBackFull, SC, SC, SD, HasData) -> (WSFDir |         SrcState(I) | OthState(SC) | HnState(SD) | CleanDB),
+    LocalReqInst(WriteBackFull, SC,  I, SC, HasData) -> (WSFDir | WSDir | SrcState(I) | OthState(I)  | HnState(UC) | CleanDB),
+    LocalReqInst(WriteBackFull, SC,  I, SD, HasData) -> (WSFDir | WSDir | SrcState(I) | OthState(I)  | HnState(UD) | CleanDB),
+  )
+
+  def table: Seq[(UInt, UInt)] = writeBackFull
+}
+
+
 object LoaclSnpUniqueEvictDecode {
   def snpUniqueEvict: Seq[(UInt, UInt)] = Seq(
     // ----------------------------------------------------------- LOCAL RESP ------------------------------------------------------------//

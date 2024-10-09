@@ -141,6 +141,11 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
   mshrAlloc_s0.tag      := io.req2Slice.bits.mTag
   mshrAlloc_s0.bank     := io.req2Slice.bits.mBank
   mshrAlloc_s0.chiMes   := io.req2Slice.bits
+  when(io.req2Slice.bits.isReq & CHIOp.REQ.isWriteX(io.req2Slice.bits.opcode)) {
+    mshrAlloc_s0.respMes.slvDBID.valid := true.B
+    mshrAlloc_s0.respMes.slvDBID.bits  := io.req2Slice.bits.dbid
+  }
+
 
 
   /*
@@ -216,7 +221,6 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
           }.elsewhen(io.req2Slice.fire & canReceiveNode & i.U === io.req2Slice.bits.mSet & j.U === nodeReqInvWay) {
             m := 0.U.asTypeOf(m)
             m := mshrAlloc_s0
-            assert(!CHIOp.REQ.isWriteX(mshrAlloc_s0.chiMes.opcode), "TODO")
             assert(m.isFree, s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x] STATE[0x%x]", i.U, j.U, m.addr(i.U), m.chiMes.channel, m.chiMes.opcode, m.state)
           /*
            * Clean MSHR Entry When Its Free

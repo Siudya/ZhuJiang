@@ -190,13 +190,13 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
     val width1 = decode_s3.asUInt.getWidth
     require(width0 == width1, s"Index: $i: Decode Width $width0 =/= $width1")
   }
-  decode_s3.decode(inst_s3, table = LocalReadDecode.table ++ LoaclSnpUniqueEvictDecode.table ++ LoaclDatalessDecode.table)
+  decode_s3.decode(inst_s3, table = LocalReadDecode.table ++ LoaclSnpUniqueEvictDecode.table ++ LoaclDatalessDecode.table ++ LoaclWriteDecode.table)
   when(valid_s3) { assert(decode_s3.asUInt =/= 0.U,
     "\n\nADDR[0x%x] DECODE ERROR: No inst match in decode table\n" +
       "INST: CHIP[0x%x] CHNL[0x%x] OP[0x%x] SRC[0x%x] OTH[0x%x] HN[0x%x] RESP[0x%x] DATA[0x%x] SNP[0x%x] FWD[0x%x] RD[0x%x]\n", task_s3_g.bits.addr,
     inst_s3.chipType, inst_s3.channel, inst_s3.opcode, inst_s3.srcState, inst_s3.othState, inst_s3.hnState, inst_s3.respType, inst_s3.respHasData, inst_s3.snpResp, inst_s3.fwdState, inst_s3.rdResp) }
-  when(valid_s3) { when(decode_s3.wSDir)  { assert(decode_s3.commit | inst_s3.opcode === CHIOp.SNP.SnpUniqueEvict) } }
-  when(valid_s3) { when(decode_s3.wSFDir) { assert(decode_s3.commit) } }
+  when(valid_s3) { when(decode_s3.wSDir)  { assert(decode_s3.commit | (inst_s3.opcode === CHIOp.SNP.SnpUniqueEvict & inst_s3.channel === CHIChannel.SNP) | (CHIOp.REQ.isWriteX(inst_s3.opcode) & inst_s3.channel === CHIChannel.REQ)) } }
+  when(valid_s3) { when(decode_s3.wSFDir) { assert(decode_s3.commit | (CHIOp.REQ.isWriteX(inst_s3.opcode) & inst_s3.channel === CHIChannel.REQ)) } }
 
 
 // ---------------------------------------------------------------------------------------------------------------------- //

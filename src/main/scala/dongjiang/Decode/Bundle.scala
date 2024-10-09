@@ -130,7 +130,7 @@ object Inst {
   def FwdStateIs(x: UInt) : UInt = { val temp = WireInit(0.U.asTypeOf(new InstBundle())); temp.fwdState := x;               temp.asUInt }
   def RDRespIs  (x: UInt) : UInt = { val temp = WireInit(0.U.asTypeOf(new InstBundle())); temp.rdResp := x;                 temp.asUInt }
 
-  def LocalReqInst (op: UInt, src: UInt, oth: UInt, hn: UInt): UInt = FromLocal | Chnl(CHIChannel.REQ) | Op(op) | SrcIs(src) | OthIs(oth) | HnIs(hn)
+  def LocalReqInst (op: UInt, src: UInt, oth: UInt, hn: UInt, data: Bool = false.B): UInt = FromLocal | Chnl(CHIChannel.REQ) | Op(op) | SrcIs(src) | OthIs(oth) | HnIs(hn) | RespData(data)
   def LocalRespInst(chnl: UInt, op: UInt, src: UInt, oth: UInt, hn: UInt, respType: UInt, data: Bool, snp: UInt = ChiResp.I, fwd: UInt = ChiResp.I, rd: UInt = ChiResp.I): UInt = FromLocal | Chnl(chnl) | Op(op) | SrcIs(src) | OthIs(oth) | HnIs(hn) | RespIs(respType) | RespData(data) | SnpRespIs(snp) | FwdStateIs(fwd) | RDRespIs(rd)
 }
 
