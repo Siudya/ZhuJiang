@@ -40,8 +40,7 @@ package object router {
       val reqTgt = WireInit(icn.rx.req.get.bits.asTypeOf(new ReqFlit).TgtID.asTypeOf(new NodeIdBundle))
       if(csnHfs.length > 1) {
         val reqAddr = icn.rx.req.get.bits.asTypeOf(new ReqFlit).Addr.asTypeOf(new ReqAddrBundle)
-        val reqBank = reqAddr.bank(csnHfs.head.bankBits)
-        val hfSelOH = csnHfs.map(_.bankId.U === reqBank)
+        val hfSelOH = csnHfs.map(chf => reqAddr.checkBank(chf.bankBits, chf.bankId.U))
         val hfNids = csnHfs.map(_.nodeId.U.asTypeOf(new NodeIdBundle).nid)
         when(icn.rx.req.get.valid) {
           assert(PopCount(hfSelOH) === 1.U)
@@ -54,8 +53,7 @@ package object router {
       val snoopTgt = WireInit(icn.rx.snoop.get.bits.asTypeOf(new SnoopFlit).TgtID.asTypeOf(new NodeIdBundle))
       if(csnRfs.length > 1) {
         val snpAddr = icn.rx.snoop.get.bits.asTypeOf(new SnoopFlit).Addr.asTypeOf(new SnpAddrBundle)
-        val snpBank = snpAddr.bank(csnRfs.head.bankBits)
-        val rfSelOH = csnRfs.map(_.bankId.U === snpBank)
+        val rfSelOH = csnRfs.map(crf => snpAddr.checkBank(crf.bankBits, crf.bankId.U))
         val rfNids = csnRfs.map(_.nodeId.U.asTypeOf(new NodeIdBundle).nid)
         when(icn.rx.snoop.get.valid) {
           assert(PopCount(rfSelOH) === 1.U)

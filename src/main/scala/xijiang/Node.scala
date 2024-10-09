@@ -162,7 +162,7 @@ case class Node(
     require(legalTgtTypeSeq.nonEmpty, s"node 0x${nodeId.toHexString} has no inject channel $chn")
     val res = ring.filter(n => legalTgtTypeSeq.contains(n.nodeType)).map(_.nodeId).filterNot(_ == nodeId)
     if(nodeType == NodeType.S && !mainMemory) {
-      res ++ ring.filter(n => n.nodeType == NodeType.S && n.mainMemory)
+      res ++ ring.filter(n => n.nodeType == NodeType.S && n.mainMemory).map(_.nodeId)
     } else {
       res
     }
@@ -180,7 +180,7 @@ case class Node(
   }
 
   private def hnfAddrCheck(addr: ReqAddrBundle): Bool = {
-    !addr.mmio && addr.bank(bankBits) === bankId.U
+    !addr.mmio && addr.checkBank(bankBits, bankId.U)
   }
 
   private def hniAddrCheck(addr: ReqAddrBundle, chip: UInt): Bool = {
