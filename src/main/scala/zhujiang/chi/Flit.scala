@@ -171,9 +171,9 @@ class ReqAddrBundle(implicit p: Parameters) extends ZJBundle {
   val chip = UInt(nodeAidBits.W)
   val tag = UInt((raw - 1 - nodeAidBits - 6).W)
   val offset = UInt(6.W)
-  def bank(width: Int): UInt = {
-    require(width > 0)
-    tag(bankOff + width - 7, bankOff - 6)
+  def checkBank(width: Int, bankId: UInt): Bool = {
+    if(width == 0) true.B
+    else tag(bankOff + width - 7, bankOff - 6) === bankId
   }
   def devAddr: UInt = Cat(tag, offset)
 }
@@ -183,9 +183,9 @@ class SnpAddrBundle(implicit p: Parameters) extends ZJBundle {
   val chip = UInt(nodeAidBits.W)
   val tag = UInt((raw - 1 - nodeAidBits - 3).W)
   val offset = UInt(3.W)
-  def bank(width: Int): UInt = {
-    require(width > 0)
-    tag(bankOff + width - 7, bankOff - 6)
+  def checkBank(width: Int, bankId: UInt): Bool = {
+    if(width == 0) true.B
+    else tag(bankOff + width - 7, bankOff - 6) === bankId
   }
 }
 
