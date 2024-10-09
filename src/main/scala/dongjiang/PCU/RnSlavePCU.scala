@@ -252,23 +252,11 @@ class RnSlavePCU(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) ex
   pcus.zipWithIndex.foreach {
     case (pcu, i) =>
       /*
-       * Set Task NID Value When Get Resp2Node
-       */
-      when(!pcu.isFree & pcu.chiMes.isReq) {
-        val resp2NodeHit  = io.resp2Node.fire & io.resp2Node.bits.addrNoOff === pcu.indexMes.addrNoOff
-        val snp2NodeHit   = io.req2Node.fire & io.req2Node.bits.addrNoOff === pcu.indexMes.addrNoOff
-        val resp2sliceHit = io.resp2Slice.fire & pcus(pcuResp2SliceID).indexMes.addrNoOff === pcu.indexMes.addrNoOff
-        pcu.nid           := pcu.nid - resp2NodeHit.asUInt + snp2NodeHit.asUInt - resp2sliceHit.asUInt
-        assert((pcu.nid - resp2NodeHit.asUInt + snp2NodeHit.asUInt - resp2sliceHit.asUInt) >= 0.U, "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state)
-        assert(!(snp2NodeHit & resp2sliceHit), "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state)
-        assert(Mux(pcu.chiMes.isReq & CHIOp.REQ.isWriteX(pcu.chiMes.opcode), !snp2NodeHit & !resp2sliceHit, true.B), "TODO")
-      /*
        * Receive New Req
        */
-      }.elsewhen((io.chi.txreq.fire | io.req2Node.fire | io.resp2Node.fire) & pcuFreeID === i.U) {
+      when((io.chi.txreq.fire | io.req2Node.fire | io.resp2Node.fire) & pcuFreeID === i.U) {
         pcu.indexMes      := indexSaveInPCU
         pcu.chiMes        := taskSaveInPCU
-        pcu.nid           := taskNID
         pcu.nestMes       := 0.U.asTypeOf(pcu.nestMes)
         assert(pcu.state === PCURS.Free, "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state)
       /*
@@ -297,6 +285,23 @@ class RnSlavePCU(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) ex
        */
       }.elsewhen(pcu.isFree) {
         pcu               := 0.U.asTypeOf(pcu)
+      }
+
+      /*
+       * Set Task NID Value When Get Resp2Node
+       */
+      when((io.chi.txreq.fire | io.req2Node.fire | io.resp2Node.fire) & pcuFreeID === i.U) {
+        pcu.nid           := taskNID
+      }.elsewhen(!pcu.isFree & pcu.chiMes.isReq) {
+        val resp2NodeHit  = io.resp2Node.fire & io.resp2Node.bits.addrNoOff === pcu.indexMes.addrNoOff
+        val snp2NodeHit   = io.req2Node.fire & io.req2Node.bits.addrNoOff === pcu.indexMes.addrNoOff
+        val resp2sliceHit = io.resp2Slice.fire & pcus(pcuResp2SliceID).indexMes.addrNoOff === pcu.indexMes.addrNoOff
+        pcu.nid           := pcu.nid - resp2NodeHit.asUInt + snp2NodeHit.asUInt - resp2sliceHit.asUInt
+        assert((pcu.nid - resp2NodeHit.asUInt + snp2NodeHit.asUInt - resp2sliceHit.asUInt) >= 0.U, "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state)
+        assert(!(snp2NodeHit & resp2sliceHit), "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state)
+        assert(Mux(pcu.chiMes.isReq & CHIOp.REQ.isWriteX(pcu.chiMes.opcode), !snp2NodeHit & !resp2sliceHit, true.B), "TODO")
+      }.elsewhen(pcu.isFree) {
+        pcu.nid           := 0.U
       }
   }
 
