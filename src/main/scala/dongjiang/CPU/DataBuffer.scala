@@ -151,6 +151,9 @@ class DataBuffer()(implicit p: Parameters) extends DJModule {
 // ----------------------------------------------------- Assertion ---------------------------------------------------------- //
   when(io.dataTDB.valid){ assert(entrys(io.dataTDB.bits.dbid).isAlloc) }
 
+  val cntReg = RegInit(VecInit(Seq.fill(djparam.nrDatBuf) { 0.U(64.W) }))
+  cntReg.zip(entrys).foreach { case (c, e) => c := Mux(e.isFree, 0.U, c + 1.U) }
+  cntReg.zipWithIndex.foreach { case (c, i) => assert(c < TIMEOUT_DB.U, "DataBuffer ENTRY[0x%x] STATE[0x%x] TIMEOUT", i.U, entrys(i).state) }
 
 }
 
