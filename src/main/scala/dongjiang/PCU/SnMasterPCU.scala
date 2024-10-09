@@ -95,6 +95,65 @@ class SnMasterPCU(snMasId: Int, param: InterfaceParam)(implicit p: Parameters) e
 
 
 // ---------------------------------------------------------------------------------------------------------------------- //
+// ---------------------------------------------- PCU: Update MHSR Table Value  ----------------------------------------- //
+// ---------------------------------------------------------------------------------------------------------------------- //
+  pcus.zipWithIndex.foreach {
+    case (pcu, i) =>
+      /*
+       * Receive New Req
+       */
+      when(io.req2Node.fire & pcuGetReqID === i.U) {
+        pcu               := 0.U.asTypeOf(pcu) // Clean PCU Entry When ReAlloc
+        pcu.indexMes      := indexSaveInPCU
+        pcu.chiMes        := reqSaveInPCU
+        assert(pcu.state === PCUSM.Free, "SNMAS PCU[0x%x] STATE[0x%x] OP[0x%x] ADDR[0x%x] TGTID[0x%x]", i.U, pcu.state, pcu.chiMes.opcode, pcu.indexMes.addr, pcu.chiMes.tgtID)
+      /*
+       * Receive DBID From DataBuffer
+       */
+      }.elsewhen(io.dbSigs.wResp.fire & pcuRecDBID === i.U) {
+        pcu.hasData       := true.B
+        pcu.indexMes.dbid := io.dbSigs.wResp.bits.dbid
+        assert(pcu.state === PCUSM.WaitDBID, "SNMAS PCU[0x%x] STATE[0x%x] OP[0x%x] ADDR[0x%x] TGTID[0x%x]", i.U, pcu.state, pcu.chiMes.opcode, pcu.indexMes.addr, pcu.chiMes.tgtID)
+      /*
+       * Receive Data And Resp From CHI RxDat
+       */
+      }.elsewhen(io.chi.rxdat.fire & io.chi.rxdat.bits.TxnID === i.U) {
+        pcu.getDataNum    := pcu.getDataNum + 1.U
+        pcu.chiMes.resp   := io.chi.rxdat.bits.Resp
+        assert(io.chi.rxdat.bits.Opcode === CHIOp.DAT.CompData, "SNMAS PCU[0x%x] STATE[0x%x] OP[0x%x] ADDR[0x%x] TGTID[0x%x]", i.U, pcu.state, pcu.chiMes.opcode, pcu.indexMes.addr, pcu.chiMes.tgtID)
+        assert(pcu.isRead, "SNMAS PCU[0x%x] STATE[0x%x] OP[0x%x] ADDR[0x%x] TGTID[0x%x]", i.U, pcu.state, pcu.chiMes.opcode, pcu.indexMes.addr, pcu.chiMes.tgtID)
+        assert(pcu.state === PCUSM.WaitNodeData, "SNMAS PCU[0x%x] STATE[0x%x] OP[0x%x] ADDR[0x%x] TGTID[0x%x]", i.U, pcu.state, pcu.chiMes.opcode, pcu.indexMes.addr, pcu.chiMes.tgtID)
+      /*
+       * Receive DBID or Comp From CHI RxRsp
+       */
+      }.elsewhen(io.chi.rxrsp.fire & io.chi.rxrsp.bits.TxnID === i.U) {
+        when(io.chi.rxrsp.bits.Opcode === CHIOp.RSP.DBIDResp) {
+          pcu.chiMes.chiDBID := io.chi.rxrsp.bits.DBID
+          assert(pcu.state === PCUSM.WaitReplDBID | pcu.state === PCUSM.WaitNodeDBID, "SNMAS PCU[0x%x] STATE[0x%x] OP[0x%x] ADDR[0x%x] TGTID[0x%x]", i.U, pcu.state, pcu.chiMes.opcode, pcu.indexMes.addr, pcu.chiMes.tgtID)
+        }
+        when(io.chi.rxrsp.bits.Opcode === CHIOp.RSP.Comp) {
+          pcu.alrGetComp  := true.B
+          assert(Mux(!pcu.isRepl | pcu.alrGetComp, pcu.state === PCUSM.WaitNodeComp,
+            pcu.state === PCUSM.WaitReplDBID | pcu.state === PCUSM.RCDB | pcu.state === PCUSM.WriteData2Node |  pcu.state === PCUSM.WaitNodeComp),
+            "SNMAS PCU[0x%x] STATE[0x%x] OP[0x%x] ADDR[0x%x] TGTID[0x%x]", i.U, pcu.state, pcu.chiMes.opcode, pcu.indexMes.addr, pcu.chiMes.tgtID)
+        }
+
+      /*
+       * Receive Data From DataBuffer
+       */
+      }.elsewhen(io.dbSigs.dataFDB.fire & pcu.isWaitDBData & io.dbSigs.dataFDB.bits.dbid === pcu.indexMes.dbid) {
+        pcu.getDataNum    := pcu.getDataNum + 1.U
+        assert(pcu.state === PCUSM.WriteData2Node, "SNMAS PCU[0x%x] STATE[0x%x] OP[0x%x] ADDR[0x%x] TGTID[0x%x]", i.U, pcu.state, pcu.chiMes.opcode, pcu.indexMes.addr, pcu.chiMes.tgtID)
+      /*
+       * Clean PCU Entry When Its Free
+       */
+      }.elsewhen(pcu.isFree) {
+        pcu               := 0.U.asTypeOf(pcu)
+      }
+  }
+
+
+// ---------------------------------------------------------------------------------------------------------------------- //
 // --------------------------------------------------- PCU: State Transfer ---------------------------------------------- //
 // ---------------------------------------------------------------------------------------------------------------------- //
   pcus.zipWithIndex.foreach {
@@ -170,65 +229,7 @@ class SnMasterPCU(snMasId: Int, param: InterfaceParam)(implicit p: Parameters) e
   }
 
 
-// ---------------------------------------------------------------------------------------------------------------------- //
-// ---------------------------------------------- PCU: Update MHSR Table Value  ----------------------------------------- //
-// ---------------------------------------------------------------------------------------------------------------------- //
-  pcus.zipWithIndex.foreach {
-    case (pcu, i) =>
-      /*
-       * Receive New Req
-       */
-      when(io.req2Node.fire & pcuGetReqID === i.U) {
-        pcu.indexMes      := indexSaveInPCU
-        pcu.chiMes        := reqSaveInPCU
-        assert(pcu.state === PCUSM.Free, "SNMAS PCU[0x%x] STATE[0x%x] OP[0x%x] ADDR[0x%x] TGTID[0x%x]", i.U, pcu.state, pcu.chiMes.opcode, pcu.indexMes.addr, pcu.chiMes.tgtID)
-      /*
-       * Receive DBID From DataBuffer
-       */
-      }.elsewhen(io.dbSigs.wResp.fire & pcuRecDBID === i.U) {
-        pcu.hasData       := true.B
-        pcu.indexMes.dbid := io.dbSigs.wResp.bits.dbid
-        assert(pcu.state === PCUSM.WaitDBID, "SNMAS PCU[0x%x] STATE[0x%x] OP[0x%x] ADDR[0x%x] TGTID[0x%x]", i.U, pcu.state, pcu.chiMes.opcode, pcu.indexMes.addr, pcu.chiMes.tgtID)
-      /*
-       * Receive Data And Resp From CHI RxDat
-       */
-      }.elsewhen(io.chi.rxdat.fire & io.chi.rxdat.bits.TxnID === i.U) {
-        pcu.getDataNum    := pcu.getDataNum + 1.U
-        pcu.chiMes.resp   := io.chi.rxdat.bits.Resp
-        assert(io.chi.rxdat.bits.Opcode === CHIOp.DAT.CompData, "SNMAS PCU[0x%x] STATE[0x%x] OP[0x%x] ADDR[0x%x] TGTID[0x%x]", i.U, pcu.state, pcu.chiMes.opcode, pcu.indexMes.addr, pcu.chiMes.tgtID)
-        assert(pcu.isRead, "SNMAS PCU[0x%x] STATE[0x%x] OP[0x%x] ADDR[0x%x] TGTID[0x%x]", i.U, pcu.state, pcu.chiMes.opcode, pcu.indexMes.addr, pcu.chiMes.tgtID)
-        assert(pcu.state === PCUSM.WaitNodeData, "SNMAS PCU[0x%x] STATE[0x%x] OP[0x%x] ADDR[0x%x] TGTID[0x%x]", i.U, pcu.state, pcu.chiMes.opcode, pcu.indexMes.addr, pcu.chiMes.tgtID)
-      /*
-       * Receive DBID or Comp From CHI RxRsp
-       */
-      }.elsewhen(io.chi.rxrsp.fire & io.chi.rxrsp.bits.TxnID === i.U) {
-        when(io.chi.rxrsp.bits.Opcode === CHIOp.RSP.DBIDResp) {
-          pcu.chiMes.chiDBID := io.chi.rxrsp.bits.DBID
-          assert(pcu.state === PCUSM.WaitReplDBID | pcu.state === PCUSM.WaitNodeDBID, "SNMAS PCU[0x%x] STATE[0x%x] OP[0x%x] ADDR[0x%x] TGTID[0x%x]", i.U, pcu.state, pcu.chiMes.opcode, pcu.indexMes.addr, pcu.chiMes.tgtID)
-        }
-        when(io.chi.rxrsp.bits.Opcode === CHIOp.RSP.Comp) {
-          pcu.alrGetComp  := true.B
-          assert(Mux(!pcu.isRepl | pcu.alrGetComp, pcu.state === PCUSM.WaitNodeComp,
-            pcu.state === PCUSM.WaitReplDBID | pcu.state === PCUSM.RCDB | pcu.state === PCUSM.WriteData2Node |  pcu.state === PCUSM.WaitNodeComp),
-            "SNMAS PCU[0x%x] STATE[0x%x] OP[0x%x] ADDR[0x%x] TGTID[0x%x]", i.U, pcu.state, pcu.chiMes.opcode, pcu.indexMes.addr, pcu.chiMes.tgtID)
-        }
-
-      /*
-       * Receive Data From DataBuffer
-       */
-      }.elsewhen(io.dbSigs.dataFDB.fire & pcu.isWaitDBData & io.dbSigs.dataFDB.bits.dbid === pcu.indexMes.dbid) {
-        pcu.getDataNum    := pcu.getDataNum + 1.U
-        assert(pcu.state === PCUSM.WriteData2Node, "SNMAS PCU[0x%x] STATE[0x%x] OP[0x%x] ADDR[0x%x] TGTID[0x%x]", i.U, pcu.state, pcu.chiMes.opcode, pcu.indexMes.addr, pcu.chiMes.tgtID)
-      /*
-       * Clean PCU Entry When Its Free
-       */
-      }.elsewhen(pcu.isFree) {
-        pcu               := 0.U.asTypeOf(pcu)
-      }
-  }
-
-
-// ---------------------------------------------------------------------------------------------------------------------- //
+  // ---------------------------------------------------------------------------------------------------------------------- //
 // ------------------------------ Receive Req From CHITXREQ or Req2Node and Save In PCU --------------------------------- //
 // ---------------------------------------------------------------------------------------------------------------------- //
   /*
