@@ -11,7 +11,7 @@ object DBState {
   val width       = 3
   // FREE -> ALLOC -> FREE
   // FREE -> ALLOC -> READING(needClean) -> READ(needClean) -> FREE
-  // FREE -> ALLOC -> READING(!needClean) -> READ(!needClean) -> READDONE -> READING(needClean) -> READ(needClean) -> FREE
+  // FREE -> ALLOC -> READING(!needClean) -> READ(!needClean) -> READ_DONE -> READING(needClean) -> READ(needClean) -> FREE
   val FREE        = "b000".U
   val ALLOC       = "b001".U
   val READ        = "b010".U // Ready to read

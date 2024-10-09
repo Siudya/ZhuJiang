@@ -50,10 +50,10 @@ trait HasOperationsBundle extends Bundle {
   // Commit(Resp to Rn Node)
   val commit      = Bool()
 
-  // Send Snoop to Slave Node
+  // Send Snoop to Rn Node
   val snoop       = Bool()
 
-  // Send Read to Slave Node
+  // Send Read to Sn Node
   val readDown    = Bool()
   val writeDown   = Bool()
 

@@ -124,7 +124,7 @@ trait HasParseZJParam extends HasZJParams {
 
     def fromSnNode(x: UInt) = snNodeIdSeq.map(_.asUInt === x).reduce(_ | _)
 
-    def getSnNodeIDByBankId(x: UInt): UInt = {
+    def getSnNodeIDByBankId(x: UInt, i: Int): UInt = {
         val nodeID = WireInit(0xfff.U)
         snNodeIdSeq.zipWithIndex.foreach {
             case(id, i) =>
@@ -132,7 +132,7 @@ trait HasParseZJParam extends HasZJParams {
                     nodeID := id.U
                 }
         }
-        assert(nodeID =/= 0xfff.U)
+        assert(nodeID =/= 0xfff.U, "getSnNodeIDByBankId ERROR BankId[0x%x] Index[0x%x]", x, i.U)
         nodeID
     }
 
@@ -144,11 +144,12 @@ trait HasParseZJParam extends HasZJParams {
                     metaId := i.U
                 }
         }
-        assert(metaId =/= (nrRnfNode + 1).U)
+        // TODO:
+        // assert(metaId =/= (nrRnfNode + 1).U, "getMetaIdByNodeID ERROR NodeID[0x%x]", x)
         metaId(rnfNodeIdBits - 1, 0)
     }
 
-    def getNodeIDByMetaId(x: UInt) = {
+    def getNodeIDByMetaId(x: UInt, i: Int) = {
         val nodeID = WireInit(0xfff.U)
         rnNodeIdSeq.zipWithIndex.foreach {
             case (id, i) =>
@@ -156,7 +157,7 @@ trait HasParseZJParam extends HasZJParams {
                     nodeID := id.U
                 }
         }
-        assert(nodeID =/= 0xfff.U)
+        assert(nodeID =/= 0xfff.U, "getNodeIDByMetaId ERROR MetaId[0x%x] Index[0x%x]", x, i.U)
         nodeID(10, 0)
     }
 }

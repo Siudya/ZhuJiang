@@ -265,7 +265,7 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
   readDCU_s3.opcode         := decode_s3.rdOp
   readDCU_s3.from.IncoId    := io.sliceId
   readDCU_s3.to.IncoId      := IncoID.LOCALMAS.U
-  readDCU_s3.tgtID          := getSnNodeIDByBankId(task_s3_g.bits.bank)
+  readDCU_s3.tgtID          := getSnNodeIDByBankId(task_s3_g.bits.bank, 0)
   readDCU_s3.srcID          := task_s3_g.bits.reqMes.srcID
   readDCU_s3.resp           := decode_s3.resp
 
@@ -281,7 +281,7 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
   writeDCU_s3.opcode        := decode_s3.wdOp
   writeDCU_s3.from.IncoId   := io.sliceId
   writeDCU_s3.to.IncoId     := IncoID.LOCALMAS.U
-  writeDCU_s3.tgtID         := getSnNodeIDByBankId(task_s3_g.bits.bank)
+  writeDCU_s3.tgtID         := getSnNodeIDByBankId(task_s3_g.bits.bank, 1)
   writeDCU_s3.srcID         := task_s3_g.bits.reqMes.srcID
   writeDCU_s3.dbid          := rcDBID
 
@@ -297,7 +297,7 @@ class ProcessPipe()(implicit p: Parameters) extends DJModule {
   taskRepl_s3.opcode        := CHIOp.REQ.Replace
   taskRepl_s3.from.IncoId   := io.sliceId
   taskRepl_s3.to.IncoId     := IncoID.LOCALMAS.U
-  taskRepl_s3.tgtID         := getSnNodeIDByBankId(task_s3_g.bits.bank)
+  taskRepl_s3.tgtID         := getSnNodeIDByBankId(task_s3_g.bits.bank, 2)
   taskRepl_s3.srcID         := hnfNodeId.U
   taskRepl_s3.dbid          := rcDBID
 
