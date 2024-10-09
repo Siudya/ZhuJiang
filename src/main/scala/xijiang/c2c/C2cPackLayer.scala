@@ -38,13 +38,13 @@ class C2cPayload(implicit p: Parameters) extends ZJBundle {
 
 class C2cRingPort(node: Node)(implicit p: Parameters) extends ZJBundle {
   val icn = Flipped(new IcnBundle(node))
-  val chip = Output(UInt(chipAddrBits.W))
+  val chip = Output(UInt(nodeAidBits.W))
 }
 
 class C2cLinkPort(implicit p: Parameters) extends ZJBundle {
   val tx = Decoupled(new C2cPayload)
   val rx = Flipped(Decoupled(new C2cPayload))
-  val chip = Input(UInt(chipAddrBits.W))
+  val chip = Input(UInt(nodeAidBits.W))
 }
 
 class C2cPackLayerTx(node: Node)(implicit p: Parameters) extends ZJModule with C2cUtils {

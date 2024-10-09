@@ -29,3 +29,7 @@ verilog: build-dir
 
 clean:
 	rm -r build/*
+
+UNAME := Axi
+ut-top:
+	mill -i zhujiang.test.runMain zhujiang.$(UNAME)Top $(RTL_AGRS) -td build/$(UNAME)

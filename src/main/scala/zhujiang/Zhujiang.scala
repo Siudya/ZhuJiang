@@ -22,6 +22,7 @@ import sifive.enterprise.firrtl.NestedPrefixModulesAnnotation
 import xijiang.router.base.IcnBundle
 import xijiang.Ring
 import xijiang.c2c.C2cLinkPort
+import zhujiang.device.bridge.axi.AxiBridge
 
 
 class Zhujiang(implicit p: Parameters) extends ZJModule {
@@ -71,13 +72,13 @@ class Zhujiang(implicit p: Parameters) extends ZJModule {
   /*
    *Connect NHL2 IO <> xijiang
    */
-  val nrLocalRn = localRing.icnRfs.get.length
-  val io = IO(new Bundle { val fromNHL2 = Vec(nrLocalRn, Flipped(new CHIBundleDecoupled(params))) })
-  val connectToNHL2s = Seq.fill(nrLocalRn) { Module(new ConnectToNHL2(params, zjParams.localRing.filter(_.nodeType == NodeType.RF).last)) }
+  val nrLocalCc       = zjParams.localRing.count(_.nodeType == NodeType.CC)
+  val io              = IO(new Bundle { val fromNHL2 = Vec(nrLocalCc, Flipped(new CHIBundleDecoupled(params))) })
+  val connectToNHL2s  = Seq.fill(nrLocalCc) { Module(new ConnectToNHL2(params, zjParams.localRing.filter(_.nodeType == NodeType.CC).last)) }
   connectToNHL2s.zipWithIndex.foreach {
     case (connect, i) =>
       connect.io.fromNHL2 <> io.fromNHL2(i)
-      connect.io.toRnIcn  <> localRing.icnRfs.get(i)
+      connect.io.toCcIcn  <> localRing.icnCcs.get(i)
   }
 
 

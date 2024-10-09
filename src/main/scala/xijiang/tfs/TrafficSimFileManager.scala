@@ -1,7 +1,8 @@
 package xijiang.tfs
 
 import org.chipsalliance.cde.config.Parameters
-import xijiang.NodeType
+import xijiang.tfb.TrafficBoardFileManager.{allNodeTypeDefs, allNodeTypeMap}
+import xijiang.{Node, NodeType}
 import xs.utils.FileRegisters
 import zhujiang.ZJParametersKey
 import zhujiang.chi.ChannelEncodings
@@ -18,6 +19,12 @@ object TrafficSimFileManager {
     FileRegisters.add("env/tfs/src", "main.cpp", mainStr, true)
     FileRegisters.add("", "xmake.lua", compScr, true)
   }
+
+  private val localNodeTypes: String = allNodeTypeMap.filter(_._3 == "LOCAL_TGT_POOL").map(_._1.toUpperCase + "_TYPE").reduce((a: String, b: String) => s"$a, $b")
+  private val csnNodeTypes: String = allNodeTypeMap.filter(_._3 == "C2C_TGT_POOL").map(_._1.toUpperCase + "_TYPE").reduce((a: String, b: String) => s"$a, $b")
+  private val ejectsArraysInitFn: String = allNodeTypeMap.map(
+    elm => s"  type_ejects_map[${elm._1.toUpperCase}_TYPE] = {${elm._4.reduce((a: String, b: String) => s"$a, $b")}};\n"
+  ).reduce(_ + _)
 
   def header: String =
     s"""
@@ -64,19 +71,11 @@ object TrafficSimFileManager {
        |#define FLIT_SIZE ${params.maxFlitBits}
        |#define TIME_OUT ${params.tfbParams.get.timeOut}
        |#define NODE_NID_BITS ${params.nodeNidBits}
-       |#define CHIP_ID_BITS ${params.chipAddrBits}
-       |#define NODE_TYPE_BITS ${params.nodeTypeBits}
+       |#define NODE_AID_BITS ${params.nodeAidBits}
        |#define NODE_NET_BITS ${params.nodeNetBits}
        |#define FLIT_BUF_SIZE ${(params.maxFlitBits + 7) / 8}
        |
-       |#define LRF_TYPE ${NodeType.RF | (0 << params.nodeTypeBits)}
-       |#define LRI_TYPE ${NodeType.RI | (0 << params.nodeTypeBits)}
-       |#define LHF_TYPE ${NodeType.HF | (0 << params.nodeTypeBits)}
-       |#define LHI_TYPE ${NodeType.HI | (0 << params.nodeTypeBits)}
-       |#define LS_TYPE  ${NodeType.S | (0 << params.nodeTypeBits)}
-       |#define CRF_TYPE ${NodeType.RF | (1 << params.nodeTypeBits)}
-       |#define CHF_TYPE ${NodeType.HF | (1 << params.nodeTypeBits)}
-       |#define C2C_TYPE ${NodeType.C | (1 << params.nodeTypeBits)}
+       |$allNodeTypeDefs
        |
        |#define REQ ${ChannelEncodings.REQ}
        |#define RSP ${ChannelEncodings.RSP}
@@ -84,22 +83,31 @@ object TrafficSimFileManager {
        |#define SNP ${ChannelEncodings.SNP}
        |#define ERQ ${ChannelEncodings.ERQ}
        |
+       |#define TYPE_NET_OFF ${NodeType.width}
+       |#define TYPE_NET_BITS 1
+       |
+       |#define NODE_AID_BITS ${params.nodeAidBits}
+       |#define NODE_NID_BITS ${params.nodeNidBits}
+       |#define NODE_ID_BITS ${params.nodeIdBits}
+       |#define TGT_ID_OFF 4
+       |#define SRC_ID_OFF (TGT_ID_OFF + NODE_ID_BITS)
+       |
        |#define RX_READY_MAX_DELAY ${params.tfsParams.get.rxReadyMaxDelay}
        |#define TX_VALID_MAX_DELAY ${params.tfsParams.get.txValidMaxDelay}
        |
-       |#define NODE_TYPE_OFF NODE_NID_BITS
-       |#define NODE_NET_OFF (NODE_NID_BITS + NODE_TYPE_BITS)
-       |
-       |#define NODE_ID_BITS (NODE_NID_BITS + NODE_TYPE_BITS + NODE_NET_BITS)
        |#define TGT_ID_OFF 4
        |#define SRC_ID_OFF (TGT_ID_OFF + NODE_ID_BITS)
        |#define TXN_ID_BITS 12
        |#define TXN_ID_OFF (4 + NODE_ID_BITS + NODE_ID_BITS)
        |
+       |#define LOCAL_TGT_POOL 0
+       |#define CSN_TGT_POOL 1
+       |#define C2C_TGT_POOL 2
+       |
        |#define TFS_ERR(...)                  \\
        |  {                                   \\
        |    TrafficSim::get_instance().info_lock.lock();                                   \\
-       |    fprintf(stderr, "[TFS ERROR] @ %lu: ", TrafficSim::get_instance().global_timer); \\
+       |    fprintf(stderr, "\\n[TFS ERROR] @ %lu: ", TrafficSim::get_instance().global_timer); \\
        |    fprintf(stderr, __VA_ARGS__);     \\
        |    fflush(stderr);                   \\
        |    TrafficSim::get_instance().info_lock.unlock();                                   \\
@@ -107,7 +115,7 @@ object TrafficSimFileManager {
        |#define TFS_INFO(...)                 \\
        |  {                                   \\
        |    TrafficSim::get_instance().info_lock.lock();                                   \\
-       |    fprintf(stdout, "[TFS INFO] @ %lu: ", TrafficSim::get_instance().global_timer); \\
+       |    fprintf(stdout, "\\n[TFS INFO] @ %lu: ", TrafficSim::get_instance().global_timer); \\
        |    fprintf(stdout, __VA_ARGS__);     \\
        |    fflush(stdout);                   \\
        |    TrafficSim::get_instance().info_lock.unlock();                                   \\
@@ -120,12 +128,14 @@ object TrafficSimFileManager {
        |  uint16_t node_id;
        |  uint16_t pool_type = 0;
        |  uint16_t txn_id = 0;
+       |  bool csn = false;
        |  mt19937 random_gen;
        |  unordered_map<uint8_t, vector<uint16_t>> legal_tgt_pool;
        |  unordered_map<uint8_t, array<uint8_t, FLIT_BUF_SIZE>> chn_tx_flit_map;
        |  unordered_map<uint8_t, uint32_t> chn_rx_ready_timer_map;
        |  unordered_map<uint8_t, uint32_t> chn_tx_valid_timer_map;
-       |  NodeManager(uint16_t nid);
+       |  NodeManager(uint16_t nid, uint8_t nt);
+       |  void init();
        |  void step();
        |  void rx_fire(uint8_t chn);
        |  void tx_fire(uint8_t chn);
@@ -136,8 +146,11 @@ object TrafficSimFileManager {
        |
        |class TrafficSim {
        |  private:
-       |  TrafficSim() = default;
+       |  TrafficSim();
        |  bool initialized = false;
+       |  const uint8_t local_node_types[${allNodeTypeMap.count(_._3 == "LOCAL_TGT_POOL")}] = {$localNodeTypes};
+       |  const uint8_t csn_node_types[${allNodeTypeMap.count(_._3 == "C2C_TGT_POOL")}] = {$csnNodeTypes};
+       |  unordered_map<uint8_t, vector<uint8_t>> type_ejects_map;
        |
        |  public:
        |  TrafficSim(const TrafficSim &) = delete;
@@ -158,6 +171,10 @@ object TrafficSimFileManager {
        |  void step();
        |};
        |
+       |TrafficSim::TrafficSim() {
+       |$ejectsArraysInitFn
+       |}
+       |
        |inline uint64_t get_field(uint64_t vec, uint8_t offset, uint8_t width) {
        |  return (vec >> offset) & ((1 << width) - 1);
        |}
@@ -167,21 +184,23 @@ object TrafficSimFileManager {
        |  return vec & clear;
        |}
        |
-       |NodeManager::NodeManager(uint16_t nid) {
+       |NodeManager::NodeManager(uint16_t nid, uint8_t nt) {
        |  node_id = nid;
        |  txn_id = 0;
-       |  auto &tfs = TrafficSim::get_instance();
-       |  bool csn = get_field(node_id, NODE_NET_OFF, NODE_NET_BITS) == 1;
-       |  bool c2c = get_field(node_id, NODE_TYPE_OFF, NODE_TYPE_BITS + NODE_NET_BITS) == C2C_TYPE;
+       |  bool c2c = nt == C2C_TYPE;
+       |  csn = get_field(nt, TYPE_NET_OFF, TYPE_NET_BITS) == 0x1;
        |  if(c2c) {
-       |    pool_type = 2;
+       |    pool_type = C2C_TGT_POOL;
        |  } else if(csn) {
-       |    pool_type = 1;
+       |    pool_type = CSN_TGT_POOL;
        |  } else {
-       |    pool_type = 0;
+       |    pool_type = LOCAL_TGT_POOL;
        |  }
+       |}
        |
-       |  for(const auto &[k, v] : tfs.legal_tgt_pool[pool_type]) {
+       |void NodeManager::init() {
+       |  const auto &tfs = TrafficSim::get_instance();
+       |  for(const auto &[k, v] : tfs.legal_tgt_pool.at(pool_type)) {
        |    legal_tgt_pool[k] = vector<uint16_t>();
        |    for(const auto &tgt : v) {
        |      if(tgt != node_id) legal_tgt_pool[k].push_back(tgt);
@@ -272,97 +291,55 @@ object TrafficSimFileManager {
        |    legal_tgt_pool[i][SNP] = vector<uint16_t>();
        |    if(i == 0) legal_tgt_pool[i][ERQ] = vector<uint16_t>();
        |  }
-       |
-       |  uint8_t lrf_id_num = tfb_get_nodes_size(LRF_TYPE);
-       |  uint8_t lri_id_num = tfb_get_nodes_size(LRI_TYPE);
-       |  uint8_t lhf_id_num = tfb_get_nodes_size(LHF_TYPE);
-       |  uint8_t lhi_id_num = tfb_get_nodes_size(LHI_TYPE);
-       |  uint8_t lsn_id_num = tfb_get_nodes_size(LS_TYPE);
-       |  uint8_t crf_id_num = tfb_get_nodes_size(CRF_TYPE);
-       |  uint8_t chf_id_num = tfb_get_nodes_size(CHF_TYPE);
-       |  uint8_t c2c_id_num = tfb_get_nodes_size(C2C_TYPE);
-       |
-       |  uint16_t *lrf_id_arr = new uint16_t[lrf_id_num];
-       |  uint16_t *lri_id_arr = new uint16_t[lri_id_num];
-       |  uint16_t *lhf_id_arr = new uint16_t[lhf_id_num];
-       |  uint16_t *lhi_id_arr = new uint16_t[lhi_id_num];
-       |  uint16_t *lsn_id_arr = new uint16_t[lsn_id_num];
-       |  uint16_t *crf_id_arr = new uint16_t[crf_id_num];
-       |  uint16_t *chf_id_arr = new uint16_t[chf_id_num];
-       |  uint16_t *c2c_id_arr = new uint16_t[c2c_id_num];
-       |
-       |  tfb_get_nodes(LRF_TYPE, lrf_id_arr);
-       |  tfb_get_nodes(LRI_TYPE, lri_id_arr);
-       |  tfb_get_nodes(LHF_TYPE, lhf_id_arr);
-       |  tfb_get_nodes(LHI_TYPE, lhi_id_arr);
-       |  tfb_get_nodes(LS_TYPE,  lsn_id_arr);
-       |  tfb_get_nodes(CRF_TYPE, crf_id_arr);
-       |  tfb_get_nodes(CHF_TYPE, chf_id_arr);
-       |  tfb_get_nodes(C2C_TYPE, c2c_id_arr);
-       |
-       |  for(uint8_t i = 0; i < lrf_id_num; i++) {
-       |    legal_tgt_pool[0][RSP].push_back(lrf_id_arr[i]);
-       |    legal_tgt_pool[0][DAT].push_back(lrf_id_arr[i]);
-       |    legal_tgt_pool[0][SNP].push_back(lrf_id_arr[i]);
-       |  }
-       |  for(uint8_t i = 0; i < lri_id_num; i++) {
-       |    legal_tgt_pool[0][RSP].push_back(lri_id_arr[i]);
-       |    legal_tgt_pool[0][DAT].push_back(lri_id_arr[i]);
-       |  }
-       |  for(uint8_t i = 0; i < lhf_id_num; i++) {
-       |    legal_tgt_pool[0][REQ].push_back(lhf_id_arr[i]);
-       |    legal_tgt_pool[0][RSP].push_back(lhf_id_arr[i]);
-       |    legal_tgt_pool[0][DAT].push_back(lhf_id_arr[i]);
-       |  }
-       |  for(uint8_t i = 0; i < lhi_id_num; i++) {
-       |    legal_tgt_pool[0][REQ].push_back(lhi_id_arr[i]);
-       |    legal_tgt_pool[0][RSP].push_back(lhi_id_arr[i]);
-       |    legal_tgt_pool[0][DAT].push_back(lhi_id_arr[i]);
-       |  }
-       |  for(uint8_t i = 0; i < lsn_id_num; i++) {
-       |    legal_tgt_pool[0][ERQ].push_back(lsn_id_arr[i]);
-       |    legal_tgt_pool[0][DAT].push_back(lsn_id_arr[i]);
-       |  }
-       |  for(uint8_t i = 0; i < crf_id_num; i++) {
-       |    legal_tgt_pool[2][RSP].push_back(crf_id_arr[i]);
-       |    legal_tgt_pool[2][DAT].push_back(crf_id_arr[i]);
-       |    legal_tgt_pool[2][SNP].push_back(crf_id_arr[i]);
-       |  }
-       |  for(uint8_t i = 0; i < chf_id_num; i++) {
-       |    legal_tgt_pool[2][REQ].push_back(chf_id_arr[i]);
-       |    legal_tgt_pool[2][RSP].push_back(chf_id_arr[i]);
-       |    legal_tgt_pool[2][DAT].push_back(chf_id_arr[i]);
-       |  }
-       |  for(uint8_t i = 0; i < c2c_id_num; i++) {
-       |    uint16_t csn_remote_requester = (CRF_TYPE << NODE_TYPE_OFF) | i;
-       |    uint16_t csn_remote_home = (CHF_TYPE << NODE_TYPE_OFF) | i;
-       |
-       |    legal_tgt_pool[1][RSP].push_back(csn_remote_requester);
-       |    legal_tgt_pool[1][DAT].push_back(csn_remote_requester);
-       |    legal_tgt_pool[1][SNP].push_back(csn_remote_requester);
-       |
-       |    legal_tgt_pool[1][REQ].push_back(csn_remote_home);
-       |    legal_tgt_pool[1][RSP].push_back(csn_remote_home);
-       |    legal_tgt_pool[1][DAT].push_back(csn_remote_home);
-       |  }
        |  printf("tfs node manager target:\\n");
-       |  for(uint8_t i = 0; i < lrf_id_num; i++) node_mng_pool[lrf_id_arr[i]] = make_unique<NodeManager>(lrf_id_arr[i]);
-       |  for(uint8_t i = 0; i < lri_id_num; i++) node_mng_pool[lri_id_arr[i]] = make_unique<NodeManager>(lri_id_arr[i]);
-       |  for(uint8_t i = 0; i < lhf_id_num; i++) node_mng_pool[lhf_id_arr[i]] = make_unique<NodeManager>(lhf_id_arr[i]);
-       |  for(uint8_t i = 0; i < lhi_id_num; i++) node_mng_pool[lhi_id_arr[i]] = make_unique<NodeManager>(lhi_id_arr[i]);
-       |  for(uint8_t i = 0; i < lsn_id_num; i++) node_mng_pool[lsn_id_arr[i]] = make_unique<NodeManager>(lsn_id_arr[i]);
-       |  for(uint8_t i = 0; i < crf_id_num; i++) node_mng_pool[crf_id_arr[i]] = make_unique<NodeManager>(crf_id_arr[i]);
-       |  for(uint8_t i = 0; i < chf_id_num; i++) node_mng_pool[chf_id_arr[i]] = make_unique<NodeManager>(chf_id_arr[i]);
-       |  for(uint8_t i = 0; i < c2c_id_num; i++) node_mng_pool[c2c_id_arr[i]] = make_unique<NodeManager>(c2c_id_arr[i]);
+       |  for(int i = 0; i < ${allNodeTypeMap.count(_._3 == "LOCAL_TGT_POOL")}; i++) {
+       |    const uint8_t node_type = local_node_types[i];
+       |    const uint8_t id_num = tfb_get_nodes_size(node_type);
+       |    uint16_t *id_arr = new uint16_t[id_num];
+       |    tfb_get_nodes(node_type, id_arr);
+       |    for(int j = 0; j < id_num; j++) {
+       |      const uint16_t node_id = id_arr[j];
+       |      for(const auto &chn: type_ejects_map.at(node_type)) {
+       |        legal_tgt_pool[LOCAL_TGT_POOL][chn].push_back(node_id);
+       |      }
+       |      node_mng_pool[node_id] = make_unique<NodeManager>(node_id, node_type);
+       |    }
+       |    delete[] id_arr;
+       |  }
+       |  for(int i = 0; i < ${allNodeTypeMap.count(_._3 == "C2C_TGT_POOL")}; i++) {
+       |    const uint8_t node_type = csn_node_types[i];
+       |    const uint8_t id_num = tfb_get_nodes_size(node_type);
+       |    uint16_t *id_arr = new uint16_t[id_num];
+       |    tfb_get_nodes(node_type, id_arr);
+       |    for(int j = 0; j < id_num; j++) {
+       |      const uint16_t node_id = id_arr[j];
+       |      for(const auto &chn: type_ejects_map.at(node_type)) {
+       |        legal_tgt_pool[C2C_TGT_POOL][chn].push_back(node_id);
+       |      }
+       |      node_mng_pool[node_id] = make_unique<NodeManager>(node_id, node_type);
+       |    }
+       |    delete[] id_arr;
+       |  }
        |
-       |  delete[] lrf_id_arr;
-       |  delete[] lri_id_arr;
-       |  delete[] lhf_id_arr;
-       |  delete[] lhi_id_arr;
-       |  delete[] lsn_id_arr;
-       |  delete[] crf_id_arr;
-       |  delete[] chf_id_arr;
+       |  uint8_t c2c_id_num = tfb_get_nodes_size(C2C_TYPE);
+       |  uint16_t *c2c_id_arr = new uint16_t[c2c_id_num];
+       |  tfb_get_nodes(C2C_TYPE, c2c_id_arr);
+       |  for(uint8_t i = 0; i < c2c_id_num; i++) {
+       |    const uint16_t c2c_node_id = c2c_id_arr[i];
+       |    const uint16_t chip = get_field(c2c_node_id, 0, NODE_AID_BITS);
+       |    const uint16_t net = 1 << (NODE_ID_BITS - 1);
+       |    const uint16_t max_nid = 1 << 4;
+       |    for(uint16_t nid = 0; nid < max_nid; nid++) {
+       |      uint16_t remote_node_id = net | (nid << NODE_AID_BITS) | chip;
+       |      legal_tgt_pool[CSN_TGT_POOL][REQ].push_back(remote_node_id);
+       |      legal_tgt_pool[CSN_TGT_POOL][RSP].push_back(remote_node_id);
+       |      legal_tgt_pool[CSN_TGT_POOL][DAT].push_back(remote_node_id);
+       |      legal_tgt_pool[CSN_TGT_POOL][SNP].push_back(remote_node_id);
+       |    }
+       |    node_mng_pool[c2c_node_id] = make_unique<NodeManager>(c2c_node_id, C2C_TYPE);
+       |  }
        |  delete[] c2c_id_arr;
+       |  for(const auto &[k, v]: node_mng_pool) v->init();
        |  initialized = true;
        |}
        |

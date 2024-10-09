@@ -42,6 +42,7 @@ trait BaseRouterUtils {
   m: ZJModule =>
   def node: Node
   override val desiredName = node.routerStr
+  val tfbNodeType = if(node.csnNode) ((1 << NodeType.width) | node.nodeType).U else node.nodeType.U
 
   val local = !node.csnNode
   val c2c = node.csnNode && node.nodeType == NodeType.C
@@ -50,21 +51,13 @@ trait BaseRouterUtils {
 
   val router = IO(new Bundle {
     val rings = Vec(2, new RouterRingIO(local))
-    val chip = Input(UInt(p(ZJParametersKey).chipAddrBits.W))
+    val chip = Input(UInt(p(ZJParametersKey).nodeAidBits.W))
     val nodeId = Output(UInt(niw.W))
-    val remoteChipIds = if(!local && !c2c && node.nodeType != NodeType.P) Some(Input(Vec(csnC2cNum, UInt(chipAddrBits.W)))) else None
-    val localChip = if(c2c) Some(Input(UInt(chipAddrBits.W))) else None
+    val c2cIds = if(!local && !c2c && node.nodeType != NodeType.P) Some(Input(Vec(csnC2cNum, new NodeIdBundle))) else None
   })
   val icn = IO(new IcnBundle(node))
 
-  val nid = if(local) {
-    node.nodeId.U(niw.W)
-  } else if(c2c) {
-    val mask = Cat(Fill(niw - chipAddrBits, true.B), Fill(chipAddrBits, false.B))
-    (node.nodeId.U(niw.W) & mask) | router.chip
-  } else {
-    node.nodeId.U(niw.W) | router.chip
-  }
+  val nid = if(local) node.nodeId.U(niw.W) else node.nodeId.U(niw.W) | router.chip
 
   private val flitMap = Map[String, Flit](
     "REQ" -> new ReqFlit,
@@ -86,10 +79,10 @@ trait BaseRouterUtils {
   def connectRing[K <: Flit](chn: String): Unit = {
     val icnRx = icn.rx.getBundle(chn)
     val icnTx = icn.tx.getBundle(chn)
-    val tap = if(icnRx.isDefined || icnTx.isDefined) Some(Module(new ChannelTap(flitMap(chn), chn, ejectBufSizeMap(chn), c2c))) else None
+    val tap = if(icnRx.isDefined || icnTx.isDefined) Some(Module(new ChannelTap(flitMap(chn), chn, ejectBufSizeMap(chn), node))) else None
     if(tap.isDefined) {
       tap.get.suggestName(s"${chn.toLowerCase()}ChannelTap")
-      tap.get.io.nid := nid
+      tap.get.io.matchTag := nid
       tap.get.io.rx(0) := router.rings(0).rx.getBundle(chn)
       tap.get.io.rx(1) := router.rings(1).rx.getBundle(chn)
       router.rings(0).tx.getBundle(chn) := tap.get.io.tx(0)
@@ -114,52 +107,55 @@ trait BaseRouterUtils {
       buf.io.enq.bits := icnRx.get.bits.asTypeOf(flitMap(chn))
       icnRx.get.ready := buf.io.enq.ready
       tap.get.io.inject <> buf.io.deq
-
-      def checkTarget(n: Node): Bool = {
-        if(local) {
-          n.nodeId.U === buf.io.deq.bits.tgt
-        } else if(c2c) {
-          (n.nodeId.U | router.localChip.get) === buf.io.deq.bits.tgt
-        } else {
-          n.nodeId.U === Cat(
-            1.U(nodeNetBits.W),
-            NodeType.C.U(nodeTypeBits.W),
-            buf.io.deq.bits.tgt(chipAddrBits - 1, 0).asTypeOf(UInt(nodeNidBits.W))
-          )
+      val tgt = buf.io.deq.bits.tgt.asTypeOf(new NodeIdBundle)
+      val routerTgt = Wire(UInt(niw.W))
+      dontTouch(routerTgt)
+      routerTgt.suggestName(s"routerTgt$chn")
+      if(local) {
+        routerTgt := tgt.asUInt
+      } else if(c2c) {
+        routerTgt := tgt.router
+      } else {
+        val c2cSelOH = router.c2cIds.get.map(_.chip === tgt.chip)
+        val c2cRouters = router.c2cIds.get.map(_.router)
+        when(buf.io.deq.valid) {
+          assert(PopCount(c2cSelOH) === 1.U, cf"Illegal chip id on $chn of node 0x${node.nodeId.toHexString}, flit tgt chip: ${tgt.chip}%x")
         }
+        routerTgt := Mux1H(c2cSelOH, c2cRouters)
       }
 
-      tap.get.io.injectTapSelOH(0) := node.rightNodes.map(checkTarget).reduce(_ || _)
-      tap.get.io.injectTapSelOH(1) := node.leftNodes.map(checkTarget).reduce(_ || _)
+      tap.get.io.injectTapSelOH(0) := node.rightNodes.map(_.nodeId.U === routerTgt).reduce(_ || _)
+      tap.get.io.injectTapSelOH(1) := node.leftNodes.map(_.nodeId.U === routerTgt).reduce(_ || _)
       when(tap.get.io.inject.valid) {
         assert(PopCount(tap.get.io.injectTapSelOH) === 1.U, cf"Unknown routing path on $chn of node 0x${node.nodeId.toHexString}, flit tgt: 0x${buf.io.deq.bits.tgt}%x")
       }
-      val tgt = WireInit(buf.io.deq.bits.tgt.asTypeOf(new NodeIdBundle))
-      if(!local && !c2c) {
-        if(csnC2cNum == 1) {
-          tgt.nodeCsnChip := router.remoteChipIds.get.head
-        } else {
-          tgt.nodeCsnChip := router.remoteChipIds.get(buf.io.deq.bits.tgt(log2Ceil(csnC2cNum) - 1, 0))
-        }
-        tap.get.io.inject.bits.tgt := tgt.asUInt
+
+      val src = WireInit(nid.asTypeOf(new NodeIdBundle))
+      if(local) {
+        src.aid := buf.io.deq.bits.src(nodeAidBits - 1, 0)
+      } else if(c2c) {
+        src := buf.io.deq.bits.src.asTypeOf(src)
+      } else {
+        src.aid := router.chip
       }
+      tap.get.io.inject.bits.src := src.asUInt
+
       mon.foreach(m => {
         m.suggestName(s"inject${chn.toLowerCase().capitalize}Monitor")
         m.io.clock := clock
         m.io.valid := tap.get.io.inject.fire
         m.io.nodeId := nid
+        m.io.nodeType := tfbNodeType
         m.io.inject := true.B
         m.io.flitType := ChannelEncodings.encodingsMap(chn).U
-        val flit = WireInit(tap.get.io.inject.bits.asTypeOf(tap.get.gen))
-        if(!c2c) flit.src := nid
-        m.io.flit := flit.asUInt
+        m.io.flit := tap.get.io.inject.bits.asUInt
         when(m.io.valid) {
           assert(!m.io.fault, s"channel $chn inject wrong flit!")
         }
       })
-      if(m.p(ZJParametersKey).tfsParams.isEmpty) {
+      if(m.p(ZJParametersKey).tfsParams.isEmpty && (local || c2c)) {
         val ring = if(local) m.p(ZJParametersKey).localRing else m.p(ZJParametersKey).csnRing
-        node.checkLegalStaticInjectTarget(ring, chn, buf.io.deq.bits.tgt.asTypeOf(new NodeIdBundle), buf.io.deq.valid, nid, router.localChip)
+        node.checkLegalInjectTarget(ring, chn, buf.io.deq.bits.tgt.asTypeOf(new NodeIdBundle), buf.io.deq.valid, nid)
       }
     }
 
@@ -171,23 +167,12 @@ trait BaseRouterUtils {
       icnTx.get.bits := buf.io.deq.bits.asTypeOf(icnTx.get.bits)
       buf.io.deq.ready := icnTx.get.ready
       buf.io.enq <> tap.get.io.eject
-
-      val src = WireInit(tap.get.io.eject.bits.src.asTypeOf(new NodeIdBundle))
-      if(!local && !c2c && m.p(ZJParametersKey).tfsParams.isEmpty) {
-        val chipSrc = tap.get.io.eject.bits.src.asTypeOf(new NodeIdBundle).nodeCsnChip
-        val c2cHits = router.remoteChipIds.get.map(_ === chipSrc)
-        when(tap.get.io.eject.valid) {
-          assert(PopCount(c2cHits) === 1.U, cf"Invalid eject chip target $chipSrc of node 0x${nid}%x on $chn")
-        }
-        src.nodeCsnChip := PriorityEncoder(c2cHits)
-        buf.io.enq.bits.src := src.asUInt
-      }
-
       mon.foreach(m => {
         m.suggestName(s"eject${chn.toLowerCase().capitalize}Monitor")
         m.io.clock := clock
         m.io.valid := tap.get.io.eject.fire
         m.io.nodeId := nid
+        m.io.nodeType := tfbNodeType
         m.io.inject := false.B
         m.io.flitType := ChannelEncodings.encodingsMap(chn).U
         m.io.flit := tap.get.io.eject.bits.asUInt
@@ -199,15 +184,19 @@ trait BaseRouterUtils {
   }
 }
 
-class BaseRouter(val node: Node)(implicit p: Parameters) extends ZJModule
-  with BaseRouterUtils {
+class BaseRouter(val node: Node)(implicit p: Parameters) extends ZJModule with BaseRouterUtils {
   router.nodeId := nid
+  dontTouch(router.nodeId)
   private val tfbNodeRegister = if((node.injects ++ node.ejects).nonEmpty && hasTfb) Some(Module(new NodeRegister)) else None
-  tfbNodeRegister.foreach(_.io.nodeId := nid)
+  tfbNodeRegister.foreach(r => {
+    r.io.nodeId := nid
+    r.io.nodeType := tfbNodeType
+  })
 
   connectRing("REQ")
   connectRing("RSP")
   connectRing("DAT")
   connectRing("SNP")
   if(local) connectRing("ERQ")
+  print(node)
 }

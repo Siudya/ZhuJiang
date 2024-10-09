@@ -9,16 +9,40 @@ import xs.utils.FileRegisters
 
 import scala.annotation.tailrec
 
+/**
+ * CC----S0----HF0----S1----CC
+ * |                        |
+ * SMem                     RI
+ * |         Local          |
+ * HI                       HI default
+ * |                        |
+ * CC----S0----HF1----S1----CC
+ */
+
 class ZhujiangTopConfig extends Config((site, here, up) => {
   case ZJParametersKey => ZJParameters(
     localNodeParams = Seq(
-      NodeParam(nodeType = NodeType.RF, splitFlit = true),
-      NodeParam(nodeType = NodeType.RF, splitFlit = true),
-      NodeParam(nodeType = NodeType.HF, splitFlit = true),
-      NodeParam(nodeType = NodeType.HI, splitFlit = true),
-      NodeParam(nodeType = NodeType.S, splitFlit = true),
-      NodeParam(nodeType = NodeType.S, splitFlit = true),
-      NodeParam(nodeType = NodeType.S, splitFlit = true, mainMemory = true)
+      NodeParam(nodeType = NodeType.CC, cpuNum = 2),
+      NodeParam(nodeType = NodeType.S, bankId = 0),
+      NodeParam(nodeType = NodeType.HF, bankId = 0),
+      NodeParam(nodeType = NodeType.S, bankId = 1),
+      NodeParam(nodeType = NodeType.CC, cpuNum = 2),
+      NodeParam(nodeType = NodeType.RI),
+      NodeParam(nodeType = NodeType.HI, defaultHni = true),
+      NodeParam(nodeType = NodeType.CC, cpuNum = 2),
+      NodeParam(nodeType = NodeType.S, bankId = 1),
+      NodeParam(nodeType = NodeType.HF, bankId = 1),
+      NodeParam(nodeType = NodeType.S, bankId = 0),
+      NodeParam(nodeType = NodeType.CC, cpuNum = 2),
+      NodeParam(nodeType = NodeType.HI, addressRange = (0x1000000, 0x10010000)),
+      NodeParam(nodeType = NodeType.S, mainMemory = true)
+    ),
+    csnNodeParams = Seq(
+      NodeParam(nodeType = NodeType.HF, bankId = 0),
+      NodeParam(nodeType = NodeType.RF, bankId = 0),
+      NodeParam(nodeType = NodeType.C),
+      NodeParam(nodeType = NodeType.HF, bankId = 1),
+      NodeParam(nodeType = NodeType.RF, bankId = 1)
     )
   )
 })

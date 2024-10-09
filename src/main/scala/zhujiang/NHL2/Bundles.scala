@@ -321,32 +321,36 @@ class CHIBundleDecoupled(params: CHIBundleParameters)(implicit p: Parameters) ex
 class ConnectToNHL2(params: CHIBundleParameters, node: Node)(implicit p: Parameters) extends ZJModule {
     val io = IO(new Bundle {
         val fromNHL2    = Flipped(new CHIBundleDecoupled(params))
-        val toRnIcn     = Flipped(new IcnBundle(node))
+        val toCcIcn     = Flipped(new IcnBundle(node))
     })
 
-    io.toRnIcn.rx.req.get.valid     := io.fromNHL2.txreq.valid
-    io.toRnIcn.rx.req.get.bits      := io.fromNHL2.txreq.bits.asTypeOf(new CHIBundleREQ(params)).toReqFlit
-    io.fromNHL2.txreq.ready         := io.toRnIcn.rx.req.get.ready
+    io.toCcIcn.rx.req.get.valid     := io.fromNHL2.txreq.valid
+    io.toCcIcn.rx.req.get.bits      := io.fromNHL2.txreq.bits.asTypeOf(new CHIBundleREQ(params)).toReqFlit
+    io.fromNHL2.txreq.ready         := io.toCcIcn.rx.req.get.ready
 
-    io.toRnIcn.rx.resp.get.valid    := io.fromNHL2.txrsp.valid
-    io.toRnIcn.rx.resp.get.bits     := io.fromNHL2.txrsp.bits.asTypeOf(new CHIBundleRSP(params)).toRespFlit
-    io.fromNHL2.txrsp.ready         := io.toRnIcn.rx.resp.get.ready
+    io.toCcIcn.rx.resp.get.valid    := io.fromNHL2.txrsp.valid
+    io.toCcIcn.rx.resp.get.bits     := io.fromNHL2.txrsp.bits.asTypeOf(new CHIBundleRSP(params)).toRespFlit
+    io.fromNHL2.txrsp.ready         := io.toCcIcn.rx.resp.get.ready
 
-    io.toRnIcn.rx.data.get.valid    := io.fromNHL2.txdat.valid
-    io.toRnIcn.rx.data.get.bits     := io.fromNHL2.txdat.bits.asTypeOf(new CHIBundleDAT(params)).toDataFlit
-    io.fromNHL2.txdat.ready         := io.toRnIcn.rx.data.get.ready
+    io.toCcIcn.rx.data.get.valid    := io.fromNHL2.txdat.valid
+    io.toCcIcn.rx.data.get.bits     := io.fromNHL2.txdat.bits.asTypeOf(new CHIBundleDAT(params)).toDataFlit
+    io.fromNHL2.txdat.ready         := io.toCcIcn.rx.data.get.ready
 
-    io.fromNHL2.rxsnp.valid         := io.toRnIcn.tx.snoop.get.valid
-    io.fromNHL2.rxsnp.bits          := io.fromNHL2.rxsnp.bits.asTypeOf(new CHIBundleSNP(params)).fromSnoopFlit(io.toRnIcn.tx.snoop.get.bits.asUInt).asUInt
-    io.toRnIcn.tx.snoop.get.ready   := io.fromNHL2.rxsnp.ready
+    io.fromNHL2.rxsnp.valid         := io.toCcIcn.tx.snoop.get.valid
+    io.fromNHL2.rxsnp.bits          := io.fromNHL2.rxsnp.bits.asTypeOf(new CHIBundleSNP(params)).fromSnoopFlit(io.toCcIcn.tx.snoop.get.bits.asUInt).asUInt
+    io.toCcIcn.tx.snoop.get.ready   := io.fromNHL2.rxsnp.ready
 
-    io.fromNHL2.rxrsp.valid         := io.toRnIcn.tx.resp.get.valid
-    io.fromNHL2.rxrsp.bits          := io.fromNHL2.rxrsp.bits.asTypeOf(new CHIBundleRSP(params)).fromRespFlit(io.toRnIcn.tx.resp.get.bits.asUInt).asUInt
-    io.toRnIcn.tx.resp.get.ready    := io.fromNHL2.rxrsp.ready
+    io.fromNHL2.rxrsp.valid         := io.toCcIcn.tx.resp.get.valid
+    io.fromNHL2.rxrsp.bits          := io.fromNHL2.rxrsp.bits.asTypeOf(new CHIBundleRSP(params)).fromRespFlit(io.toCcIcn.tx.resp.get.bits.asUInt).asUInt
+    io.toCcIcn.tx.resp.get.ready    := io.fromNHL2.rxrsp.ready
 
-    io.fromNHL2.rxdat.valid         := io.toRnIcn.tx.data.get.valid
-    io.fromNHL2.rxdat.bits          := io.fromNHL2.rxdat.bits.asTypeOf(new CHIBundleDAT(params)).fromDataFlit(io.toRnIcn.tx.data.get.bits.asUInt).asUInt
-    io.toRnIcn.tx.data.get.ready    := io.fromNHL2.rxdat.ready
+    io.fromNHL2.rxdat.valid         := io.toCcIcn.tx.data.get.valid
+    io.fromNHL2.rxdat.bits          := io.fromNHL2.rxdat.bits.asTypeOf(new CHIBundleDAT(params)).fromDataFlit(io.toCcIcn.tx.data.get.bits.asUInt).asUInt
+    io.toCcIcn.tx.data.get.ready    := io.fromNHL2.rxdat.ready
+
+    // Unuse
+    assert(!io.toCcIcn.tx.req.get.valid)
+    io.toCcIcn.tx.req.get.ready     := false.B
 
 }
 

@@ -93,7 +93,7 @@ case class DJParam(
 
 
 trait HasParseZJParam extends HasZJParams {
-    val localRnfNode    = zjParams.localRing.filter(_.nodeType == NodeType.RF)
+    val localRnfNode    = zjParams.localRing.filter(_.nodeType == NodeType.CC)
     val localHnfNode    = zjParams.localRing.filter(_.nodeType == NodeType.HF).last
     val localSnNode     = zjParams.localRing.filter(_.nodeType == NodeType.S)
     val hasCSN          = zjParams.csnRing.nonEmpty
@@ -112,7 +112,7 @@ trait HasParseZJParam extends HasZJParams {
     val chiNodeIdBits   = zjParams.nodeIdBits
 
     // Local Base Node Mes
-    val nrRnfNode       = zjParams.localRing.count(_.nodeType  == NodeType.RF)
+    val nrRnfNode       = zjParams.localRing.count(_.nodeType == NodeType.CC)
     val rnfNodeIdBits   = log2Ceil(nrRnfNode)
     val rnNodeIdSeq     = localRnfNode.map(_.nodeId)
     val snNodeIdSeq     = localSnNode.map(_.nodeId)

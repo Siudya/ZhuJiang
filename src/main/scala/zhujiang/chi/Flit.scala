@@ -1,6 +1,7 @@
 package zhujiang.chi
 
 import chisel3._
+import chisel3.util.Cat
 import org.chipsalliance.cde.config.Parameters
 import zhujiang.{ZJBundle, ZJParametersKey}
 
@@ -54,8 +55,6 @@ class ReqFlit(implicit p: Parameters) extends Flit {
   def DataTarget = ReturnNID
 
   require(this.getWidth == reqFlitBits, s"Illegal request FLIT width ${this.getWidth}, expected $reqFlitBits!")
-  def tgtChipId: UInt = Addr(raw - 2, raw - chipAddrBits - 1)
-  def mmioReq: Bool = Addr(raw - 1)
 }
 
 class RespFlit(implicit p: Parameters) extends Flit {
@@ -169,25 +168,31 @@ object Credit {
 
 class ReqAddrBundle(implicit p: Parameters) extends ZJBundle {
   val mmio = Bool()
-  val chip = UInt(chipAddrBits.W)
-  val tag = UInt((raw - 1 - chipAddrBits - 6).W)
+  val chip = UInt(nodeAidBits.W)
+  val tag = UInt((raw - 1 - nodeAidBits - 6).W)
   val offset = UInt(6.W)
-  def csnNid: UInt = tag(nodeNidBits - chipAddrBits - 1, 0)
+  def checkBank(width: Int, bankId: UInt): Bool = {
+    if(width == 0) true.B
+    else tag(bankOff + width - 7, bankOff - 6) === bankId
+  }
+  def devAddr: UInt = Cat(tag, offset)
 }
 
 class SnpAddrBundle(implicit p: Parameters) extends ZJBundle {
   val mmio = Bool()
-  val chip = UInt(chipAddrBits.W)
-  val tag = UInt((raw - 1 - chipAddrBits - 3).W)
+  val chip = UInt(nodeAidBits.W)
+  val tag = UInt((raw - 1 - nodeAidBits - 3).W)
   val offset = UInt(3.W)
-  def csnNid: UInt = tag(nodeNidBits - chipAddrBits - 1, 0)
+  def checkBank(width: Int, bankId: UInt): Bool = {
+    if(width == 0) true.B
+    else tag(bankOff + width - 7, bankOff - 6) === bankId
+  }
 }
 
 class NodeIdBundle(implicit p: Parameters) extends ZJBundle {
-  val csn = Bool()
-  val nodeType = UInt(nodeTypeBits.W)
-  val nodeCsnNid = UInt((nodeNidBits - chipAddrBits).W)
-  val nodeCsnChip = UInt(chipAddrBits.W)
-
-  def nodeNid: UInt = chisel3.util.Cat(nodeCsnNid, nodeCsnChip)
+  val net = Bool()
+  val nid = UInt(nodeNidBits.W)
+  val aid = UInt(nodeAidBits.W)
+  def chip: UInt = aid
+  def router: UInt = Cat(net, nid, 0.U(aid.getWidth.W))
 }
