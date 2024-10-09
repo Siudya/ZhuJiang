@@ -4,10 +4,14 @@ import xijiang.{Node, NodeType}
 import chisel3.stage.ChiselGeneratorAnnotation
 import circt.stage.{ChiselStage, FirtoolOption}
 import zhujiang.UnitTop.firtoolOpts
+import zhujiang.axi.AxiParams
 import zhujiang.device.bridge.axi.AxiBridge
 import zhujiang.device.bridge.axilite.AxiLiteBridge
 import zhujiang.device.bridge.chi.ChiSnBridge
 import zhujiang.device.bridge.tlul.TLULBridge
+import zhujiang.device.cluster.{ClusterPLL, DistributedAclint}
+import zhujiang.device.uncore.UncoreComplex
+import zhujiang.tilelink.TilelinkParams
 
 object UnitTop {
   val firtoolOpts = Seq(FirtoolOption("-O=release"),
@@ -46,5 +50,26 @@ object ChiSnBridgeTop extends App {
   val (config, firrtlOpts) = ZhujiangTopParser(args)
   (new ChiselStage).execute(firrtlOpts, firtoolOpts ++ Seq(
     ChiselGeneratorAnnotation(() => new ChiSnBridge(Node(nodeType = NodeType.HI, splitFlit = true, outstanding = 8))(config))
+  ))
+}
+
+object DistributedAclintTop extends App {
+  val (config, firrtlOpts) = ZhujiangTopParser(args)
+  (new ChiselStage).execute(firrtlOpts, firtoolOpts ++ Seq(
+    ChiselGeneratorAnnotation(() => new DistributedAclint(TilelinkParams(addrBits = 11, sourceBits = 5, dataBits = 64))(config))
+  ))
+}
+
+object ClusterPLLTop extends App {
+  val (config, firrtlOpts) = ZhujiangTopParser(args)
+  (new ChiselStage).execute(firrtlOpts, firtoolOpts ++ Seq(
+    ChiselGeneratorAnnotation(() => new ClusterPLL(TilelinkParams(addrBits = 11, sourceBits = 5, dataBits = 64))(config))
+  ))
+}
+
+object UncoreTop extends App {
+  val (config, firrtlOpts) = ZhujiangTopParser(args)
+  (new ChiselStage).execute(firrtlOpts, firtoolOpts ++ Seq(
+    ChiselGeneratorAnnotation(() => new UncoreComplex(16, 32, AxiParams(dataBits = 64), AxiParams(dataBits = 256))(config))
   ))
 }

@@ -16,13 +16,7 @@ class AxiLiteBridge(node: Node, ioDataBits: Int, tagOffset: Int)(implicit p: Par
   private val axiParams = AxiParams(idBits = log2Ceil(node.outstanding), dataBits = ioDataBits)
 
   val icn = IO(new DeviceIcnBundle(node))
-  val axi = IO(new Bundle {
-    val aw = Decoupled(new AWFlit(axiParams))
-    val ar = Decoupled(new ARFlit(axiParams))
-    val w = Decoupled(new WFlit(axiParams))
-    val b = Flipped(Decoupled(new BFlit(axiParams)))
-    val r = Flipped(Decoupled(new RFlit(axiParams)))
-  })
+  val axi = IO(new AxiBundle(axiParams))
 
   private def compareTag(addr0: UInt, addr1: UInt): Bool = {
     addr0(compareTagBits + tagOffset - 1, tagOffset) === addr1(compareTagBits + tagOffset - 1, tagOffset)
