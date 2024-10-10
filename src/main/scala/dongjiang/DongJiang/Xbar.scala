@@ -11,35 +11,30 @@ import xs.utils.FastArbiter
 
 class IdMap(implicit p: Parameters) extends DJModule {
     val io = IO(new Bundle {
-        val bankVal = Input(Vec(djparam.nrBank, Bool()))
-        val inBank  = Input(UInt(bankBits.W))
-        val outBank = Output(UInt(bankBits.W))
+        val inBank      = Input(UInt(bankBits.W))
+        val outBank     = Output(UInt(bankBits.W))
     })
     val outBank     = WireInit(0.U(bankBits.W))
-    val bankaValNum = WireInit(PopCount(io.bankVal).asUInt)
 
     if (djparam.nrBank == 4) {
-        switch(bankaValNum) {
-            // Use Bank [0]
-            is(1.U) { outBank :=  0.U }
-            // Use Bank [0 1]
-            is(2.U) { outBank := io.inBank(0) }
-            // Use Bank [0 1 2 3]
-            is(4.U) { outBank := io.inBank }
-        }
+        // Use Bank [0]
+        if(nrBankPerDJ == 1)      { outBank :=  0.U }
+        // Use Bank [0 1]
+        else if(nrBankPerDJ == 2) { outBank := io.inBank(0) | io.inBank(1) }
+        // Use Bank [0 1 2 3]
+        else if(nrBankPerDJ == 4) { outBank := io.inBank }
     } else if (djparam.nrBank == 2) {
-        switch(bankaValNum) {
-            // Use Bank [0]
-            is(1.U) { outBank := 0.U }
-            // Use Bank [0 1]
-            is(2.U) { outBank := io.inBank(0) }
-        }
+        // Use Bank [0]
+        if(nrBankPerDJ == 1)      { outBank :=  0.U }
+        // Use Bank [0 1]
+        else if(nrBankPerDJ == 2) { outBank := io.inBank(0) }
     } else {
         // Use Bank [0]
         outBank === 0.U
     }
     io.outBank := outBank
-    assert(bankaValNum === 1.U | bankaValNum === 2.U | bankaValNum === 4.U)
+    require(nrBankPerDJ == 4 | nrBankPerDJ == 2 | nrBankPerDJ == 1)
+    require(nrBankPerDJ <= djparam.nrBank)
 }
 
 
@@ -48,31 +43,30 @@ class IdMap(implicit p: Parameters) extends DJModule {
 class Xbar()(implicit p: Parameters) extends DJModule {
 // ------------------------------------------ IO declaration ----------------------------------------------//
     val io = IO(new Bundle {
-        val bankVal = Input(Vec(djparam.nrBank, Bool()))
         // slice ctrl signals
         val req2Slice = new Bundle {
             val in = Vec(nrIntf, Flipped(Decoupled(new Req2SliceBundle()))) // expect SNMaster
-            val out = Vec(djparam.nrBank, Decoupled(new Req2SliceBundle()))
+            val out = Vec(nrBankPerDJ, Decoupled(new Req2SliceBundle()))
         }
         val reqAck2Node = new Bundle {
-            val in = Vec(djparam.nrBank, Flipped(Decoupled(new ReqAck2NodeBundle()))) // expect SNMaster
+            val in = Vec(nrBankPerDJ, Flipped(Decoupled(new ReqAck2NodeBundle()))) // expect SNMaster
             val out = Vec(nrIntf, Decoupled(new ReqAck2NodeBundle()))
         }
         val resp2Node = new Bundle {
-            val in = Vec(djparam.nrBank, Flipped(Decoupled(new Resp2NodeBundle())))
+            val in = Vec(nrBankPerDJ, Flipped(Decoupled(new Resp2NodeBundle())))
             val out = Vec(nrIntf, Decoupled(new Resp2NodeBundle()))
         }
         val req2Node = new Bundle {
-            val in = Vec(djparam.nrBank, Flipped(Decoupled(new Req2NodeBundle())))
+            val in = Vec(nrBankPerDJ, Flipped(Decoupled(new Req2NodeBundle())))
             val out = Vec(nrIntf, Decoupled(new Req2NodeBundle()))
         }
         val resp2Slice = new Bundle {
             val in = Vec(nrIntf, Flipped(Decoupled(new Resp2SliceBundle())))
-            val out = Vec(djparam.nrBank, Decoupled(new Resp2SliceBundle()))
+            val out = Vec(nrBankPerDJ, Decoupled(new Resp2SliceBundle()))
         }
         // slice DataBuffer signals
         val dbSigs = new Bundle {
-            val in0 = Vec(djparam.nrBank + nrIntf, Flipped(Decoupled(new DBRCReq())))
+            val in0 = Vec(nrBankPerDJ + nrIntf, Flipped(Decoupled(new DBRCReq())))
             val in1 = Vec(nrIntf, Flipped(new DBBundle(hasDBRCReq = false)))
             val out = Vec(1, new DBBundle(hasDBRCReq = true))
         }
@@ -90,7 +84,6 @@ class Xbar()(implicit p: Parameters) extends DJModule {
     req2SliceReMap.zip(io.req2Slice.in).foreach{ case(reMap, in) => reMap <> in }
     req2SliceIdMaps.zipWithIndex.foreach {
         case(m, i) =>
-            m.io.bankVal <> io.bankVal
             m.io.inBank := io.req2Slice.in(i).bits.to.IncoId
             req2SliceReMap(i).bits.to.IncoId := m.io.outBank
     }

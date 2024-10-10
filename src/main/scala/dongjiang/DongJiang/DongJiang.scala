@@ -155,21 +155,20 @@ class DongJiang(localHf: Node, csnRf: Option[Node] = None, csnHf: Option[Node] =
 
 // ------------------------------------------ Modules declaration ----------------------------------------------//
 
-    val localRnSlave    = Module(new RnSlavePCU(IncoID.LOCALSLV, djparam.localRnSlaveIntf))
-    val localSnMaster   = Module(new SnMasterPCU(IncoID.LOCALMAS, djparam.localSnMasterIntf))
-    val csnRnSlaveOpt   = if (hasCSNIntf) Some(Module(new RnSlavePCU(IncoID.CSNSLV, djparam.csnRnSlaveIntf.get))) else None
-    val csnRnMasterOpt  = if (hasCSNIntf) Some(Module(new RnMasterPCU(IncoID.CSNMAS, djparam.csnRnMasterIntf.get))) else None
+    val localRnSlave    = Module(new RnSlavePCU(localHf.bankId, IncoID.LOCALSLV, djparam.localRnSlaveIntf))
+    val localSnMaster   = Module(new SnMasterPCU(localHf.bankId, IncoID.LOCALMAS, djparam.localSnMasterIntf))
+    val csnRnSlaveOpt   = if (hasCSNIntf) Some(Module(new RnSlavePCU(localHf.bankId, IncoID.CSNSLV, djparam.csnRnSlaveIntf.get))) else None
+    val csnRnMasterOpt  = if (hasCSNIntf) Some(Module(new RnMasterPCU(localHf.bankId, IncoID.CSNMAS, djparam.csnRnMasterIntf.get))) else None
     val intfs           = if (hasCSNIntf) Seq(localRnSlave, localSnMaster, csnRnSlaveOpt.get, csnRnMasterOpt.get)
                           else            Seq(localRnSlave, localSnMaster)
     val databuffer      = Module(new DataBuffer())
 
     val xbar            = Module(new Xbar())
-    val slices          = Seq.fill(djparam.nrBank) { Module(new SliceWrapper()) }
+    val slices          = Seq.fill(nrBankPerDJ) { Module(new SliceWrapper(localHf.bankId)) }
     slices.zipWithIndex.foreach { case(s, i) => s.io.sliceId := i.U }
 
     // TODO:
     slices.foreach(_.io.valid := true.B)
-    xbar.io.bankVal.foreach(_ := true.B)
 
 
 // ---------------------------------------------- Connection ---------------------------------------------------//

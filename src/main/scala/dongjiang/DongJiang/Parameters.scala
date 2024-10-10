@@ -37,14 +37,14 @@ case class DJParam(
                     blockBytes: Int = 64,
                     beatBytes: Int = 32,
                     addressBits: Int = 48,
-                    hasLLC: Boolean = true,
+                    hasLLC: Boolean = true, // TODO
                     // ------------------------- Interface Mes -------------------- //
                     localRnSlaveIntf:   InterfaceParam =              InterfaceParam( name = "RnSalve_LOCAL",  isRn = true,   isSlave = true),
                     localSnMasterIntf:  InterfaceParam =              InterfaceParam( name = "SnMaster_LOCAL", isRn = false,  isSlave = false, chipId = Some(0)),
                     csnRnSlaveIntf:     Option[InterfaceParam] = None, // Some(InterfaceParam( name = "RnSalve_CSN",    isRn = true,   isSlave = true)),
                     csnRnMasterIntf:    Option[InterfaceParam] = None, // Some(InterfaceParam( name = "RnMaster_CSN",   isRn = true,   isSlave = false, chipId = Some(1) )),
-                    chiTxnidBits: Int = 12,
-                    chiDBIDBits: Int = 16,
+                    chiTxnidBits: Int = 12, // TODO
+                    chiDBIDBits: Int = 16, // TODO
                     // ------------------------ DCU Base Mes ------------------ //
                     nrDSBank: Int = 2,
                     nrDCUWBuf: Int = 4,
@@ -60,7 +60,7 @@ case class DJParam(
                     nrMSHRSets: Int = 2,
                     nrMSHRWays: Int = 4,
                     // number of bank or buffer
-                    nrBank: Int = 2,
+                    nrBank: Int = 4, // TODO
                     nrDatBuf: Int = 16,
                     // ------------------------ Directory Mes ------------------ //
                     // self dir & ds mes, dont care when hasLLC is false
@@ -94,15 +94,15 @@ case class DJParam(
 
 trait HasParseZJParam extends HasZJParams {
     val localRnfNode    = zjParams.localRing.filter(_.nodeType == NodeType.CC)
-    val localHnfNode    = zjParams.localRing.filter(_.nodeType == NodeType.HF).last
+    val localHnfNode    = zjParams.localRing.filter(_.nodeType == NodeType.HF)
     val localSnNode     = zjParams.localRing.filter(_.nodeType == NodeType.S)
     val hasCSN          = zjParams.csnRing.nonEmpty
     val csnHnfNodeOpt   = if(hasCSN) Option(zjParams.csnRing.filter(_.nodeType == NodeType.HF).last) else None
     val csnRnfNodeOpt   = if(hasCSN) Option(zjParams.csnRing.filter(_.nodeType == NodeType.RF).last) else None
 
-    require(zjParams.localRing.count(_.nodeType == NodeType.HF) == 1)
+    require(zjParams.localRing.count(_.nodeType == NodeType.HF) >= 1)
     require(localSnNode.last.mainMemory)
-    require(localHnfNode.splitFlit)
+    localHnfNode.foreach { case h => require(h.splitFlit) }
     if(hasCSN) {
         require(csnHnfNodeOpt.get.splitFlit)
         require(csnRnfNodeOpt.get.splitFlit)
@@ -112,12 +112,13 @@ trait HasParseZJParam extends HasZJParams {
     val chiNodeIdBits   = zjParams.nodeIdBits
 
     // Local Base Node Mes
+    val nrBankPerDJ     = localSnNode.length / localHnfNode.length
     val nrRnfNode       = zjParams.localRing.count(_.nodeType == NodeType.CC)
     val rnfNodeIdBits   = log2Ceil(nrRnfNode)
     val rnNodeIdSeq     = localRnfNode.map(_.nodeId)
     val snNodeIdSeq     = localSnNode.map(_.nodeId)
-    val ddrcNodeId      = localSnNode.map(_.nodeId).last
-    val hnfNodeId       = localHnfNode.nodeId
+    val ddrcNodeId      = localSnNode.filter(_.mainMemory).map(_.nodeId).last
+    val hnfNodeIdSeq    = localHnfNode.map(_.nodeId)
 
     // CSN Base Node Mes
     val csnHnfNodeId    = 0 // TODO
@@ -176,6 +177,7 @@ trait HasDJParam extends HasParseZJParam {
     val localChipId     = 0 // TODO
     val csnChipId       = 1 // TODO
     require(isPow2(nrBeat))
+    require(nrBankPerDJ * localHnfNode.length == djparam.nrBank)
 
     // Base Interface Mes
     val hasCSNIntf      = djparam.csnRnSlaveIntf.nonEmpty & djparam.csnRnMasterIntf.nonEmpty

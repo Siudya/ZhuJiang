@@ -119,7 +119,7 @@ class PCURSEntry(param: InterfaceParam)(implicit p: Parameters) extends DJBundle
 
 
 
-class RnSlavePCU(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) extends PCUBaseIO(isSlv = true, hasReq2Slice = true, hasDBRCReq = true) {
+class RnSlavePCU(djBankId: Int, rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) extends PCUBaseIO(isSlv = true, hasReq2Slice = true, hasDBRCReq = true) {
   // Del it
   io <> DontCare
   dontTouch(io)
@@ -439,9 +439,9 @@ class RnSlavePCU(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) ex
   io.chi.rxdat.bits         := DontCare
   io.chi.rxdat.bits.Opcode  := pcus(datSelId).chiMes.opcode
   io.chi.rxdat.bits.TgtID   := pcus(datSelId).chiMes.srcID
-  io.chi.rxdat.bits.SrcID   := hnfNodeId.U
+  io.chi.rxdat.bits.SrcID   := hnfNodeIdSeq(djBankId).U
   io.chi.rxdat.bits.TxnID   := pcus(datSelId).chiMes.txnID
-  io.chi.rxdat.bits.HomeNID := hnfNodeId.U
+  io.chi.rxdat.bits.HomeNID := hnfNodeIdSeq(djBankId).U
   io.chi.rxdat.bits.DBID    := datSelId
   io.chi.rxdat.bits.Resp    := pcus(datSelId).chiMes.resp
   io.chi.rxdat.bits.DataID  := io.dbSigs.dataFDB.bits.dataID
@@ -461,7 +461,7 @@ class RnSlavePCU(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) ex
   io.chi.rxrsp.bits         := DontCare
   io.chi.rxrsp.bits.Opcode  := Mux(pcus(rspSelId).chiMes.isRsp, pcus(rspSelId).chiMes.opcode, CompDBIDResp)
   io.chi.rxrsp.bits.TgtID   := Mux(pcus(rspSelId).chiMes.isRsp, pcus(rspSelId).chiMes.srcID,  pcus(rspSelId).chiMes.srcID)
-  io.chi.rxrsp.bits.SrcID   := Mux(pcus(rspSelId).chiMes.isRsp, hnfNodeId.U,                  hnfNodeId.U)
+  io.chi.rxrsp.bits.SrcID   := Mux(pcus(rspSelId).chiMes.isRsp, hnfNodeIdSeq(djBankId).U,     hnfNodeIdSeq(djBankId).U)
   io.chi.rxrsp.bits.TxnID   := Mux(pcus(rspSelId).chiMes.isRsp, pcus(rspSelId).chiMes.txnID,  pcus(rspSelId).chiMes.txnID)
   io.chi.rxrsp.bits.DBID    := Mux(pcus(rspSelId).chiMes.isRsp, rspSelId,                     rspSelId)
   io.chi.rxrsp.bits.Resp    := Mux(pcus(rspSelId).chiMes.isRsp, pcus(rspSelId).chiMes.resp,   DontCare)
@@ -544,7 +544,7 @@ class RnSlavePCU(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) ex
   io.chi.rxsnp.bits.Addr      := pcus(pcuSendSnpID).indexMes.addr(addressBits - 1, 3)
   io.chi.rxsnp.bits.Opcode    := pcus(pcuSendSnpID).chiMes.opcode
   io.chi.rxsnp.bits.TgtID     := snpTgtID
-  io.chi.rxsnp.bits.SrcID     := hnfNodeId.U
+  io.chi.rxsnp.bits.SrcID     := hnfNodeIdSeq(djBankId).U
   io.chi.rxsnp.bits.TxnID     := pcuSendSnpID
   io.chi.rxsnp.bits.FwdNID    := pcus(pcuSendSnpID).chiMes.srcID
   io.chi.rxsnp.bits.FwdTxnID  := pcus(pcuSendSnpID).chiMes.txnID

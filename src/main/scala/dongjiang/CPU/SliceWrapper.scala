@@ -7,7 +7,7 @@ import org.chipsalliance.cde.config._
 import xs.utils._
 import Utils.FastArb._
 
-class SliceWrapper()(implicit p: Parameters) extends DJModule {
+class SliceWrapper(djBankId: Int)(implicit p: Parameters) extends DJModule {
 // --------------------- IO declaration ------------------------//
   val io = IO(new Bundle {
     val valid           = Input(Bool())
@@ -24,8 +24,8 @@ class SliceWrapper()(implicit p: Parameters) extends DJModule {
 
 // --------------------- Modules declaration ------------------------//
   val directory     = Module(new DirectoryWrapper())
-  val reqPipe       = Module(new ProcessPipe())
-  val respPipe      = Module(new ProcessPipe())
+  val reqPipe       = Module(new ProcessPipe(djBankId))
+  val respPipe      = Module(new ProcessPipe(djBankId))
   val mshrCtl       = Module(new MSHRCtl())
   val mpReqQueue    = Module(new Queue(gen = new Req2NodeBundle(), entries = djparam.nrMpReqQueue, pipe = true, flow = true))
   val mpRespQueue   = Module(new Queue(gen = new Resp2NodeBundle(),entries = djparam.nrMpRespQueue, pipe = true, flow = true))

@@ -72,9 +72,12 @@ class Zhujiang(implicit p: Parameters) extends ZJModule {
   /*
    *Connect NHL2 IO <> xijiang
    */
-  val nrLocalCc       = zjParams.localRing.count(_.nodeType == NodeType.CC)
+  val ccNodes         = zjParams.localRing.filter(_.nodeType == NodeType.CC)
+  val nrLocalCc       = ccNodes.length
+  def createNHL2IO(i: Int) = { val l2 = Module(new ConnectToNHL2(params, ccNodes(i))); l2 }
+
   val io              = IO(new Bundle { val fromNHL2 = Vec(nrLocalCc, Flipped(new CHIBundleDecoupled(params))) })
-  val connectToNHL2s  = Seq.fill(nrLocalCc) { Module(new ConnectToNHL2(params, zjParams.localRing.filter(_.nodeType == NodeType.CC).last)) }
+  val connectToNHL2s  = ccNodes.indices.map(i => createNHL2IO(i))
   connectToNHL2s.zipWithIndex.foreach {
     case (connect, i) =>
       connect.io.fromNHL2 <> io.fromNHL2(i)
@@ -85,16 +88,20 @@ class Zhujiang(implicit p: Parameters) extends ZJModule {
   /*
    * dongjiang
    */
-  val ddrcNode  = zjParams.localRing.filter(_.mainMemory).last
+  val hnfNodes   = zjParams.localRing.filter(_.nodeType == NodeType.HF)
   val dcuNodes  = zjParams.localRing.filter(_.nodeType == NodeType.S).filter(!_.mainMemory)
+  val ddrcNode  = zjParams.localRing.filter(_.mainMemory).last
   require(zjParams.localRing.count(_.mainMemory) == 1)
 
-  val dongjiang = Module(new DongJiang(zjParams.localRing.filter(_.nodeType == NodeType.HF).last))
-  val ddrc      = Module(new FakeDDRC(ddrcNode))
-  val dcus      = Seq.fill(dcuNodes.length) { Module(new DCU(dcuNodes.head)) }
+  def createHnf(i: Int) = { val hnf = Module(new DongJiang(hnfNodes(i))); hnf }
+  def createDCU(i: Int) = { val dcu = Module(new DCU(dcuNodes(i))); dcu }
 
-  dongjiang.io.toLocal  <> localRing.icnHfs.get.last
-  ddrc.io.sn            <> localRing.icnSns.get.last
-  dcus.zip(localRing.icnSns.get.init).foreach { case(a, b) => a.io.sn(0) <> b }
+  val dongjiang = hnfNodes.indices.map(i => createHnf(i))
+  val dcus      = dcuNodes.indices.map(i => createDCU(i))
+  val ddrc      = Module(new FakeDDRC(ddrcNode))
+
+  dongjiang.zip(localRing.icnHfs.get).foreach { case(a, b) => a.io.toLocal <> b }
+  dcus.zip(localRing.icnSns.get).foreach      { case(a, b) => a.io.sn(0) <> b }
+  ddrc.io.sn    <> localRing.icnSns.get.last
 
 }
