@@ -21,7 +21,7 @@ case class InterfaceParam
     isSlave: Boolean,
     chipId: Option[Int] = None, // Use In MASTER
     nrPCUEntry: Int = 16,
-    nrPCUEvictEntry: Int = 4
+    nrPCUEvictEntry: Int = 4 // Use In RN
 ) {
     val pcuIdBits = log2Ceil(nrPCUEntry)
     val isSn = !isRn
@@ -39,37 +39,38 @@ case class DJParam(
                     addressBits: Int = 48,
                     hasLLC: Boolean = true, // TODO
                     // ------------------------- Interface Mes -------------------- //
-                    localRnSlaveIntf:   InterfaceParam =              InterfaceParam( name = "RnSalve_LOCAL",  isRn = true,   isSlave = true),
-                    localSnMasterIntf:  InterfaceParam =              InterfaceParam( name = "SnMaster_LOCAL", isRn = false,  isSlave = false, chipId = Some(0)),
+                    localRnSlaveIntf:   InterfaceParam =              InterfaceParam( name = "RnSalve_LOCAL",  isRn = true,   isSlave = true, nrPCUEntry = 32, nrPCUEvictEntry = 8),
+                    localSnMasterIntf:  InterfaceParam =              InterfaceParam( name = "SnMaster_LOCAL", isRn = false,  isSlave = false, chipId = Some(0), nrPCUEntry = 32),
                     csnRnSlaveIntf:     Option[InterfaceParam] = None, // Some(InterfaceParam( name = "RnSalve_CSN",    isRn = true,   isSlave = true)),
                     csnRnMasterIntf:    Option[InterfaceParam] = None, // Some(InterfaceParam( name = "RnMaster_CSN",   isRn = true,   isSlave = false, chipId = Some(1) )),
                     chiTxnidBits: Int = 12, // TODO
                     chiDBIDBits: Int = 16, // TODO
-                    // ------------------------ DCU Base Mes ------------------ //
-                    nrDSBank: Int = 2,
-                    nrDCUWBuf: Int = 4,
-                    nrDCURBuf: Int = 4,
+                    // --------------------------- Base Mes ------------------- //
+                    // number of bank or buffer
+                    nrBank: Int = 4, // TODO
+                    nrDatBuf: Int = 32,
+                    // ------------------------ DCU Base Mes Per Bank ------------------ //
+                    nrDSBank: Int = 4,
+                    nrDCUWBuf: Int = 16,
+                    nrDCURBuf: Int = 16,
                     nrDCURespQ: Int = 4,
                     dcuMulticycle: Int = 2,
                     dcuHoldMcp: Boolean = true,
-                    // ------------------------ CPU Base Mes ------------------ //
+                    // ------------------------ CPU Base Mes Per Bank ------------------ //
                     nrMpTaskQueue: Int = 4,
                     nrMpReqQueue: Int = 4,
                     nrMpRespQueue: Int = 4,
                     // MSHR
-                    nrMSHRSets: Int = 2,
-                    nrMSHRWays: Int = 4,
-                    // number of bank or buffer
-                    nrBank: Int = 4, // TODO
-                    nrDatBuf: Int = 16,
-                    // ------------------------ Directory Mes ------------------ //
+                    nrMSHRSets: Int = 4,
+                    nrMSHRWays: Int = 16,
+                    // ------------------------ Directory Mes Per Bank ------------------ //
                     // self dir & ds mes, dont care when hasLLC is false
-                    selfWays: Int = 4,
-                    selfSets: Int = 32,
+                    selfWays: Int = 16,
+                    selfSets: Int = 4096,
                     selfReplacementPolicy: String = "plru",
                     // snoop filter dir mes
-                    sfDirWays: Int = 4,
-                    sfDirSets: Int = 32,
+                    sfDirWays: Int = 16,
+                    sfDirSets: Int = 2048,
                     sfReplacementPolicy: String = "plru",
                     // DIR SRAM
                     nrDirBank: Int = 4,
@@ -205,9 +206,9 @@ trait HasDJParam extends HasParseZJParam {
 
     // Base Fake DDRC Mes
     val nrDDRCBank      = dataBits / 64
-    val nrDDRCRBuf      = 4
-    val nrDDRCWBuf      = 4
-    val nrDDRCRespQ     = 4
+    val nrDDRCRBuf      = djparam.nrDCURBuf
+    val nrDDRCWBuf      = djparam.nrDCUWBuf
+    val nrDDRCRespQ     = djparam.nrDCURespQ
     val ddrcWBufIdBits  = log2Ceil(nrDDRCWBuf)
 
     // Slice Id Bits Parameters
