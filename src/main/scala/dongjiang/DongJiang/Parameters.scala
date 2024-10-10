@@ -194,8 +194,7 @@ trait HasDJParam extends HasParseZJParam {
     // Base DCU Mes
     val dcuWBufIdBits   = log2Ceil(djparam.nrDCUWBuf)
     val dcuRBufIdBits   = log2Ceil(djparam.nrDCURBuf)
-    val nrDCUsEntry     = djparam.selfSets * djparam.selfWays
-    val nrPerDCUEntry   = nrDCUsEntry / djparam.nrBank
+    val nrPerDCUEntry   = djparam.selfSets * djparam.selfWays
     val nrDSEntry       = nrPerDCUEntry / djparam.nrDSBank
     // DCU Index = [sSet] + [dirBank] + [sWay] = [dsIndex] + [dsBank]
     // Bank -> EREQ TgtID
@@ -221,12 +220,13 @@ trait HasDJParam extends HasParseZJParam {
 
     // SELF DIR Parameters: [sTag] + [sSet] + [dirBank] + [bank] + [offset]
     val sWayBits        = log2Ceil(djparam.selfWays)
-    val sSetBits        = log2Ceil(djparam.selfSets  / djparam.nrBank  /djparam.nrDirBank)
+    val sSetBits        = log2Ceil(djparam.selfSets /djparam.nrDirBank)
     val sTagBits        = djparam.addressBits - sSetBits - dirBankBits - bankBits - offsetBits
+    require(sSetBits + dirBankBits + sWayBits == dcuIndexBits)
 
     // SF DIR Parameters: [sfTag] + [sfSet] + [dirBank] + [bank] + [offset]
     val sfWayBits       = log2Ceil(djparam.sfDirWays)
-    val sfSetBits       = log2Ceil(djparam.sfDirSets / djparam.nrBank / djparam.nrDirBank)
+    val sfSetBits       = log2Ceil(djparam.sfDirSets / djparam.nrDirBank)
     val sfTagBits       = djparam.addressBits - sfSetBits - dirBankBits - bankBits - offsetBits
 
     // DIR SET MAX

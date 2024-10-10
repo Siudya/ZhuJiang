@@ -24,7 +24,7 @@ class DBEntry(implicit p: Parameters) extends DJBundle with HasToIncoID {
   val state       = UInt(DBState.width.W)
   val beatRNum    = UInt(log2Ceil(nrBeat).W)
   val needClean   = Bool()
-  val beats       = Vec(nrBeat, UInt(beatBits.W))
+  val beats       = Vec(nrBeat, UInt(beatBits.W)) // TODO: Reg -> SRAM
 
   def getBeat     = beats(beatRNum)
   def isFree      = state === DBState.FREE
