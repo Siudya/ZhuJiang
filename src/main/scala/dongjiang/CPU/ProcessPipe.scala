@@ -326,6 +326,7 @@ class ProcessPipe(djBankId: Int)(implicit p: Parameters) extends DJModule {
   /*
    * Send Commit to S4
    */
+  commit_s3.addr            := task_s3_g.bits.addr
   commit_s3.channel         := decode_s3.respChnl
   commit_s3.opcode          := decode_s3.respOp
   commit_s3.srcID           := task_s3_g.bits.reqMes.srcID
