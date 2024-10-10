@@ -25,7 +25,7 @@ class DirectoryWrapper()(implicit p: Parameters) extends DJModule {
 
 // -------------------------- Modules declaration ------------------------//
   val selfs = Seq.fill(djparam.nrDirBank) { Module(new DirectoryBase( tagBits = sTagBits,
-                                                                      sets = djparam.selfSets / djparam.nrBank / djparam.nrDirBank,
+                                                                      sets = djparam.selfSets / djparam.nrDirBank,
                                                                       ways = djparam.selfWays,
                                                                       nrMetas = 1,
                                                                       replPolicy = djparam.selfReplacementPolicy,
@@ -35,7 +35,7 @@ class DirectoryWrapper()(implicit p: Parameters) extends DJModule {
   selfs.zipWithIndex.foreach { case(s, i) => s.io.id := i.U }
 
   val sfs   = Seq.fill(djparam.nrDirBank) { Module(new DirectoryBase( tagBits = sfTagBits,
-                                                                      sets = djparam.sfDirSets  / djparam.nrBank / djparam.nrDirBank,
+                                                                      sets = djparam.sfDirSets / djparam.nrDirBank,
                                                                       ways = djparam.sfDirWays,
                                                                       nrMetas = nrRnfNode,
                                                                       replPolicy = djparam.sfReplacementPolicy,
