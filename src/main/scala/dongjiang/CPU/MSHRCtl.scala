@@ -43,8 +43,8 @@ class MSHREntry(implicit p: Parameters) extends DJBundle {
   def respBeSend      = isBeSend & isResp
   def reqBeSend       = isBeSend & isReq
 
-  def addr(x: UInt): UInt = { require(x.getWidth == mshrSetBits); Cat(tag, x, bank, 0.U(offsetBits.W)) }
-  def dirBank(x: UInt): UInt = { require(x.getWidth == mshrSetBits); getDirBank(addr(x)) }
+  def addr(x: UInt): UInt = { require(x.getWidth <= mshrSetBits); Cat(tag, x.asTypeOf(UInt(mshrSetBits.W)), bank, 0.U(offsetBits.W)) }
+  def dirBank(x: UInt): UInt = { require(x.getWidth <= mshrSetBits); getDirBank(addr(x)) }
 }
 
 
