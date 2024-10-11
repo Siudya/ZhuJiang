@@ -8,6 +8,7 @@ import zhujiang.device.bridge.axi.AxiBridge
 import zhujiang.device.bridge.axilite.AxiLiteBridge
 import zhujiang.device.bridge.chi.ChiSnBridge
 import zhujiang.device.bridge.tlul.TLULBridge
+import zhujiang.device.dma.Axi2Chi
 
 object UnitTop {
   val firtoolOpts = Seq(FirtoolOption("-O=release"),
@@ -46,5 +47,12 @@ object ChiSnBridgeTop extends App {
   val (config, firrtlOpts) = ZhujiangTopParser(args)
   (new ChiselStage).execute(firrtlOpts, firtoolOpts ++ Seq(
     ChiselGeneratorAnnotation(() => new ChiSnBridge(Node(nodeType = NodeType.HI, splitFlit = true, outstanding = 8))(config))
+  ))
+}
+
+object DmaTop extends App {
+  val (config, firrtlOpts) = ZhujiangTopParser(args)
+  (new ChiselStage).execute(firrtlOpts, firtoolOpts ++ Seq(
+    ChiselGeneratorAnnotation(() => new Axi2Chi(Node(nodeType = NodeType.RI, splitFlit = true))(config))
   ))
 }
