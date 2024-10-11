@@ -7,6 +7,7 @@ import xijiang.c2c.C2cParams
 import xijiang.tfb.TrafficBoardParams
 import xijiang.tfs.TrafficSimParams
 import xijiang.{Node, NodeParam, NodeType}
+import zhujiang.device.dma.DmaParams
 
 import scala.math.abs
 
@@ -173,6 +174,7 @@ case class ZJParameters(
   reqEjectBufDepth: Int = 8,
   localNodeParams: Seq[NodeParam] = Seq(),
   csnNodeParams: Seq[NodeParam] = Seq(),
+  dmaParams: DmaParams = DmaParams(),
   c2cParams: C2cParams = C2cParams(),
   tfbParams: Option[TrafficBoardParams] = Some(TrafficBoardParams()),
   tfsParams: Option[TrafficSimParams] = None,
