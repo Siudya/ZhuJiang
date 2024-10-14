@@ -180,17 +180,23 @@ class ProcessPipe(djBankId: Int)(implicit p: Parameters) extends DJModule {
   /*
    * Get Decode Result
    */
-  LocalReadDecode.table.zipWithIndex.foreach { case(t, i) =>
+  val table = LocalReadDecode.table ++ LoaclSnpUniqueEvictDecode.table ++ LoaclDatalessDecode.table ++ LoaclWriteDecode.table
+  table.zipWithIndex.foreach { case(t, i) =>
     val width0 = t._1.getWidth
     val width1 = inst_s3.asUInt.getWidth
     require(width0 == width1,  s"Index: $i: Inst Width $width0 =/= $width1")
   }
-  LocalReadDecode.table.zipWithIndex.foreach { case (t, i) =>
+  table.zipWithIndex.foreach { case (t, i) =>
     val width0 = t._2.getWidth
     val width1 = decode_s3.asUInt.getWidth
     require(width0 == width1, s"Index: $i: Decode Width $width0 =/= $width1")
   }
-  decode_s3.decode(inst_s3, table = LocalReadDecode.table ++ LoaclSnpUniqueEvictDecode.table ++ LoaclDatalessDecode.table ++ LoaclWriteDecode.table)
+  table.zipWithIndex.foreach { case (t, i) =>
+    val inst   = t._1.asTypeOf(new InstBundle())
+    val decode = t._1.asTypeOf(new DecodeBundle())
+    assert(!(decode.cleanDB & decode.writeDCU), s"Index: $i")
+  }
+  decode_s3.decode(inst_s3, table)
   when(valid_s3) { assert(decode_s3.asUInt =/= 0.U,
     "\n\nADDR[0x%x] DECODE ERROR: No inst match in decode table\n" +
       "INST: CHIP[0x%x] CHNL[0x%x] OP[0x%x] SRC[0x%x] OTH[0x%x] HN[0x%x] RESP[0x%x] DATA[0x%x] SNP[0x%x] FWD[0x%x] RD[0x%x]\n", task_s3_g.bits.addr,
