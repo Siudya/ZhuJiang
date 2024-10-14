@@ -116,7 +116,6 @@ class DecodeBundle extends Bundle with HasOperationsBundle {
 
 object Inst {
   val HasData = true.B
-  val NoData  = false.B
 
   def FromLocal           : UInt = { val temp = WireInit(0.U.asTypeOf(new InstBundle())); temp.chipType := ChipType.Local;  temp.asUInt }
   def FromCSN             : UInt = { val temp = WireInit(0.U.asTypeOf(new InstBundle())); temp.chipType := ChipType.CSN;    temp.asUInt }
@@ -127,14 +126,12 @@ object Inst {
   def HnIs      (x: UInt) : UInt = { val temp = WireInit(0.U.asTypeOf(new InstBundle())); temp.hnState := x;                temp.asUInt }
   def RespIs    (x: UInt) : UInt = { val temp = WireInit(0.U.asTypeOf(new InstBundle())); temp.respType := x;               temp.asUInt }
   def RespData  (x: Bool) : UInt = { val temp = WireInit(0.U.asTypeOf(new InstBundle())); temp.respHasData := x;            temp.asUInt }
-  def RespHasData         : UInt = { val temp = WireInit(0.U.asTypeOf(new InstBundle())); temp.respHasData := HasData;      temp.asUInt }
-  def RespNoData          : UInt = { val temp = WireInit(0.U.asTypeOf(new InstBundle())); temp.respHasData := NoData;       temp.asUInt }
   def SnpRespIs (x: UInt) : UInt = { val temp = WireInit(0.U.asTypeOf(new InstBundle())); temp.snpResp := x;                temp.asUInt }
   def FwdStateIs(x: UInt) : UInt = { val temp = WireInit(0.U.asTypeOf(new InstBundle())); temp.fwdState := x;               temp.asUInt }
   def RDRespIs  (x: UInt) : UInt = { val temp = WireInit(0.U.asTypeOf(new InstBundle())); temp.rdResp := x;                 temp.asUInt }
 
   def LocalReqInst (op: UInt, src: UInt, oth: UInt, hn: UInt, data: Bool = false.B): UInt = FromLocal | Chnl(CHIChannel.REQ) | Op(op) | SrcIs(src) | OthIs(oth) | HnIs(hn) | RespData(data)
-  def LocalRespInst(chnl: UInt, op: UInt, src: UInt, oth: UInt, hn: UInt, respType: UInt, data: Bool, snp: UInt = ChiResp.I, fwd: UInt = ChiResp.I, rd: UInt = ChiResp.I): UInt = FromLocal | Chnl(chnl) | Op(op) | SrcIs(src) | OthIs(oth) | HnIs(hn) | RespIs(respType) | RespData(data) | SnpRespIs(snp) | FwdStateIs(fwd) | RDRespIs(rd)
+  def LocalRespInst(chnl: UInt, op: UInt, src: UInt, oth: UInt, hn: UInt, respType: UInt, data: Bool = false.B, snp: UInt = ChiResp.I, fwd: UInt = ChiResp.I, rd: UInt = ChiResp.I): UInt = FromLocal | Chnl(chnl) | Op(op) | SrcIs(src) | OthIs(oth) | HnIs(hn) | RespIs(respType) | RespData(data) | SnpRespIs(snp) | FwdStateIs(fwd) | RDRespIs(rd)
 }
 
 
