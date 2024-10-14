@@ -174,6 +174,7 @@ class DongJiang(localHf: Node, csnRf: Option[Node] = None, csnHf: Option[Node] =
 // ---------------------------------------------- Connection ---------------------------------------------------//
     /*
      * Connect LOCAL RING CHI IO
+     * TODO: opposite direction
      */
     // tx req
     io.toLocal.tx.req.get   <> localRnSlave.io.chi.txreq

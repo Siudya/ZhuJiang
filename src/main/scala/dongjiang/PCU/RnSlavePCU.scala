@@ -480,8 +480,8 @@ class RnSlavePCU(djBankId: Int, rnSlvId: Int, param: InterfaceParam)(implicit p:
    */
   io.dbSigs.dataTDB.valid         := io.chi.txdat.valid
   io.dbSigs.dataTDB.bits.dbid     := pcus(pcuRecChiDatID).indexMes.dbid
-  io.dbSigs.dataTDB.bits.data     := io.chi.rxdat.bits.Data
-  io.dbSigs.dataTDB.bits.dataID   := io.chi.rxdat.bits.DataID
+  io.dbSigs.dataTDB.bits.data     := io.chi.txdat.bits.Data
+  io.dbSigs.dataTDB.bits.dataID   := io.chi.txdat.bits.DataID
 
 
   /*
