@@ -134,7 +134,7 @@ case class Node(
       }
       case HF => chn match {
         case "RSP" => Seq(CC, RF, RI)
-        case "DAT" => Seq(CC, RF, RI)
+        case "DAT" => Seq(CC, RF, RI, S)
         case "SNP" => Seq(CC, RF)
         case "ERQ" => Seq(S)
         case _ => Seq[Int]()
