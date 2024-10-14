@@ -549,7 +549,7 @@ class RnSlavePCU(djBankId: Int, rnSlvId: Int, param: InterfaceParam)(implicit p:
   io.chi.rxsnp.bits.TxnID     := pcuSendSnpID
   io.chi.rxsnp.bits.FwdNID    := pcus(pcuSendSnpID).chiMes.srcID
   io.chi.rxsnp.bits.FwdTxnID  := pcus(pcuSendSnpID).chiMes.txnID
-  io.chi.rxsnp.bits.RetToSrc  := pcus(pcuSendSnpID).chiMes.retToSrc
+  io.chi.rxsnp.bits.RetToSrc  := pcus(pcuSendSnpID).chiMes.retToSrc & snpAlreadySendVecReg === 0.U
   io.chi.rxsnp.bits.DoNotGoToSD := pcus(pcuSendSnpID).chiMes.doNotGoToSD
 
 
