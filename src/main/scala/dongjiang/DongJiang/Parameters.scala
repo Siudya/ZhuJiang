@@ -205,9 +205,9 @@ trait HasDJParam extends HasParseZJParam {
 
     // Base Fake DDRC Mes
     val nrDDRCBank      = dataBits / 64
-    val nrDDRCRBuf      = djparam.nrDCURBuf
-    val nrDDRCWBuf      = djparam.nrDCUWBuf
-    val nrDDRCRespQ     = djparam.nrDCURespQ
+    val nrDDRCRBuf      = 8
+    val nrDDRCWBuf      = 8
+    val nrDDRCRespQ     = 8
     val ddrcWBufIdBits  = log2Ceil(nrDDRCWBuf)
 
     // Slice Id Bits Parameters

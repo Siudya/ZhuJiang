@@ -126,7 +126,7 @@ class FakeDDRC(node: Node)(implicit p: Parameters) extends DJModule {
     /*
      * Select Buf Send Req To DDR
      */
-    val willSendRVec         = rBufRegVec.map { case r => r.state === DDRCRState.ReadDDR  & rRespQ.io.enq.ready }
+    val willSendRVec         = rBufRegVec.map { case r => r.state === DDRCRState.ReadDDR  & rRespQ.io.count <= (nrDDRCRespQ - 2).U }; require(nrDDRCRespQ >= 2)
     val willSendWVec         = wBufRegVec.map { case w => w.state === DDRCWState.WriteDDR }
     val rDDRID               = PriorityEncoder(willSendRVec)
     val wDDRID               = PriorityEncoder(willSendWVec)
@@ -269,7 +269,11 @@ class FakeDDRC(node: Node)(implicit p: Parameters) extends DJModule {
 // ------------------------------------------------------------ Assertion ----------------------------------------------- //
     assert(Mux(txReq.valid, txReq.bits.Size === log2Ceil(djparam.blockBytes).U, true.B))
 
+    assert(Mux(rRespQ.io.enq.valid, rDatQ.io.enq.ready, true.B))
+
     assert(Mux(rDatQ.io.enq.valid, rDatQ.io.enq.ready, true.B))
+
+    assert(!(rRespQ.io.enq.valid ^ rDatQ.io.enq.valid))
 
     assert(Mux(txReq.valid, txReq.bits.Opcode === ReadNoSnp | txReq.bits.Opcode === WriteNoSnpFull, true.B))
 }
