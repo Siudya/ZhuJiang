@@ -62,7 +62,7 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
     val pipeTask      = Vec(2, Decoupled(new PipeTaskBundle()))
     // Update Task From MainPipe
     val updMSHR       = Flipped(Decoupled(new UpdateMSHRReqBundle()))
-    val updLockMSHR   = Flipped(Decoupled(new MSHRSetBundle)) // TODO: It should be locked according to dir set but not mshr set
+    val updLockMSHR   = Vec(2, Flipped(Valid(new MSHRSetBundle))) // TODO: It should be locked according to dir set but not mshr set
     // Directory Read Req
     val earlyRReqVec  = Vec(djparam.nrDirBank, Decoupled())
     val dirRead       = Vec(2, Valid(new DirReadBundle()))
@@ -244,14 +244,15 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
    */
   mshrLockVecReg.zipWithIndex.foreach {
     case(lock, i) =>
-      when(io.updLockMSHR.valid & io.updLockMSHR.bits.mshrSet === i.U) {
+      when((io.updLockMSHR(0).valid & io.updLockMSHR(0).bits.mshrSet === i.U) | (io.updLockMSHR(1).valid & io.updLockMSHR(1).bits.mshrSet === i.U)) {
         lock := false.B
+        assert(lock)
       }.elsewhen((taskReq_s0.valid & canGoReq_s0 & taskReq_s0.bits.readDir & taskReq_s0.bits.mSet === i.U) | // Req Fire
                  (taskResp_s0.valid & canGoResp_s0 & taskResp_s0.bits.readDir & taskResp_s0.bits.mSet === i.U)) { // Resp Fire
         lock := true.B
       }
   }
-  io.updLockMSHR.ready := true.B
+  assert(Mux(io.updLockMSHR(0).valid & io.updLockMSHR(1).valid, !(io.updLockMSHR(0).bits.mshrSet === io.updLockMSHR(1).bits.mshrSet), true.B))
 
 
 
@@ -433,4 +434,8 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
   cntMSHRReg.zipWithIndex.foreach { case (c0, i) => c0.zipWithIndex.foreach { case(c1, j) => c1 := Mux(mshrTableReg(i)(j).isFree, 0.U, c1 + 1.U)  } }
   cntMSHRReg.zipWithIndex.foreach { case (c0, i) => c0.zipWithIndex.foreach { case(c1, j) => assert(c1 < TIMEOUT_MSHR.U, "MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x] STATE[0x%x] TIMEOUT", i.U, j.U, mshrTableReg(i)(j).addr(i.U), mshrTableReg(i)(j).chiMes.channel, mshrTableReg(i)(j).chiMes.opcode, mshrTableReg(i)(j).state) } }
 
+  // MSHRLock Timeout Check
+  val cntLockReg = RegInit(VecInit(Seq.fill(djparam.nrMSHRSets) { 0.U(64.W) }))
+  cntLockReg.zipWithIndex.foreach { case(c, i) => c := Mux(!mshrLockVecReg(i), 0.U , c + 1.U) }
+  cntLockReg.zipWithIndex.foreach { case(c, i) => assert(c < TIMEOUT_MSLOCK.U, "MSHR LOCK [0x%x] TIMEOUT", i.U) }
 }

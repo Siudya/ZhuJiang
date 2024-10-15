@@ -22,7 +22,7 @@ class ProcessPipe(djBankId: Int)(implicit p: Parameters) extends DJModule {
     val task        = Flipped(Decoupled(new PipeTaskBundle()))
     // Update Task To MSHR
     val updMSHR     = Decoupled(new UpdateMSHRReqBundle())
-    val updLockMSHR = Decoupled(new MSHRSetBundle)
+    val updLockMSHR = Valid(new MSHRSetBundle)
     // Req To Node
     val req2Node    = Decoupled(new Req2NodeBundle())
     // Resp To Node
