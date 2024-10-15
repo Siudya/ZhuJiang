@@ -322,7 +322,7 @@ class DCU(node: Node, nrIntf: Int = 1)(implicit p: Parameters) extends DJModule 
             val rHit = rBufRegVec(sendRReqID).state === DCURState.Reading & rBufRegVec(sendRReqID).dsBank === i.U
             when(wHit) {
                 d.io.write.index := wBufRegVec(sendWReqID).dsIndex
-                d.io.write.data  := Cat(wBufRegVec(sendWReqID).data.map(_.bits))
+                d.io.write.data  := Cat(wBufRegVec(sendWReqID).data.map(_.bits).reverse)
                 assert(wBufRegVec(sendWReqID).data.map(_.valid).reduce(_ & _))
             }.elsewhen(rHit) {
                 d.io.read        := rBufRegVec(sendRReqID).dsIndex

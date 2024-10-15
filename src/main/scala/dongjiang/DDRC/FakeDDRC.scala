@@ -142,7 +142,7 @@ class FakeDDRC(node: Node)(implicit p: Parameters) extends DJModule {
         case (d, i) =>
             d.wIdx  := wBufRegVec(wDDRID).index
             d.wen   := willSendWVec.reduce(_ | _)
-            d.wdata := Cat(wBufRegVec(wDDRID).data.map(_.bits)).asTypeOf(Vec(nrDDRCBank, UInt(64.W)))(i)
+            d.wdata := Cat(wBufRegVec(wDDRID).data.map(_.bits).reverse).asTypeOf(Vec(nrDDRCBank, UInt(64.W)))(i)
     }
 
     /*
