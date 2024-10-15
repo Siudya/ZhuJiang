@@ -76,21 +76,21 @@ import xs.utils._
 object PCURS {
   val width = 4
   // commom
-  val Free            = "b0000".U
-  val Req2Slice       = "b0001".U
-  val WaitSliceAck    = "b0010".U
-  val WaitSliceResp   = "b0011".U
-  val RCDB            = "b0100".U // Read & Clean DataBuffer
-  val Resp2Node       = "b0101".U
-  val WaitCompAck     = "b0110".U
-  val Resp2Slice      = "b0111".U
-  val GetDBID         = "b1000".U
-  val WaitDBID        = "b1001".U
-  val DBIDResp2Node   = "b1010".U
-  val WaitData        = "b1011".U
-  val Snp2Node        = "b1100".U
-  val Snp2NodeIng     = "b1101".U
-  val WaitSnpResp     = "b1110".U
+  val Free            = "b0000".U // 0x0
+  val Req2Slice       = "b0001".U // 0x1
+  val WaitSliceAck    = "b0010".U // 0x2
+  val WaitSliceResp   = "b0011".U // 0x3
+  val RCDB            = "b0100".U // 0x4 // Read & Clean DataBuffer
+  val Resp2Node       = "b0101".U // 0x5
+  val WaitCompAck     = "b0110".U // 0x6
+  val Resp2Slice      = "b0111".U // 0x7
+  val GetDBID         = "b1000".U // 0x8
+  val WaitDBID        = "b1001".U // 0x9
+  val DBIDResp2Node   = "b1010".U // 0xa
+  val WaitData        = "b1011".U // 0xb
+  val Snp2Node        = "b1100".U // 0xc
+  val Snp2NodeIng     = "b1101".U // 0xd
+  val WaitSnpResp     = "b1110".U // 0xe
 }
 
 class PCURSEntry(param: InterfaceParam)(implicit p: Parameters) extends DJBundle  {
@@ -201,9 +201,9 @@ class RnSlavePCU(djBankId: Int, rnSlvId: Int, param: InterfaceParam)(implicit p:
        * TODO: Advance judgment to avoid generating multiple repetitive logic
        */
       when((io.chi.txreq.fire | io.req2Node.fire | io.resp2Node.fire) & pcuFreeID === i.U) {
-        val snp2PCUHit    = io.req2Node.fire    & io.req2Node.bits.addrNoOff                         === indexSaveInPCU.addrNoOff
-        val resp2SliceHit = io.resp2Slice.fire  & pcus(pcuResp2SliceID).indexMes.addrNoOff           === indexSaveInPCU.addrNoOff
-        val reqAckHit     = io.reqAck2Node.fire & pcus(io.reqAck2Node.bits.pcuId).indexMes.addrNoOff === indexSaveInPCU.addrNoOff & !io.reqAck2Node.bits.retry
+        val snp2PCUHit    = io.req2Node.fire    & io.req2Node.bits.addrNoOff                         === indexSaveInPCU.addrNoOff & io.req2Node.bits.isSnp      // SNP add NID
+        val resp2SliceHit = io.resp2Slice.fire  & pcus(pcuResp2SliceID).indexMes.addrNoOff           === indexSaveInPCU.addrNoOff                               // SNP reduce NID
+        val reqAckHit     = io.reqAck2Node.fire & pcus(io.reqAck2Node.bits.pcuId).indexMes.addrNoOff === indexSaveInPCU.addrNoOff & !io.reqAck2Node.bits.retry  // REQ reduce NID
         // req
         when(io.chi.txreq.fire) {
           pcu.nid         := taskNID - resp2SliceHit.asUInt - reqAckHit.asUInt
@@ -220,9 +220,9 @@ class RnSlavePCU(djBankId: Int, rnSlvId: Int, param: InterfaceParam)(implicit p:
        * Modify NID
        */
       }.elsewhen(!pcu.isFree & pcu.chiMes.isReq) {
-        val snp2PCUHit    = io.req2Node.fire    & io.req2Node.bits.addrNoOff                         === pcu.indexMes.addrNoOff
-        val resp2SliceHit = io.resp2Slice.fire  & pcus(pcuResp2SliceID).indexMes.addrNoOff           === pcu.indexMes.addrNoOff
-        val reqAckHit     = io.reqAck2Node.fire & pcus(io.reqAck2Node.bits.pcuId).indexMes.addrNoOff === pcu.indexMes.addrNoOff & !io.reqAck2Node.bits.retry & io.reqAck2Node.bits.pcuId =/= i.U
+        val snp2PCUHit    = io.req2Node.fire    & io.req2Node.bits.addrNoOff                         === pcu.indexMes.addrNoOff & io.req2Node.bits.isSnp  // SNP add NID
+        val resp2SliceHit = io.resp2Slice.fire  & pcus(pcuResp2SliceID).indexMes.addrNoOff           === pcu.indexMes.addrNoOff                           // SNP reduce NID
+        val reqAckHit     = io.reqAck2Node.fire & pcus(io.reqAck2Node.bits.pcuId).indexMes.addrNoOff === pcu.indexMes.addrNoOff & !io.reqAck2Node.bits.retry & io.reqAck2Node.bits.pcuId =/= i.U // REQ reduce NID
         pcu.nid           := pcu.nid + snp2PCUHit.asUInt - resp2SliceHit.asUInt - reqAckHit.asUInt
         // assert
         assert((pcu.nid + snp2PCUHit.asUInt) >= (resp2SliceHit.asTypeOf(taskNID) + reqAckHit.asTypeOf(taskNID)), "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state)
@@ -243,7 +243,9 @@ class RnSlavePCU(djBankId: Int, rnSlvId: Int, param: InterfaceParam)(implicit p:
           val datHit        = io.chi.txdat.fire & pcuRecChiDatID === i.U & pcu.isLastBeat
           val rspId         = getMetaIdByNodeID(io.chi.txrsp.bits.SrcID)
           val datId         = getMetaIdByNodeID(io.chi.txdat.bits.SrcID)
-          pcu.getSnpRespOH  := pcu.getSnpRespOH | (UIntToOH(rspId) & rspHit) | (UIntToOH(datId) & datHit)
+          val rspIdOH       = Mux(rspHit, UIntToOH(rspId), 0.U)
+          val datIdOH       = Mux(datHit, UIntToOH(datId), 0.U)
+          pcu.getSnpRespOH  := pcu.getSnpRespOH | rspIdOH | datIdOH
           // assert
           val getSnpRespVec = Wire(Vec(nrRnfNode, Bool()))
           val tgtSnpVec     = Wire(Vec(nrRnfNode, Bool()))
@@ -370,8 +372,10 @@ class RnSlavePCU(djBankId: Int, rnSlvId: Int, param: InterfaceParam)(implicit p:
   val reqVal        = io.chi.txreq.valid
   val snpVal        = io.req2Node.valid; assert(Mux(snpVal, io.req2Node.bits.isSnp, true.B))
   val respVal       = io.resp2Node.valid
+  // count NID
   val addrMatchVec  = pcus.map(_.indexMes.addrNoOff === indexSaveInPCU.addrNoOff)
-  val taskMatchVec  = pcuFreeVec.zip(addrMatchVec).map{ case(a, b) => !a & b }
+  val reqOrSnpVec   = pcus.map { case p => p.chiMes.isReq | p.chiMes.isSnp }
+  val taskMatchVec  = pcuFreeVec.zip(addrMatchVec.zip(reqOrSnpVec)).map{ case(a, (b, c)) => !a & b & c }
   //                                  | RESP                                  | SNP                                     | REQ
   taskNID                       := Mux(respVal, 0.U,                          Mux(snpVal, 0.U,                          PopCount(taskMatchVec)))
   indexSaveInPCU.addr           := Mux(respVal, io.resp2Node.bits.addr,       Mux(snpVal, io.req2Node.bits.addr,        io.chi.txreq.bits.Addr))
