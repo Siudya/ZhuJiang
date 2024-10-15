@@ -192,8 +192,10 @@ class DirectoryWrapper()(implicit p: Parameters) extends DJModule {
 
 
 // ------------------------------------------------------- Assertion --------------------------------------------------- //
-  assert((PopCount(selfs.map(_.io.earlyRReq.valid)) + PopCount(selfs.map(_.io.earlyWReq.valid))) <= 2.U, "selfDirs: no more than two request can be entered at the same time")
-  assert((PopCount(sfs.map(_.io.earlyRReq.valid)) + PopCount(sfs.map(_.io.earlyWReq.valid))) <= 2.U, "sfDirs: no more than two request can be entered at the same time")
+  assert(PopCount(selfs.map(_.io.earlyRReq.valid)) <= 2.U, "selfDirs: no more than two read request can be entered at the same time")
+  assert(PopCount(selfs.map(_.io.earlyWReq.valid)) <= 2.U, "selfDirs: no more than two write request can be entered at the same time")
+  assert(PopCount(sfs.map(_.io.earlyRReq.valid)) <= 2.U, "sfDirs: no more than two read request can be entered at the same time")
+  assert(PopCount(sfs.map(_.io.earlyWReq.valid)) <= 2.U, "sfDirs: no more than two write request can be entered at the same time")
   assert(!selfs.map(_.io.earlyRReq.fire).zip(sfs.map(_.io.earlyRReq.fire)).map { case(s, sf) => s ^ sf }.reduce(_ | _), "selfDirs and sfDirs dirRead must be fire at the same time")
 
   assert(PopCount(selfs.map(_.io.dirResp.valid)) <= 2.U, "selfDirs dirResp: no more than two resp can be output at a time")
