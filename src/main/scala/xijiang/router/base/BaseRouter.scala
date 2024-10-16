@@ -38,11 +38,17 @@ class RouterRingIO(csn: Boolean)(implicit p: Parameters) extends ZJBundle {
   val rx = Input(new RingSide(csn))
 }
 
+class ResetRingIO extends Bundle {
+  val tx = Output(UInt(2.W))
+  val rx = Input(UInt(2.W))
+}
+
 trait BaseRouterUtils {
   m: ZJModule =>
   def node: Node
   override val desiredName = node.routerStr
   val tfbNodeType = if(node.csnNode) ((1 << NodeType.width) | node.nodeType).U else node.nodeType.U
+  private val isDefaultHi = node.nodeType == NodeType.HI && node.defaultHni
 
   val local = !node.csnNode
   val c2c = node.csnNode && node.nodeType == NodeType.C
@@ -54,8 +60,13 @@ trait BaseRouterUtils {
     val chip = Input(UInt(p(ZJParametersKey).nodeAidBits.W))
     val nodeId = Output(UInt(niw.W))
     val c2cIds = if(!local && !c2c && node.nodeType != NodeType.P) Some(Input(Vec(csnC2cNum, new NodeIdBundle))) else None
+    val reset = new ResetRingIO
   })
-  val icn = IO(new IcnBundle(node))
+  val icn = IO(new IcnBundle(node, true))
+
+  private val resetState = RegNext(router.reset.rx)
+  if(isDefaultHi) router.reset.tx := icn.resetInject.get else router.reset.tx := resetState
+  icn.resetState.get := resetState
 
   val nid = if(local) node.nodeId.U(niw.W) else node.nodeId.U(niw.W) | router.chip
 
