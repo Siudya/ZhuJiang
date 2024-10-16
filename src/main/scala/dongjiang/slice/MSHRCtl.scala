@@ -1,8 +1,8 @@
-package DONGJIANG.CPU
+package dongjiang.slice
 
-import DONGJIANG._
-import DONGJIANG.CHI._
-import DONGJIANG.DECODE._
+import dongjiang._
+import dongjiang.chi._
+import dongjiang.decode._
 import Utils.Encoder._
 import chisel3._
 import chisel3.util._

@@ -1,4 +1,4 @@
-package DONGJIANG
+package dongjiang
 
 import Utils.FastArb
 import chisel3._

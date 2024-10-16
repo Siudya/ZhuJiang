@@ -1,12 +1,12 @@
-package DONGJIANG.DDRC
+package dongjiang.ddrc
 
 import zhujiang.chi._
 import xijiang.Node
-import DONGJIANG._
-import DONGJIANG.CHI._
-import DONGJIANG.CHI.CHIOp.REQ._
-import DONGJIANG.CHI.CHIOp.RSP._
-import DONGJIANG.CHI.CHIOp.DAT._
+import dongjiang._
+import dongjiang.chi._
+import dongjiang.chi.CHIOp.REQ._
+import dongjiang.chi.CHIOp.RSP._
+import dongjiang.chi.CHIOp.DAT._
 import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config._

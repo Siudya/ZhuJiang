@@ -11,9 +11,9 @@ import chisel3.experimental.{ChiselAnnotation, annotate}
 import sifive.enterprise.firrtl.NestedPrefixModulesAnnotation
 import org.chipsalliance.cde.config.Parameters
 import xijiang.{NodeType, Ring}
-import DONGJIANG._
-import DONGJIANG.DCU._
-import DONGJIANG.DDRC._
+import dongjiang._
+import dongjiang.dcu._
+import dongjiang.ddrc._
 import chisel3.util.{Decoupled, DecoupledIO}
 import xijiang.c2c.C2cLinkPort
 import zhujiang.chi.{DataFlit, ReqFlit, RespFlit}

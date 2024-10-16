@@ -1,7 +1,7 @@
-package DONGJIANG.PCU
+package dongjiang.pcu
 
-import DONGJIANG._
-import DONGJIANG.CHI._
+import dongjiang._
+import dongjiang.chi._
 import chisel3._
 import org.chipsalliance.cde.config._
 import chisel3.util.{Cat, Decoupled, PopCount, RegEnable, Valid, ValidIO, log2Ceil}

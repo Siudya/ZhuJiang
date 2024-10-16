@@ -1,18 +1,18 @@
-package DONGJIANG.DECODE
+package dongjiang.decode
 
-import DONGJIANG._
-import DONGJIANG.DECODE.InstBundle
-import DONGJIANG.DECODE.RespType._
-import DONGJIANG.ChipType._
-import DONGJIANG.DECODE.Inst._
-import DONGJIANG.DECODE.Code._
-import DONGJIANG.CHI._
-import DONGJIANG.CHI.CHIChannel._
-import DONGJIANG.CHI.CHIOp.REQ._
-import DONGJIANG.CHI.CHIOp.RSP._
-import DONGJIANG.CHI.CHIOp.DAT._
-import DONGJIANG.CHI.CHIOp.SNP._
-import DONGJIANG.CHI.ChiState._
+import dongjiang._
+import dongjiang.decode.InstBundle
+import dongjiang.decode.RespType._
+import dongjiang.ChipType._
+import dongjiang.decode.Inst._
+import dongjiang.decode.Code._
+import dongjiang.chi._
+import dongjiang.chi.CHIChannel._
+import dongjiang.chi.CHIOp.REQ._
+import dongjiang.chi.CHIOp.RSP._
+import dongjiang.chi.CHIOp.DAT._
+import dongjiang.chi.CHIOp.SNP._
+import dongjiang.chi.ChiState._
 import chisel3._
 import chisel3.util._
 

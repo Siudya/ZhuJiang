@@ -1,6 +1,6 @@
-package DONGJIANG
+package dongjiang
 
-import DONGJIANG.CHI._
+import dongjiang.chi._
 import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config._

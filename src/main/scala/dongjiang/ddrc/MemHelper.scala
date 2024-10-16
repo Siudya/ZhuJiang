@@ -1,4 +1,4 @@
-package DONGJIANG.DDRC
+package dongjiang.ddrc
 
 import org.chipsalliance.cde.config.Parameters
 import chisel3._

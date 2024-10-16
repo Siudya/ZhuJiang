@@ -1,8 +1,8 @@
-package DONGJIANG.CPU
+package dongjiang.slice
 
-import DONGJIANG._
-import DONGJIANG.DECODE._
-import DONGJIANG.CHI._
+import dongjiang._
+import dongjiang.decode._
+import dongjiang.chi._
 import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config._

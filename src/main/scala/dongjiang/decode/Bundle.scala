@@ -1,17 +1,17 @@
-package DONGJIANG.DECODE
+package dongjiang.decode
 
-import DONGJIANG._
-import DONGJIANG.CHI._
-import DONGJIANG.CHI.CHIChannel._
+import dongjiang._
+import dongjiang.chi._
+import dongjiang.chi.CHIChannel._
 import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config.Parameters
 import xs.utils.ParallelLookUp
-import DONGJIANG.CHI.CHIOp.REQ._
-import DONGJIANG.CHI.CHIOp.RSP._
-import DONGJIANG.CHI.CHIOp.DAT._
-import DONGJIANG.CHI.CHIOp.SNP._
-import DONGJIANG.CHI.ChiState._
+import dongjiang.chi.CHIOp.REQ._
+import dongjiang.chi.CHIOp.RSP._
+import dongjiang.chi.CHIOp.DAT._
+import dongjiang.chi.CHIOp.SNP._
+import dongjiang.chi.ChiState._
 
 
 object RespType {

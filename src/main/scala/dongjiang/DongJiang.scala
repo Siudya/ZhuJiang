@@ -1,10 +1,10 @@
-package DONGJIANG
+package dongjiang
 
 import zhujiang.chi._
 import xijiang.Node
-import DONGJIANG.CHI._
-import DONGJIANG.PCU._
-import DONGJIANG.CPU._
+import dongjiang.chi._
+import dongjiang.pcu._
+import dongjiang.slice._
 import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config._
