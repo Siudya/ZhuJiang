@@ -12,7 +12,7 @@ import xs.utils._
 
 /*
  * ************************************************************** State transfer ***********************************************************************************
- *
+ * Req Contain Read and Dataless
  * Req Retry:             [Free]  -----> [Req2Slice] -----> [WaitSliceAck] ---retry---> [Req2Slice]
  * Req Receive:           [Free]  -----> [Req2Slice] -----> [WaitSliceAck] --receive--> [Free]
  *
@@ -70,6 +70,63 @@ import xs.utils._
  * [------]           | [------]                 | [------]
  * [------]           | [------]                 | [------]
  * [------]           | [------]                 | [------]
+ *
+ *
+ *
+ * ************************************************************** PCU ID Transfer ********************************************************************************
+ *
+ * chiIdx: CHI Index
+ * { TgtID | SrcID | TxnID | DBID | FwdNID | FwdTxnID }
+ *
+ * pcuIdx: PCU Index
+ * { incoID | pcuID | mshrSet | mshrWay }
+ *
+ *
+ * Read / Dataless:
+ * { Read / Dataless } TxReq  From CHI And Store In PCU         { chiMes.nodeID = SrcID } { chiMes.txnID = TxnID }                                      |
+ * { Req2Slice       } Req    From PCU And Send To Slice        { chiMes.nodeID = SrcID } { chiMes.txnID = TxnID }                                      | { idxMes.incoID = LOCALSLV } { idxMes.pcuID = pcuID }
+ * { ReqAck          } ReqAck From Slice and Match With PCU ID                                                                                          | { idxMes.pcuID == pcuID }
+ * { Resp2Node       } Resp   From Slice And Store In PCU       { chiMes.nodeID = tgtID } { chiMes.txnID = txnID } { idxMes.dbid = dbid }               |
+ * { Comp(Data)      } RxRsp  Send To CHI                       { TgtID = chiMes.nodeID } { TxnID = chiMes.txnID } { HomeNID = hnfID } { DBID = pcuID } |
+ * { CompAck         } TxRsp  From CHI And Match With PCU ID    { TxnID == pcuID }                                                                      |
+ *
+ *
+ * Read with DMT: TODO
+ * { Read            } TxReq  From CHI And Store In PCU         { chiMes.nodeID = SrcID } { chiMes.txnID = TxnID }                                      |
+ * { Req2Slice       } Req    From PCU And Send To Slice        { chiMes.nodeID = SrcID } { chiMes.txnID = TxnID }                                      | { idxMes.incoID = LOCALSLV } { idxMes.pcuID = pcuID }
+ * { ReqAck          } ReqAck From Slice and Match With PCU ID                                                                                          | { idxMes.pcuID == pcuID }
+ * { CompAck         } TxRsp  From CHI And Send Resp To Slice   { chiMes.txnID  = TxnID(Cat(bankID, mshrSet, mshrWay)) }                                |
+ *
+ *
+ * Write:
+ * { Write           } TxReq  From CHI And Store In PCU         { chiMes.nodeID = SrcID } { chiMes.txnID = TxnID }                                      |
+ * { CompDBIDResp    } RxRsp  Send To CHI                       { TgtID = chiMes.nodeID } { TxnID = chiMes.txnID } { DBID = pcuID }                     |
+ * { WriteData       } TxRsp  From CHI And Match With PCU ID    { TxnID == pcuID }                                                                      |
+ * { Req2Slice       } Req    From PCU And Send To Slice                                                                                                | { idxMes.incoID = LOCALSLV } { idxMes.pcuID = pcuID }
+ * { ReqAck          } ReqAck From Slice and Match With PCU ID                                                                                          | { idxMes.pcuID == pcuID }
+ *
+ *
+ * Write with DWT: TODO
+ * { Write           } TxReq  From CHI And Store In PCU         { chiMes.nodeID = SrcID } { chiMes.txnID = TxnID }                                      |
+ * { Req2Slice       } Req    From PCU And Send To Slice        { chiMes.nodeID = SrcID } { chiMes.txnID = TxnID }                                      | { idxMes.incoID = LOCALSLV } { idxMes.pcuID = pcuID }
+ * { ReqAck          } ReqAck From Slice and Match With PCU ID                                                                                          | { idxMes.pcuID == pcuID }
+ *
+ *
+ * Snoop:
+ * { Req2Node        } Req    From Slice And Store In PCU                                                                                               | { idxMes.snpVec = idx.snpVec } { idxMes.mshrWay = idxMes.mshrWay }
+ * { Snoop           } Req    Send To CHI                       { TgtID = snpID } { TxnID = pcuID }                                                     |
+ * { SnResp(Data)    } Resp   From CHI And Match With PCU ID    { TxnID == pcuID }                                                                      |
+ * { Resp2Slice      } Resp   Send To Slice                                                                                                             | { idxMes.incoID = LOCALSLV } {idxMes.mshrSet = chiMes.mSet } { idxMes.mshrWay = mshrWay }
+ *
+ *
+ * Snoop with DCT: TODO
+ * { Req2Node        } Req    From Slice And Store In PCU       { chiMes.nodeID =  chiMes.nodeID } { chiMes.txnID =  chiMes.txnID }                     | { idxMes.snpVec = idx.snpVec } { idxMes.mshrWay = idxMes.mshrWay }
+ * { Snoop           } Req    Send To CHI                       { TgtID = snpID } { TxnID = pcuID }                                                     |
+ * { SnResp          } Resp   From CHI And Match With PCU ID    { TxnID == pcuID }                                                                      |
+ * { SnoopFwd        } Req    Send To CHI                       { TgtID = snpID } { TxnID = pcuID } { FwdNID = chiMes.nodeID } { FwdTxnID = chiMes.txnID } |
+ * { SnpResp(Data)Fwded } Resp From CHI And Match With PCU ID   { TxnID == pcuID }                                                                      |
+ * { Resp2Slice      } Resp   Send To Slice                                                                                                             | { idxMes.incoID = LOCALSLV } {idxMes.mshrSet = chiMes.mSet } { idxMes.mshrWay = mshrWay }
+ *
  *
  */
 

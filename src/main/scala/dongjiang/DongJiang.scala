@@ -45,22 +45,6 @@ class DongJiang(localHf: Node, csnRf: Option[Node] = None, csnHf: Option[Node] =
  */
 
 
-/*
- * TODO: Update It
- * How To Detemine A Req( Read / Dataless / Atomic / CMO / Write ) Go To Which Master( RNMASTER / SNMASTER ):
- * 1. Use CoreID
- *
- * How To Detemine A Req( Read / Dataless / Atomic / CMO / Write ) Go To HN(In CSN) or SN(In LocalRing) Node:
- * 1. Use CoreID
- *
- * How To Detemine A Snoop Go To Which Slave:
- * 1. It will be detemine by SF Result; It may be possible to send Snoop to Slave more than one
- * 2. Snp*Fwd only will be send to one Slave
- *
- */
-
-
-
 
 /*
  * TODO: Update It
