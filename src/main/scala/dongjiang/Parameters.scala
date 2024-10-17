@@ -24,11 +24,11 @@ case class InterfaceParam
     nrEntry: Int = 16,
     nrEvictEntry: Int = 4 // Use In RN
 ) {
-    val entryIdBits = log2Ceil(nrEntry)
-    val isSn = !isRn
-    val isMaster = !isSlave
-    val hasReq2Slice = true
-    val hasDBRCReq = isMaster
+    lazy val entryIdBits = log2Ceil(nrEntry)
+    lazy val isSn = !isRn
+    lazy val isMaster = !isSlave
+    lazy val hasReq2Slice = true
+    lazy val hasDBRCReq = isMaster
     if(isMaster) require(chipId.nonEmpty) else require(chipId.isEmpty)
 }
 
@@ -95,12 +95,12 @@ case class DJParam(
 
 
 trait HasParseZJParam extends HasZJParams {
-    val localRnfNode    = zjParams.localRing.filter(_.nodeType == NodeType.CC)
-    val localHnfNode    = zjParams.localRing.filter(_.nodeType == NodeType.HF)
-    val localSnNode     = zjParams.localRing.filter(_.nodeType == NodeType.S)
-    val hasCSN          = zjParams.csnRing.nonEmpty
-    val csnHnfNodeOpt   = if(hasCSN) Option(zjParams.csnRing.filter(_.nodeType == NodeType.HF).last) else None
-    val csnRnfNodeOpt   = if(hasCSN) Option(zjParams.csnRing.filter(_.nodeType == NodeType.RF).last) else None
+    lazy val localRnfNode    = zjParams.localRing.filter(_.nodeType == NodeType.CC)
+    lazy val localHnfNode    = zjParams.localRing.filter(_.nodeType == NodeType.HF)
+    lazy val localSnNode     = zjParams.localRing.filter(_.nodeType == NodeType.S)
+    lazy val hasCSN          = zjParams.csnRing.nonEmpty
+    lazy val csnHnfNodeOpt   = if(hasCSN) Option(zjParams.csnRing.filter(_.nodeType == NodeType.HF).last) else None
+    lazy val csnRnfNodeOpt   = if(hasCSN) Option(zjParams.csnRing.filter(_.nodeType == NodeType.RF).last) else None
 
     require(zjParams.localRing.count(_.nodeType == NodeType.HF) >= 1)
     require(localSnNode.last.mainMemory)
@@ -111,19 +111,19 @@ trait HasParseZJParam extends HasZJParams {
     }
 
     // CHI Node ID Width
-    val chiNodeIdBits   = zjParams.nodeIdBits
+    lazy val chiNodeIdBits   = zjParams.nodeIdBits
 
     // Local Base Node Mes
-    val nrBankPerDJ     = localSnNode.length / localHnfNode.length
-    val nrRnfNode       = zjParams.localRing.count(_.nodeType == NodeType.CC)
-    val rnfNodeIdBits   = log2Ceil(nrRnfNode)
-    val rnNodeIdSeq     = localRnfNode.map(_.nodeId)
-    val snNodeIdSeq     = localSnNode.map(_.nodeId)
-    val ddrcNodeId      = localSnNode.filter(_.mainMemory).map(_.nodeId).last
-    val hnfNodeIdSeq    = localHnfNode.map(_.nodeId)
+    lazy val nrBankPerDJ     = localSnNode.length / localHnfNode.length
+    lazy val nrRnfNode       = zjParams.localRing.count(_.nodeType == NodeType.CC)
+    lazy val rnfNodeIdBits   = log2Ceil(nrRnfNode)
+    lazy val rnNodeIdSeq     = localRnfNode.map(_.nodeId)
+    lazy val snNodeIdSeq     = localSnNode.map(_.nodeId)
+    lazy val ddrcNodeId      = localSnNode.filter(_.mainMemory).map(_.nodeId).last
+    lazy val hnfNodeIdSeq    = localHnfNode.map(_.nodeId)
 
     // CSN Base Node Mes
-    val csnHnfNodeId    = 0 // TODO
+    lazy val csnHnfNodeId    = 0 // TODO
 
     def fromSnNode(x: UInt) = snNodeIdSeq.map(_.asUInt === x).reduce(_ | _)
 
@@ -171,76 +171,76 @@ trait HasDJParam extends HasParseZJParam {
     val djparam = p(DJParamKey)
 
     // Base Mes Parameters
-    val nrBeat          = djparam.blockBytes / djparam.beatBytes
-    val beatNumBits     = log2Ceil(nrBeat)
-    val addressBits     = djparam.addressBits
-    val dataBits        = djparam.blockBytes * 8
-    val beatBits        = djparam.beatBytes * 8
-    val localChipId     = 0 // TODO
-    val csnChipId       = 1 // TODO
+    lazy val nrBeat          = djparam.blockBytes / djparam.beatBytes
+    lazy val beatNumBits     = log2Ceil(nrBeat)
+    lazy val addressBits     = djparam.addressBits
+    lazy val dataBits        = djparam.blockBytes * 8
+    lazy val beatBits        = djparam.beatBytes * 8
+    lazy val localChipId     = 0 // TODO
+    lazy val csnChipId       = 1 // TODO
     require(isPow2(nrBeat))
     require(nrBankPerDJ * localHnfNode.length == djparam.nrBank)
 
     // Base Interface Mes
-    val hasCSNIntf      = djparam.csnRnSlaveIntf.nonEmpty & djparam.csnRnMasterIntf.nonEmpty
-    val interfaceMes    = if(hasCSNIntf) Seq(djparam.localRnSlaveIntf, djparam.localSnMasterIntf, djparam.csnRnSlaveIntf.get, djparam.csnRnMasterIntf.get)
-                          else           Seq(djparam.localRnSlaveIntf, djparam.localSnMasterIntf)
-    val nrIntf          = interfaceMes.length
-    val nrSlvIntf       = interfaceMes.count(_.isSlave)
-    val nrMasIntf       = interfaceMes.count(_.isMaster)
-    val nrIntfBits      = log2Ceil(nrIntf)
-    val nrIntfEntryMax  = interfaceMes.map(_.nrEntry).max
-    val intfEntryIdBits = log2Ceil(nrIntfEntryMax)
+    lazy val hasCSNIntf      = djparam.csnRnSlaveIntf.nonEmpty & djparam.csnRnMasterIntf.nonEmpty
+    lazy val interfaceMes    = if(hasCSNIntf) Seq(djparam.localRnSlaveIntf, djparam.localSnMasterIntf, djparam.csnRnSlaveIntf.get, djparam.csnRnMasterIntf.get)
+                               else           Seq(djparam.localRnSlaveIntf, djparam.localSnMasterIntf)
+    lazy val nrIntf          = interfaceMes.length
+    lazy val nrSlvIntf       = interfaceMes.count(_.isSlave)
+    lazy val nrMasIntf       = interfaceMes.count(_.isMaster)
+    lazy val nrIntfBits      = log2Ceil(nrIntf)
+    lazy val nrIntfEntryMax  = interfaceMes.map(_.nrEntry).max
+    lazy val intfEntryIdBits = log2Ceil(nrIntfEntryMax)
 
     // Base DCU Mes
-    val dcuWBufIdBits   = log2Ceil(djparam.nrDCUWBuf)
-    val dcuRBufIdBits   = log2Ceil(djparam.nrDCURBuf)
-    val nrPerDCUEntry   = djparam.selfSets * djparam.selfWays
-    val nrDSEntry       = nrPerDCUEntry / djparam.nrDSBank
+    lazy val dcuWBufIdBits   = log2Ceil(djparam.nrDCUWBuf)
+    lazy val dcuRBufIdBits   = log2Ceil(djparam.nrDCURBuf)
+    lazy val nrPerDCUEntry   = djparam.selfSets * djparam.selfWays
+    lazy val nrDSEntry       = nrPerDCUEntry / djparam.nrDSBank
     // DCU Index = [sSet] + [dirBank] + [sWay] = [dsIndex] + [dsBank]
     // Bank -> EREQ TgtID
-    val dcuIndexBits    = log2Ceil(nrPerDCUEntry)
-    val dsIndexBits     = log2Ceil(nrDSEntry)
-    val dsBankBits      = log2Ceil(djparam.nrDSBank)
+    lazy val dcuIndexBits    = log2Ceil(nrPerDCUEntry)
+    lazy val dsIndexBits     = log2Ceil(nrDSEntry)
+    lazy val dsBankBits      = log2Ceil(djparam.nrDSBank)
     require(dcuIndexBits == (dsIndexBits + dsBankBits))
 
     // Base Fake DDRC Mes
-    val nrDDRCBank      = dataBits / 64
-    val nrDDRCRBuf      = 8
-    val nrDDRCWBuf      = 8
-    val nrDDRCRespQ     = 8
-    val ddrcWBufIdBits  = log2Ceil(nrDDRCWBuf)
+    lazy val nrDDRCBank      = dataBits / 64
+    lazy val nrDDRCRBuf      = 8
+    lazy val nrDDRCWBuf      = 8
+    lazy val nrDDRCRespQ     = 8
+    lazy val ddrcWBufIdBits  = log2Ceil(nrDDRCWBuf)
 
     // Slice Id Bits Parameters
-    val dbIdBits        = log2Ceil(djparam.nrDatBuf)
+    lazy val dbIdBits        = log2Ceil(djparam.nrDatBuf)
 
     // DIR BASE Parameters
-    val bankBits        = log2Ceil(djparam.nrBank)
-    val dirBankBits     = log2Ceil(djparam.nrDirBank)
-    val offsetBits      = log2Ceil(djparam.blockBytes)
+    lazy val bankBits        = log2Ceil(djparam.nrBank)
+    lazy val dirBankBits     = log2Ceil(djparam.nrDirBank)
+    lazy val offsetBits      = log2Ceil(djparam.blockBytes)
 
     // SELF DIR Parameters: [sTag] + [sSet] + [dirBank] + [bank] + [offset]
-    val sWayBits        = log2Ceil(djparam.selfWays)
-    val sSetBits        = log2Ceil(djparam.selfSets /djparam.nrDirBank)
-    val sTagBits        = djparam.addressBits - sSetBits - dirBankBits - bankBits - offsetBits
+    lazy val sWayBits        = log2Ceil(djparam.selfWays)
+    lazy val sSetBits        = log2Ceil(djparam.selfSets /djparam.nrDirBank)
+    lazy val sTagBits        = djparam.addressBits - sSetBits - dirBankBits - bankBits - offsetBits
     require(sSetBits + dirBankBits + sWayBits == dcuIndexBits)
 
     // SF DIR Parameters: [sfTag] + [sfSet] + [dirBank] + [bank] + [offset]
-    val sfWayBits       = log2Ceil(djparam.sfDirWays)
-    val sfSetBits       = log2Ceil(djparam.sfDirSets / djparam.nrDirBank)
-    val sfTagBits       = djparam.addressBits - sfSetBits - dirBankBits - bankBits - offsetBits
+    lazy val sfWayBits       = log2Ceil(djparam.sfDirWays)
+    lazy val sfSetBits       = log2Ceil(djparam.sfDirSets / djparam.nrDirBank)
+    lazy val sfTagBits       = djparam.addressBits - sfSetBits - dirBankBits - bankBits - offsetBits
 
     // DIR SET MAX
-    val maxDirSetBits   = max(sSetBits, sfSetBits)
+    lazy val maxDirSetBits   = max(sSetBits, sfSetBits)
 
     // MSHR TABLE Parameters: [mshrTag] + [mshrSet] + [bank] + [offset]
-    val mshrWayBits     = log2Ceil(djparam.nrMSHRWays)
-    val mshrSetBits     = log2Ceil(djparam.nrMSHRSets)
-    val mshrTagBits     = djparam.addressBits - mshrSetBits - bankBits - offsetBits
+    lazy val mshrWayBits     = log2Ceil(djparam.nrMSHRWays)
+    lazy val mshrSetBits     = log2Ceil(djparam.nrMSHRSets)
+    lazy val mshrTagBits     = djparam.addressBits - mshrSetBits - bankBits - offsetBits
 
     // replacement Parameters
-    val sReplWayBits    = if(djparam.selfReplacementPolicy != "random") djparam.selfWays - 1 else 0
-    val sfReplWayBits   = if(djparam.sfReplacementPolicy != "random") djparam.sfDirWays - 1 else 0
+    lazy val sReplWayBits    = if(djparam.selfReplacementPolicy != "random") djparam.selfWays - 1 else 0
+    lazy val sfReplWayBits   = if(djparam.sfReplacementPolicy != "random") djparam.sfDirWays - 1 else 0
     require(djparam.selfReplacementPolicy == "random" | djparam.selfReplacementPolicy == "plru", "It should modify sReplWayBits when use replacement except of random or plru")
     require(djparam.sfReplacementPolicy == "random" | djparam.sfReplacementPolicy == "plru", "It should modify cReplWayBits when use replacement except of random or plru")
 
@@ -248,13 +248,13 @@ trait HasDJParam extends HasParseZJParam {
     // TODO
 
     // TIMEOUT CHECK CNT VALUE
-    val TIMEOUT_DB      = 10000 // DataBuffer
-    val TIMEOUT_MSHR    = 8000 // BlockTable
-    val TIMEOUT_RSINTF  = 5000 // Rn Slave Intf
-    val TIMEOUT_SMINTF  = 5000 // Sn Master Intf
-    val TIMEOUT_RMINTF  = 5000 // Rn Master Intf
-    val TIMEOUT_MSLOCK  = 3000 // MSHR Lock
-    val TIMEOUT_EXU     = 3000 // Pipe Execute
+    lazy val TIMEOUT_DB      = 10000 // DataBuffer
+    lazy val TIMEOUT_MSHR    = 8000 // BlockTable
+    lazy val TIMEOUT_RSINTF  = 5000 // Rn Slave Intf
+    lazy val TIMEOUT_SMINTF  = 5000 // Sn Master Intf
+    lazy val TIMEOUT_RMINTF  = 5000 // Rn Master Intf
+    lazy val TIMEOUT_MSLOCK  = 3000 // MSHR Lock
+    lazy val TIMEOUT_EXU     = 3000 // Pipe Execute
 
     // some requirements for CHI width
     require(intfEntryIdBits <= djparam.chiTxnidBits)
