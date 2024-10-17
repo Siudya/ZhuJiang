@@ -161,6 +161,7 @@ class RnSlavePCU(djBankId: Int, rnSlvId: Int, param: InterfaceParam)(implicit p:
        * Receive New Req
        */
       when((io.chi.txreq.fire | io.req2Node.fire | io.resp2Node.fire) & pcuFreeID === i.U) {
+        pcu               := 0.U.asTypeOf(pcu)
         pcu.nid           := 0.U
         pcu.indexMes      := indexSaveInPCU
         pcu.chiMes        := taskSaveInPCU
