@@ -5,11 +5,9 @@ import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config._
 import xijiang.NodeType
-import zhujiang.HasZJParams
+import zhujiang.{HasZJParams, ZJParametersKey}
 
 import scala.math.{max, min}
-
-case object DJParamKey extends Field[DJParam](DJParam())
 
 
 // Node Interface Params, used for generation
@@ -113,7 +111,7 @@ trait HasParseZJParam extends HasZJParams {
     val chiNodeIdBits   = zjParams.nodeIdBits
 
     // Local Base Node Mes
-    val nrBankPerDJ     = localSnNode.length / localHnfNode.length
+    val nrBankPerDJ     = p(ZJParametersKey).djParams.nrBank / localHnfNode.length
     val nrRnfNode       = zjParams.localRing.count(_.nodeType == NodeType.CC)
     val rnfNodeIdBits   = log2Ceil(nrRnfNode)
     val rnNodeIdSeq     = localRnfNode.map(_.nodeId)
@@ -167,7 +165,7 @@ trait HasParseZJParam extends HasZJParams {
 
 trait HasDJParam extends HasParseZJParam {
     val p: Parameters
-    val djparam = p(DJParamKey)
+    val djparam = p(ZJParametersKey).djParams //TODO: use lazy val in all parameters
 
     // Base Mes Parameters
     val nrBeat          = djparam.blockBytes / djparam.beatBytes
