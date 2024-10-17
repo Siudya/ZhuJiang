@@ -175,19 +175,19 @@ class RnSlavePCU(djBankId: Int, rnSlvId: Int, param: InterfaceParam)(implicit p:
         pcu.indexMes.dbid := io.dbSigs.wResp.bits.dbid
         assert(pcu.state === PCURS.WaitDBID, "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state)
       /*
-       * Receive CHI TX Rsp
+       * Receive CHI TX Dat or CHI TX Rsp
        */
-      }.elsewhen(io.chi.txrsp.fire & pcuRecChiRspID === i.U){
-        pcu.chiMes.resp   := Mux(pcu.chiMes.isSnp & pcu.chiMes.retToSrc, io.chi.txrsp.bits.Resp, pcu.chiMes.resp)
-        when(io.chi.txrsp.bits.Opcode === CHIOp.RSP.CompAck) { assert(pcu.state === PCURS.WaitCompAck, "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state) }
-        .otherwise                                           { assert(pcu.state === PCURS.Snp2NodeIng | pcu.state === PCURS.WaitSnpResp, "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state) }
-      /*
-       * Receive CHI TX Dat
-       */
-      }.elsewhen(io.chi.txdat.fire & pcuRecChiDatID === i.U) {
-        pcu.getDataNum    := pcu.getDataNum + 1.U
-        pcu.chiMes.resp   := io.chi.txdat.bits.Resp
-        assert(Mux(pcu.chiMes.isSnp & pcu.chiMes.retToSrc, pcu.state === PCURS.Snp2NodeIng | pcu.state === PCURS.WaitSnpResp, pcu.state === PCURS.WaitData), "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state)
+      }.elsewhen((io.chi.txdat.fire & pcuRecChiDatID === i.U) | (io.chi.txrsp.fire & pcuRecChiRspID === i.U)) {
+        val hitRespDat    = io.chi.txdat.fire & pcuRecChiDatID === i.U
+        val hitRespRsp    = io.chi.txrsp.fire & pcuRecChiRspID === i.U
+        pcu.getDataNum    := pcu.getDataNum + hitRespDat.asUInt
+        pcu.chiMes.resp   := Mux(hitRespDat, io.chi.txdat.bits.Resp, Mux(hitRespRsp & !pcu.chiMes.retToSrc, io.chi.txrsp.bits.Resp, pcu.chiMes.resp))
+        when(hitRespDat) {
+          assert(Mux(pcu.chiMes.isSnp & pcu.chiMes.retToSrc, pcu.state === PCURS.Snp2NodeIng | pcu.state === PCURS.WaitSnpResp, pcu.state === PCURS.WaitData), "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state)
+        }.elsewhen(hitRespRsp) {
+          when(io.chi.txrsp.bits.Opcode === CHIOp.RSP.CompAck) { assert(pcu.state === PCURS.WaitCompAck, "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state) }
+          .otherwise {                                           assert(pcu.state === PCURS.Snp2NodeIng | pcu.state === PCURS.WaitSnpResp, "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state) }
+        }
       /*
        * Clean PCU Entry When Its Free
        */
@@ -344,9 +344,9 @@ class RnSlavePCU(djBankId: Int, rnSlvId: Int, param: InterfaceParam)(implicit p:
         is(PCURS.WaitSnpResp) {
           val rspHit    = io.chi.txrsp.fire & pcuRecChiRspID === i.U
           val datHit    = io.chi.txdat.fire & pcuRecChiDatID === i.U
-          val isLastRsp = PopCount(pcu.getSnpRespOH ^ pcu.chiMes.tgtID) === 1.U
-          pcu.state     := Mux(rspHit & isLastRsp, PCURS.Resp2Slice,
-                            Mux(datHit & pcu.isLastBeat & isLastRsp, PCURS.Resp2Slice, pcu.state))
+          val shlGetNum = PopCount(pcu.getSnpRespOH ^ pcu.chiMes.tgtID)
+          val nowGetNum = rspHit.asTypeOf(UInt(2.W)) + (datHit & pcu.isLastBeat).asTypeOf(UInt(2.W))
+          pcu.state     := Mux(shlGetNum === nowGetNum, PCURS.Resp2Slice, pcu.state)
         }
         // State: Resp2Slice
         is(PCURS.Resp2Slice) {
