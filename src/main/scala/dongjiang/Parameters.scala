@@ -1,6 +1,7 @@
 package dongjiang
 
 import dongjiang.chi._
+import dongjiang.pcu.ChipType
 import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config._
@@ -321,3 +322,7 @@ trait HasDJParam extends HasParseZJParam {
         else { 0.U }
     }
 }
+
+
+abstract class DJModule(implicit val p: Parameters) extends Module with HasDJParam
+abstract class DJBundle(implicit val p: Parameters) extends Bundle with HasDJParam

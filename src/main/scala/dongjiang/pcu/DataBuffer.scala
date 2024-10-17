@@ -1,10 +1,10 @@
-package dongjiang
+package dongjiang.pcu
 
 import dongjiang._
 import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config._
-import Utils.Encoder.RREncoder
+import dongjiang.utils.Encoder.RREncoder
 
 
 object DBState {

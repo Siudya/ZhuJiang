@@ -1,11 +1,12 @@
-package dongjiang.decode
+package dongjiang.pcu.exu.decode
 
 import dongjiang._
-import dongjiang.decode.InstBundle
-import dongjiang.decode.RespType._
-import dongjiang.ChipType._
-import dongjiang.decode.Inst._
-import dongjiang.decode.Code._
+import dongjiang.pcu._
+import dongjiang.pcu.exu.decode.InstBundle
+import dongjiang.pcu.exu.decode.RespType._
+import dongjiang.pcu.ChipType
+import dongjiang.pcu.exu.decode.Inst._
+import dongjiang.pcu.exu.decode.Code._
 import dongjiang.chi._
 import dongjiang.chi.CHIChannel._
 import dongjiang.chi.CHIOp.REQ._

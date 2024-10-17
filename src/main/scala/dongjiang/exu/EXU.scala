@@ -1,13 +1,14 @@
-package dongjiang.slice
+package dongjiang.pcu.exu
 
 import dongjiang._
+import dongjiang.pcu._
 import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config._
 import xs.utils._
-import Utils.FastArb._
+import dongjiang.utils.FastArb._
 
-class SliceWrapper(djBankId: Int)(implicit p: Parameters) extends DJModule {
+class ExecuteUnit(djBankId: Int)(implicit p: Parameters) extends DJModule {
 // --------------------- IO declaration ------------------------//
   val io = IO(new Bundle {
     val valid           = Input(Bool())

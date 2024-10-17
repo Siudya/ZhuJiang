@@ -1,12 +1,13 @@
-package dongjiang.pcu
+package dongjiang.pcu.intf
 
 import dongjiang._
+import dongjiang.pcu._
 import dongjiang.chi._
 import dongjiang.chi.CHIOp.REQ._
 import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config._
-import Utils.FastArb._
+import dongjiang.utils.FastArb._
 
 /*
  * Read Req:  [Free] -----> [GetDBID] -----> [WaitDBID] -----> [Req2Node] -----> [WaitNodeData] -----> [Resp2Slice]
@@ -71,7 +72,7 @@ class PCUSMEntry(param: InterfaceParam)(implicit p: Parameters) extends DJBundle
   def isRepl        = isReplace(chiMes.opcode)
 }
 
-class SnMasterPCU(djBankId: Int, snMasId: Int, param: InterfaceParam)(implicit p: Parameters) extends PCUBaseIO(isSlv = false, hasReq2Slice = false, hasDBRCReq = true) {
+class SnMasterIntf(djBankId: Int, snMasId: Int, param: InterfaceParam)(implicit p: Parameters) extends IntfBaseIO(isSlv = false, hasReq2Slice = false, hasDBRCReq = true) {
   // Del it
   io <> DontCare
   dontTouch(io)

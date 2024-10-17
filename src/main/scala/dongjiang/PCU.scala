@@ -1,23 +1,22 @@
-package dongjiang
+package dongjiang.pcu
 
+import dongjiang._
 import zhujiang.chi._
 import xijiang.Node
 import dongjiang.chi._
 import dongjiang.pcu._
-import dongjiang.slice._
+import dongjiang.pcu.exu._
+import dongjiang.pcu.intf._
 import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config._
 import xs.utils.perf.{DebugOptions, DebugOptionsKey}
-import Utils.FastArb._
+import dongjiang.utils.FastArb._
 import xijiang.router.base.IcnBundle
 import zhujiang.HasZJParams
 
-abstract class DJModule(implicit val p: Parameters) extends Module with HasDJParam
-abstract class DJBundle(implicit val p: Parameters) extends Bundle with HasDJParam
 
-
-class DongJiang(localHf: Node, csnRf: Option[Node] = None, csnHf: Option[Node] = None)(implicit p: Parameters) extends DJModule {
+class ProtocolCtrlUnit(localHf: Node, csnRf: Option[Node] = None, csnHf: Option[Node] = None)(implicit p: Parameters) extends DJModule {
 /*
  * TODO: Update It
  * System Architecture: (2 RNSLAVE, 1 RNMASTER, 1 SNMASTER and 2 Slice)
@@ -139,16 +138,16 @@ class DongJiang(localHf: Node, csnRf: Option[Node] = None, csnHf: Option[Node] =
 
 // ------------------------------------------ Modules declaration ----------------------------------------------//
 
-    val localRnSlave    = Module(new RnSlavePCU(localHf.bankId, IncoID.LOCALSLV, djparam.localRnSlaveIntf))
-    val localSnMaster   = Module(new SnMasterPCU(localHf.bankId, IncoID.LOCALMAS, djparam.localSnMasterIntf))
-    val csnRnSlaveOpt   = if (hasCSNIntf) Some(Module(new RnSlavePCU(localHf.bankId, IncoID.CSNSLV, djparam.csnRnSlaveIntf.get))) else None
-    val csnRnMasterOpt  = if (hasCSNIntf) Some(Module(new RnMasterPCU(localHf.bankId, IncoID.CSNMAS, djparam.csnRnMasterIntf.get))) else None
+    val localRnSlave    = Module(new RnSlaveIntf(localHf.bankId, IncoID.LOCALSLV, djparam.localRnSlaveIntf))
+    val localSnMaster   = Module(new SnMasterIntf(localHf.bankId, IncoID.LOCALMAS, djparam.localSnMasterIntf))
+    val csnRnSlaveOpt   = if (hasCSNIntf) Some(Module(new RnSlaveIntf(localHf.bankId, IncoID.CSNSLV, djparam.csnRnSlaveIntf.get))) else None
+    val csnRnMasterOpt  = if (hasCSNIntf) Some(Module(new RnMasterIntf(localHf.bankId, IncoID.CSNMAS, djparam.csnRnMasterIntf.get))) else None
     val intfs           = if (hasCSNIntf) Seq(localRnSlave, localSnMaster, csnRnSlaveOpt.get, csnRnMasterOpt.get)
                           else            Seq(localRnSlave, localSnMaster)
     val databuffer      = Module(new DataBuffer())
 
     val xbar            = Module(new Xbar())
-    val slices          = Seq.fill(nrBankPerDJ) { Module(new SliceWrapper(localHf.bankId)) }
+    val slices          = Seq.fill(nrBankPerDJ) { Module(new ExecuteUnit(localHf.bankId)) }
     slices.zipWithIndex.foreach { case(s, i) => s.io.sliceId := i.U }
 
     // TODO:

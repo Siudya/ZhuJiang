@@ -1,7 +1,8 @@
-package dongjiang.slice
+package dongjiang.pcu.exu
 
 import dongjiang._
-import dongjiang.decode._
+import dongjiang.pcu._
+import dongjiang.pcu.exu.decode._
 import dongjiang.chi._
 import chisel3._
 import chisel3.util._

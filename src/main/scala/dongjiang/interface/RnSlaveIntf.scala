@@ -1,13 +1,14 @@
-package dongjiang.pcu
+package dongjiang.pcu.intf
 
 import dongjiang._
+import dongjiang.pcu._
 import dongjiang.chi._
 import dongjiang.chi.CHIOp.REQ._
 import dongjiang.chi.CHIOp.RSP._
 import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config._
-import Utils.Encoder._
+import dongjiang.utils.Encoder._
 import xs.utils._
 
 /*
@@ -176,7 +177,7 @@ class PCURSEntry(param: InterfaceParam)(implicit p: Parameters) extends DJBundle
 
 
 
-class RnSlavePCU(djBankId: Int, rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) extends PCUBaseIO(isSlv = true, hasReq2Slice = true, hasDBRCReq = true) {
+class RnSlaveIntf(djBankId: Int, rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) extends IntfBaseIO(isSlv = true, hasReq2Slice = true, hasDBRCReq = true) {
   // Del it
   io <> DontCare
   dontTouch(io)

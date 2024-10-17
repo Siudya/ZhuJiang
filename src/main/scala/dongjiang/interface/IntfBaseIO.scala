@@ -1,14 +1,15 @@
-package dongjiang.pcu
+package dongjiang.pcu.intf
 
 import dongjiang._
+import dongjiang.pcu._
 import dongjiang.chi._
 import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config._
 import xs.utils._
-import Utils.FastArb._
+import dongjiang.utils.FastArb._
 
-abstract class PCUBaseIO(isSlv:Boolean, hasFree: Boolean = false, hasReq2Slice: Boolean = false, hasDBRCReq: Boolean = false)(implicit p: Parameters) extends DJModule {
+abstract class IntfBaseIO(isSlv:Boolean, hasFree: Boolean = false, hasReq2Slice: Boolean = false, hasDBRCReq: Boolean = false)(implicit p: Parameters) extends DJModule {
 // --------------------- IO declaration ------------------------//
   val io = IO(new Bundle {
     val freeOpt         = if(hasFree) Some(Output(Bool())) else None

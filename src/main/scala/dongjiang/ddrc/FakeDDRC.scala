@@ -13,7 +13,7 @@ import org.chipsalliance.cde.config._
 import xs.utils.perf.{DebugOptions, DebugOptionsKey}
 import xijiang.router.base.IcnBundle
 import xs.utils.sram._
-import Utils.FastArb._
+import dongjiang.utils.FastArb._
 
 
 object DDRCWState {

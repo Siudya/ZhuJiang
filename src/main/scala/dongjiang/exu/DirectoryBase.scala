@@ -1,6 +1,7 @@
-package dongjiang.slice
+package dongjiang.pcu.exu
 
 import dongjiang._
+import dongjiang.pcu._
 import dongjiang.chi._
 import chisel3.{util, _}
 import chisel3.util._
@@ -8,7 +9,7 @@ import org.chipsalliance.cde.config._
 import xs.utils.sram.SRAMTemplate
 import chisel3.util.random.LFSR
 import freechips.rocketchip.util.ReplacementPolicy
-import Utils.SramWrapper
+import dongjiang.utils.SramWrapper
 
 object DirCtrlState {
   // [Free] ---> [ReqFire] ---> [WaitMcp]  ---> [GetResp]

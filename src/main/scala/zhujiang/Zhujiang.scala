@@ -11,7 +11,7 @@ import chisel3.experimental.{ChiselAnnotation, annotate}
 import sifive.enterprise.firrtl.NestedPrefixModulesAnnotation
 import org.chipsalliance.cde.config.Parameters
 import xijiang.{NodeType, Ring}
-import dongjiang._
+import dongjiang.pcu._
 import dongjiang.dcu._
 import dongjiang.ddrc._
 import chisel3.util.{Decoupled, DecoupledIO}
@@ -88,20 +88,20 @@ class Zhujiang(implicit p: Parameters) extends ZJModule {
   /*
    * dongjiang
    */
-  val hnfNodes   = zjParams.localRing.filter(_.nodeType == NodeType.HF)
+  val hnfNodes  = zjParams.localRing.filter(_.nodeType == NodeType.HF)
   val dcuNodes  = zjParams.localRing.filter(_.nodeType == NodeType.S).filter(!_.mainMemory)
   val ddrcNode  = zjParams.localRing.filter(_.mainMemory).last
   require(zjParams.localRing.count(_.mainMemory) == 1)
 
-  def createHnf(i: Int) = { val hnf = Module(new DongJiang(hnfNodes(i))); hnf }
-  def createDCU(i: Int) = { val dcu = Module(new DCU(dcuNodes(i))); dcu }
+  def createHnf(i: Int) = { val hnf = Module(new ProtocolCtrlUnit(hnfNodes(i))); hnf }
+  def createDCU(i: Int) = { val dcu = Module(new DataCtrlUnit(dcuNodes(i))); dcu }
 
-  val dongjiang = hnfNodes.indices.map(i => createHnf(i))
+  val pcus      = hnfNodes.indices.map(i => createHnf(i))
   val dcus      = dcuNodes.indices.map(i => createDCU(i))
   val ddrc      = Module(new FakeDDRC(ddrcNode))
 
-  dongjiang.zip(localRing.icnHfs.get).foreach { case(a, b) => a.io.toLocal <> b }
-  dcus.zip(localRing.icnSns.get).foreach      { case(a, b) => a.io.sn(0) <> b }
+  pcus.zip(localRing.icnHfs.get).foreach { case(a, b) => a.io.toLocal <> b }
+  dcus.zip(localRing.icnSns.get).foreach { case(a, b) => a.io.sn(0) <> b }
   ddrc.io.sn    <> localRing.icnSns.get.last
 
 }

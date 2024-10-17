@@ -1,6 +1,7 @@
-package dongjiang.decode
+package dongjiang.pcu.exu.decode
 
 import dongjiang._
+import dongjiang.pcu._
 import dongjiang.chi._
 import dongjiang.chi.CHIChannel._
 import chisel3._
