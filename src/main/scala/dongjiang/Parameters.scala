@@ -247,11 +247,11 @@ trait HasDJParam extends HasParseZJParam {
     // TODO
 
     // TIMEOUT CHECK CNT VALUE
+    val TIMEOUT_DB      = 10000 // DataBuffer
     val TIMEOUT_MSHR    = 8000 // BlockTable
     val TIMEOUT_RSPCU   = 5000 // Rn Slave PCU
     val TIMEOUT_SMPCU   = 5000 // Sn Master PCU
     val TIMEOUT_RMPCU   = 5000 // Rn Master PCU
-    val TIMEOUT_DB      = 4000 // DataBuffer
     val TIMEOUT_MSLOCK  = 3000 // MSHR Lock
     val TIMEOUT_EXU     = 3000 // Pipe Execute
 
