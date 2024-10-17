@@ -115,6 +115,7 @@ class AxiBridge(node: Node)(implicit p: Parameters) extends ZJModule {
   readDataPipe.io.enq.bits.SrcID := 0.U
   readDataPipe.io.enq.bits.TgtID := ctrlSel.returnNid.get
   readDataPipe.io.enq.bits.HomeNID := ctrlSel.srcId
+  readDataPipe.io.enq.bits.DBID := ctrlSel.txnId
   readDataPipe.io.enq.bits.Resp := "b010".U
 
   icn.tx.data.get.valid := readDataPipe.io.deq.valid
