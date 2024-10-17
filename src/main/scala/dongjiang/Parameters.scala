@@ -21,10 +21,10 @@ case class InterfaceParam
     isRn: Boolean,
     isSlave: Boolean,
     chipId: Option[Int] = None, // Use In MASTER
-    nrPCUEntry: Int = 16,
-    nrPCUEvictEntry: Int = 4 // Use In RN
+    nrEntry: Int = 16,
+    nrEvictEntry: Int = 4 // Use In RN
 ) {
-    val pcuIdBits = log2Ceil(nrPCUEntry)
+    val entryIdBits = log2Ceil(nrEntry)
     val isSn = !isRn
     val isMaster = !isSlave
     val hasReq2Slice = true
@@ -40,8 +40,8 @@ case class DJParam(
                     addressBits: Int = 48,
                     hasLLC: Boolean = true, // TODO
                     // ------------------------- Interface Mes -------------------- //
-                    localRnSlaveIntf:   InterfaceParam =              InterfaceParam( name = "RnSalve_LOCAL",  isRn = true,   isSlave = true, nrPCUEntry = 32, nrPCUEvictEntry = 8),
-                    localSnMasterIntf:  InterfaceParam =              InterfaceParam( name = "SnMaster_LOCAL", isRn = false,  isSlave = false, chipId = Some(0), nrPCUEntry = 32),
+                    localRnSlaveIntf:   InterfaceParam =              InterfaceParam( name = "RnSalve_LOCAL",  isRn = true,   isSlave = true, nrEntry = 32, nrEvictEntry = 8),
+                    localSnMasterIntf:  InterfaceParam =              InterfaceParam( name = "SnMaster_LOCAL", isRn = false,  isSlave = false, chipId = Some(0), nrEntry = 32),
                     csnRnSlaveIntf:     Option[InterfaceParam] = None, // Some(InterfaceParam( name = "RnSalve_CSN",    isRn = true,   isSlave = true)),
                     csnRnMasterIntf:    Option[InterfaceParam] = None, // Some(InterfaceParam( name = "RnMaster_CSN",   isRn = true,   isSlave = false, chipId = Some(1) )),
                     chiTxnidBits: Int = 12, // TODO
@@ -189,8 +189,8 @@ trait HasDJParam extends HasParseZJParam {
     val nrSlvIntf       = interfaceMes.count(_.isSlave)
     val nrMasIntf       = interfaceMes.count(_.isMaster)
     val nrIntfBits      = log2Ceil(nrIntf)
-    val nrPCUMax        = interfaceMes.map(_.nrPCUEntry).max
-    val pcuIdBits       = log2Ceil(nrPCUMax)
+    val nrIntfEntryMax  = interfaceMes.map(_.nrEntry).max
+    val intfEntryIdBits = log2Ceil(nrIntfEntryMax)
 
     // Base DCU Mes
     val dcuWBufIdBits   = log2Ceil(djparam.nrDCUWBuf)
@@ -250,14 +250,14 @@ trait HasDJParam extends HasParseZJParam {
     // TIMEOUT CHECK CNT VALUE
     val TIMEOUT_DB      = 10000 // DataBuffer
     val TIMEOUT_MSHR    = 8000 // BlockTable
-    val TIMEOUT_RSPCU   = 5000 // Rn Slave PCU
-    val TIMEOUT_SMPCU   = 5000 // Sn Master PCU
-    val TIMEOUT_RMPCU   = 5000 // Rn Master PCU
+    val TIMEOUT_RSINTF  = 5000 // Rn Slave Intf
+    val TIMEOUT_SMINTF  = 5000 // Sn Master Intf
+    val TIMEOUT_RMINTF  = 5000 // Rn Master Intf
     val TIMEOUT_MSLOCK  = 3000 // MSHR Lock
     val TIMEOUT_EXU     = 3000 // Pipe Execute
 
     // some requirements for CHI width
-    require(pcuIdBits <= djparam.chiTxnidBits)
+    require(intfEntryIdBits <= djparam.chiTxnidBits)
     require(dbIdBits <= djparam.chiDBIDBits)
 
     def getChipTypeByAddr(x: UInt): UInt = {

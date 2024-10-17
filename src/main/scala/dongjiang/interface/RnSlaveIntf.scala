@@ -37,7 +37,7 @@ import xs.utils._
  *
  *
  *
- * ************************************************************** PCU Entry Transfer ********************************************************************************
+ * ************************************************************** Entry Transfer ********************************************************************************
  * Req:
  * [------] <- Req0x0 | [Req0x0] -> Req to slice | [------] <- Resp from slice | [Rsp0x0] -> resp to node
  * [------]           | [------]                 | [------]                    | [------]
@@ -74,7 +74,7 @@ import xs.utils._
  *
  *
  *
- * ************************************************************** PCU ID Transfer ********************************************************************************
+ * ************************************************************** ID Transfer ********************************************************************************
  *
  * chiIdx: CHI Index
  * { TgtID | SrcID | TxnID | DBID | FwdNID | FwdTxnID }
@@ -131,7 +131,7 @@ import xs.utils._
  *
  */
 
-object PCURS {
+object RSState {
   val width = 4
   // commom
   val Free            = "b0000".U // 0x0
@@ -151,9 +151,9 @@ object PCURS {
   val WaitSnpResp     = "b1110".U // 0xe
 }
 
-class PCURSEntry(param: InterfaceParam)(implicit p: Parameters) extends DJBundle  {
-  val state         = UInt(PCURS.width.W)
-  val nid           = UInt(param.pcuIdBits.W)
+class RSEntry(param: InterfaceParam)(implicit p: Parameters) extends DJBundle  {
+  val state         = UInt(RSState.width.W)
+  val nid           = UInt(param.entryIdBits.W)
   val indexMes      = new DJBundle with HasAddr with HasFromIncoID with HasMSHRWay with HasDBID
   val nestMes       = new Bundle {
     val waitWBDone  = Bool()
@@ -164,13 +164,13 @@ class PCURSEntry(param: InterfaceParam)(implicit p: Parameters) extends DJBundle
   val getDataNum    = UInt(beatNumBits.W)
   val getSnpRespOH  = UInt(nrRnfNode.W)
 
-  def isFree        = state === PCURS.Free
-  def isReqBeSend   = state === PCURS.Req2Slice & !nestMes.asUInt.orR & nid === 0.U
-  def isRspBeSend   = (state === PCURS.Resp2Node & chiMes.isRsp) | state === PCURS.DBIDResp2Node
-  def isDatBeSend   = state === PCURS.Resp2Node & chiMes.isDat
-  def isGetDBID     = state === PCURS.GetDBID
-  def isSendSnp     = state === PCURS.Snp2Node
-  def isSendSnpIng  = state === PCURS.Snp2NodeIng
+  def isFree        = state === RSState.Free
+  def isReqBeSend   = state === RSState.Req2Slice & !nestMes.asUInt.orR & nid === 0.U
+  def isRspBeSend   = (state === RSState.Resp2Node & chiMes.isRsp) | state === RSState.DBIDResp2Node
+  def isDatBeSend   = state === RSState.Resp2Node & chiMes.isDat
+  def isGetDBID     = state === RSState.GetDBID
+  def isSendSnp     = state === RSState.Snp2Node
+  def isSendSnpIng  = state === RSState.Snp2NodeIng
   def isLastBeat    = getDataNum === (nrBeat - 1).U
 }
 
@@ -182,75 +182,75 @@ class RnSlaveIntf(djBankId: Int, rnSlvId: Int, param: InterfaceParam)(implicit p
   io <> DontCare
   dontTouch(io)
 // --------------------- Reg and Wire declaration ------------------------//
-  val pcus            = RegInit(VecInit(Seq.fill(param.nrPCUEntry) { 0.U.asTypeOf(new PCURSEntry(param)) }))
-  // PCU Receive Task ID
-  val pcuFreeID       = Wire(UInt(param.pcuIdBits.W))
-  // PCU Send Req To Slice
-  val pcuSendReqID    = Wire(UInt(param.pcuIdBits.W))
-  // PCU Get DBID ID
-  val pcuGetDBID      = Wire(UInt(param.pcuIdBits.W))
-  // PCU Receive DBID ID
-  val pcuRecDBID      = Wire(UInt(param.pcuIdBits.W))
-  // PCU Send Snp ID
-  val pcuSendSnpID    = Wire(UInt(param.pcuIdBits.W))
-  // PCU Receive TxRsp ID
-  val pcuRecChiRspID  = Wire(UInt(param.pcuIdBits.W))
-  // PCU Receive TxDat ID
-  val pcuRecChiDatID  = Wire(UInt(param.pcuIdBits.W))
-  // PCU Send Resp To Slice ID
-  val pcuResp2SliceID = Wire(UInt(param.pcuIdBits.W))
+  val entrys            = RegInit(VecInit(Seq.fill(param.nrEntry) { 0.U.asTypeOf(new RSEntry(param)) }))
+  // ENTRY Receive Task ID
+  val entryFreeID       = Wire(UInt(param.entryIdBits.W))
+  // ENTRY Send Req To Slice
+  val entrySendReqID    = Wire(UInt(param.entryIdBits.W))
+  // ENTRY Get DBID ID
+  val entryGetDBID      = Wire(UInt(param.entryIdBits.W))
+  // ENTRY Receive DBID ID
+  val entryRecDBID      = Wire(UInt(param.entryIdBits.W))
+  // ENTRY Send Snp ID
+  val entrySendSnpID    = Wire(UInt(param.entryIdBits.W))
+  // ENTRY Receive TxRsp ID
+  val entryRecChiRspID  = Wire(UInt(param.entryIdBits.W))
+  // ENTRY Receive TxDat ID
+  val entryRecChiDatID  = Wire(UInt(param.entryIdBits.W))
+  // ENTRY Send Resp To Slice ID
+  val entryResp2SliceID = Wire(UInt(param.entryIdBits.W))
   // req from slice or txreq
-  val taskNID         = Wire(UInt(param.pcuIdBits.W))
-  val taskSaveInPCU   = WireInit(0.U.asTypeOf(pcus(0).chiMes))
-  val indexSaveInPCU  = WireInit(0.U.asTypeOf(pcus(0).indexMes))
+  val taskNID           = Wire(UInt(param.entryIdBits.W))
+  val taskSaveInIntf    = WireInit(0.U.asTypeOf(entrys(0).chiMes))
+  val indexSaveInIntf   = WireInit(0.U.asTypeOf(entrys(0).indexMes))
   // snp to node
-  val snpIsLast       = Wire(Bool())
+  val snpIsLast         = Wire(Bool())
   val snpAlreadySendVecReg = RegInit(0.U(nrRnfNode.W))
 
 
 
 // ---------------------------------------------------------------------------------------------------------------------- //
-// ---------------------------------------------- PCU: Update PCU Entry Value ------------------------------------------- //
+// ----------------------------------------------------  Update Entry Value --------------------------------------------- //
 // ---------------------------------------------------------------------------------------------------------------------- //
-  pcus.zipWithIndex.foreach {
-    case (pcu, i) =>
-      // ------------------------------------------- Update PCU Values -------------------------------------------------- //
+  entrys.zipWithIndex.foreach {
+    case (entry, i) =>
+      // ------------------------------------------- Update Base Values -------------------------------------------------- //
       /*
        * Receive New Req
        */
-      when((io.chi.txreq.fire | io.req2Node.fire | io.resp2Node.fire) & pcuFreeID === i.U) {
-        pcu               := 0.U.asTypeOf(pcu)
-        pcu.nid           := 0.U
-        pcu.indexMes      := indexSaveInPCU
-        pcu.chiMes        := taskSaveInPCU
-        pcu.nestMes       := 0.U.asTypeOf(pcu.nestMes)
-        assert(pcu.state === PCURS.Free, "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state)
+      when((io.chi.txreq.fire | io.req2Node.fire | io.resp2Node.fire) & entryFreeID === i.U) {
+        entry               := 0.U.asTypeOf(entry)
+        entry.nid           := 0.U
+        entry.indexMes      := indexSaveInIntf
+        entry.chiMes        := taskSaveInIntf
+        entry.nestMes       := 0.U.asTypeOf(entry.nestMes)
+        assert(entry.state === RSState.Free, "RNSLV ENTRY[0x%x] STATE[0x%x]", i.U, entry.state)
       /*
        * Receive DBID From DataBuffer
        */
-      }.elsewhen(io.dbSigs.wResp.fire & pcuRecDBID === i.U) {
-        pcu.hasData       := true.B
-        pcu.indexMes.dbid := io.dbSigs.wResp.bits.dbid
-        assert(pcu.state === PCURS.WaitDBID, "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state)
+      }.elsewhen(io.dbSigs.wResp.fire & entryRecDBID === i.U) {
+        entry.hasData       := true.B
+        entry.indexMes.dbid := io.dbSigs.wResp.bits.dbid
+        assert(entry.state === RSState.WaitDBID, "RNSLV ENTRY[0x%x] STATE[0x%x]", i.U, entry.state)
       /*
        * Receive CHI TX Dat or CHI TX Rsp
        */
-      }.elsewhen((io.chi.txdat.fire & pcuRecChiDatID === i.U) | (io.chi.txrsp.fire & pcuRecChiRspID === i.U)) {
-        val hitRespDat    = io.chi.txdat.fire & pcuRecChiDatID === i.U
-        val hitRespRsp    = io.chi.txrsp.fire & pcuRecChiRspID === i.U
-        pcu.getDataNum    := pcu.getDataNum + hitRespDat.asUInt
-        pcu.chiMes.resp   := Mux(hitRespDat, io.chi.txdat.bits.Resp, Mux(hitRespRsp & !pcu.chiMes.retToSrc, io.chi.txrsp.bits.Resp, pcu.chiMes.resp))
+      }.elsewhen((io.chi.txdat.fire & entryRecChiDatID === i.U) | (io.chi.txrsp.fire & entryRecChiRspID === i.U)) {
+        val hitRespDat      = io.chi.txdat.fire & entryRecChiDatID === i.U
+        val hitRespRsp      = io.chi.txrsp.fire & entryRecChiRspID === i.U
+        entry.getDataNum    := entry.getDataNum + hitRespDat.asUInt
+        entry.chiMes.resp   := Mux(hitRespDat, io.chi.txdat.bits.Resp, Mux(hitRespRsp & !entry.chiMes.retToSrc, io.chi.txrsp.bits.Resp, entry.chiMes.resp))
         when(hitRespDat) {
-          assert(Mux(pcu.chiMes.isSnp & pcu.chiMes.retToSrc, pcu.state === PCURS.Snp2NodeIng | pcu.state === PCURS.WaitSnpResp, pcu.state === PCURS.WaitData), "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state)
+          assert(Mux(entry.chiMes.isSnp & entry.chiMes.retToSrc, entry.state === RSState.Snp2NodeIng | entry.state === RSState.WaitSnpResp, entry.state === RSState.WaitData), "RNSLV ENTRY[0x%x] STATE[0x%x]", i.U, entry.state)
         }.elsewhen(hitRespRsp) {
-          when(io.chi.txrsp.bits.Opcode === CHIOp.RSP.CompAck) { assert(pcu.state === PCURS.WaitCompAck, "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state) }
-          .otherwise {                                           assert(pcu.state === PCURS.Snp2NodeIng | pcu.state === PCURS.WaitSnpResp, "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state) }
+          when(io.chi.txrsp.bits.Opcode === CHIOp.RSP.CompAck) { assert(entry.state === RSState.WaitCompAck, "RNSLV ENTRY[0x%x] STATE[0x%x]", i.U, entry.state) }
+          .otherwise {                                           assert(entry.state === RSState.Snp2NodeIng | entry.state === RSState.WaitSnpResp, "RNSLV ENTRY[0x%x] STATE[0x%x]", i.U, entry.state) }
         }
       /*
-       * Clean PCU Entry When Its Free
+       * Clean ENTRY Entry When Its Free
        */
-      }.elsewhen(pcu.isFree) {
-        pcu               := 0.U.asTypeOf(pcu)
+      }.elsewhen(entry.isFree) {
+        entry               := 0.U.asTypeOf(entry)
       }
 
 
@@ -259,63 +259,63 @@ class RnSlaveIntf(djBankId: Int, rnSlvId: Int, param: InterfaceParam)(implicit p
        * Set New NID
        * TODO: Advance judgment to avoid generating multiple repetitive logic
        */
-      when((io.chi.txreq.fire | io.req2Node.fire | io.resp2Node.fire) & pcuFreeID === i.U) {
-        val snp2PCUHit    = io.req2Node.fire    & io.req2Node.bits.addrNoOff                         === indexSaveInPCU.addrNoOff & io.req2Node.bits.isSnp      // SNP add NID
-        val resp2SliceHit = io.resp2Slice.fire  & pcus(pcuResp2SliceID).indexMes.addrNoOff           === indexSaveInPCU.addrNoOff                               // SNP reduce NID
-        val reqAckHit     = io.reqAck2Node.fire & pcus(io.reqAck2Node.bits.pcuId).indexMes.addrNoOff === indexSaveInPCU.addrNoOff & !io.reqAck2Node.bits.retry  // REQ reduce NID
+      when((io.chi.txreq.fire | io.req2Node.fire | io.resp2Node.fire) & entryFreeID === i.U) {
+        val snp2IntfHit    = io.req2Node.fire    & io.req2Node.bits.addrNoOff                         === indexSaveInIntf.addrNoOff & io.req2Node.bits.isSnp      // SNP add NID
+        val resp2SliceHit = io.resp2Slice.fire  & entrys(entryResp2SliceID).indexMes.addrNoOff           === indexSaveInIntf.addrNoOff                               // SNP reduce NID
+        val reqAckHit     = io.reqAck2Node.fire & entrys(io.reqAck2Node.bits.pcuId).indexMes.addrNoOff === indexSaveInIntf.addrNoOff & !io.reqAck2Node.bits.retry  // REQ reduce NID
         // req
         when(io.chi.txreq.fire) {
-          pcu.nid         := taskNID - resp2SliceHit.asUInt - reqAckHit.asUInt
+          entry.nid       := taskNID - resp2SliceHit.asUInt - reqAckHit.asUInt
           // assert
-          assert(taskNID >= (resp2SliceHit.asTypeOf(taskNID) + reqAckHit.asTypeOf(taskNID)), "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state)
-          assert(!(snp2PCUHit & resp2SliceHit), "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state)
-          assert(Mux(taskSaveInPCU.isReq & CHIOp.REQ.isWriteX(taskSaveInPCU.opcode), !snp2PCUHit & !resp2SliceHit, true.B), "TODO")
+          assert(taskNID >= (resp2SliceHit.asTypeOf(taskNID) + reqAckHit.asTypeOf(taskNID)), "RNSLV ENTRY[0x%x] STATE[0x%x]", i.U, entry.state)
+          assert(!(snp2IntfHit & resp2SliceHit), "RNSLV ENTRY[0x%x] STATE[0x%x]", i.U, entry.state)
+          assert(Mux(taskSaveInIntf.isReq & CHIOp.REQ.isWriteX(taskSaveInIntf.opcode), !snp2IntfHit & !resp2SliceHit, true.B), "TODO")
         // snp or resp
         }.otherwise {
-          pcu.nid         := 0.U
+          entry.nid       := 0.U
           assert(taskNID === 0.U)
         }
       /*
        * Modify NID
        */
-      }.elsewhen(!pcu.isFree & pcu.chiMes.isReq) {
-        val snp2PCUHit    = io.req2Node.fire    & io.req2Node.bits.addrNoOff                         === pcu.indexMes.addrNoOff & io.req2Node.bits.isSnp  // SNP add NID
-        val resp2SliceHit = io.resp2Slice.fire  & pcus(pcuResp2SliceID).indexMes.addrNoOff           === pcu.indexMes.addrNoOff                           // SNP reduce NID
-        val reqAckHit     = io.reqAck2Node.fire & pcus(io.reqAck2Node.bits.pcuId).indexMes.addrNoOff === pcu.indexMes.addrNoOff & !io.reqAck2Node.bits.retry & io.reqAck2Node.bits.pcuId =/= i.U // REQ reduce NID
-        pcu.nid           := pcu.nid + snp2PCUHit.asUInt - resp2SliceHit.asUInt - reqAckHit.asUInt
+      }.elsewhen(!entry.isFree & entry.chiMes.isReq) {
+        val snp2IntfHit    = io.req2Node.fire    & io.req2Node.bits.addrNoOff                         === entry.indexMes.addrNoOff & io.req2Node.bits.isSnp  // SNP add NID
+        val resp2SliceHit = io.resp2Slice.fire  & entrys(entryResp2SliceID).indexMes.addrNoOff           === entry.indexMes.addrNoOff                           // SNP reduce NID
+        val reqAckHit     = io.reqAck2Node.fire & entrys(io.reqAck2Node.bits.pcuId).indexMes.addrNoOff === entry.indexMes.addrNoOff & !io.reqAck2Node.bits.retry & io.reqAck2Node.bits.pcuId =/= i.U // REQ reduce NID
+        entry.nid         := entry.nid + snp2IntfHit.asUInt - resp2SliceHit.asUInt - reqAckHit.asUInt
         // assert
-        assert((pcu.nid + snp2PCUHit.asUInt) >= (resp2SliceHit.asTypeOf(taskNID) + reqAckHit.asTypeOf(taskNID)), "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state)
-        assert(!(snp2PCUHit & resp2SliceHit), "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state)
-        assert(Mux(pcu.chiMes.isReq & CHIOp.REQ.isWriteX(pcu.chiMes.opcode), !snp2PCUHit & !resp2SliceHit, true.B), "TODO")
+        assert((entry.nid + snp2IntfHit.asUInt) >= (resp2SliceHit.asTypeOf(taskNID) + reqAckHit.asTypeOf(taskNID)), "RNSLV ENTRY[0x%x] STATE[0x%x]", i.U, entry.state)
+        assert(!(snp2IntfHit & resp2SliceHit), "RNSLV ENTRY[0x%x] STATE[0x%x]", i.U, entry.state)
+        assert(Mux(entry.chiMes.isReq & CHIOp.REQ.isWriteX(entry.chiMes.opcode), !snp2IntfHit & !resp2SliceHit, true.B), "TODO")
       /*
        * Reset NID
        */
-      }.elsewhen(pcu.isFree) {
-        pcu.nid           := 0.U
+      }.elsewhen(entry.isFree) {
+        entry.nid           := 0.U
       }
 
 
       // ---------------------------------------------- Record Snp Resp --------------------------------------------------- //
-      when(pcu.chiMes.isSnp) {
-        when(pcu.state === PCURS.Snp2NodeIng | pcu.state === PCURS.WaitSnpResp) {
-          val rspHit        = io.chi.txrsp.fire & pcuRecChiRspID === i.U
-          val datHit        = io.chi.txdat.fire & pcuRecChiDatID === i.U & pcu.isLastBeat
+      when(entry.chiMes.isSnp) {
+        when(entry.state === RSState.Snp2NodeIng | entry.state === RSState.WaitSnpResp) {
+          val rspHit        = io.chi.txrsp.fire & entryRecChiRspID === i.U
+          val datHit        = io.chi.txdat.fire & entryRecChiDatID === i.U & entry.isLastBeat
           val rspId         = getMetaIdByNodeID(io.chi.txrsp.bits.SrcID)
           val datId         = getMetaIdByNodeID(io.chi.txdat.bits.SrcID)
           val rspIdOH       = Mux(rspHit, UIntToOH(rspId), 0.U)
           val datIdOH       = Mux(datHit, UIntToOH(datId), 0.U)
-          pcu.getSnpRespOH  := pcu.getSnpRespOH | rspIdOH | datIdOH
+          entry.getSnpRespOH  := entry.getSnpRespOH | rspIdOH | datIdOH
           // assert
           val getSnpRespVec = Wire(Vec(nrRnfNode, Bool()))
           val tgtSnpVec     = Wire(Vec(nrRnfNode, Bool()))
-          getSnpRespVec     := pcu.getSnpRespOH.asBools
-          tgtSnpVec         := pcu.chiMes.tgtID(nrRnfNode - 1, 0).asBools
-          assert(Mux(rspHit, !getSnpRespVec(rspId), true.B), "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state)
-          assert(Mux(datHit, !getSnpRespVec(datId), true.B), "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state)
-          assert(Mux(rspHit, tgtSnpVec(rspId),      true.B), "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state)
-          assert(Mux(datHit, tgtSnpVec(datId),      true.B), "RNSLV PCU[0x%x] STATE[0x%x]", i.U, pcu.state)
+          getSnpRespVec     := entry.getSnpRespOH.asBools
+          tgtSnpVec         := entry.chiMes.tgtID(nrRnfNode - 1, 0).asBools
+          assert(Mux(rspHit, !getSnpRespVec(rspId), true.B), "RNSLV ENTRY[0x%x] STATE[0x%x]", i.U, entry.state)
+          assert(Mux(datHit, !getSnpRespVec(datId), true.B), "RNSLV ENTRY[0x%x] STATE[0x%x]", i.U, entry.state)
+          assert(Mux(rspHit, tgtSnpVec(rspId),      true.B), "RNSLV ENTRY[0x%x] STATE[0x%x]", i.U, entry.state)
+          assert(Mux(datHit, tgtSnpVec(datId),      true.B), "RNSLV ENTRY[0x%x] STATE[0x%x]", i.U, entry.state)
         }.otherwise {
-          pcu.getSnpRespOH  := 0.U
+          entry.getSnpRespOH  := 0.U
         }
       }
   }
@@ -323,93 +323,93 @@ class RnSlaveIntf(djBankId: Int, rnSlvId: Int, param: InterfaceParam)(implicit p
 
 
 // ---------------------------------------------------------------------------------------------------------------------- //
-// --------------------------------------------------- PCU: State Transfer ---------------------------------------------- //
+// ---------------------------------------------------  State Transfer -------------------------------------------------- //
 // ---------------------------------------------------------------------------------------------------------------------- //
-  pcus.zipWithIndex.foreach {
-    case(pcu, i) =>
-      switch(pcu.state) {
+  entrys.zipWithIndex.foreach {
+    case(entry, i) =>
+      switch(entry.state) {
         // State: Free
-        is(PCURS.Free) {
-          val hit       = pcuFreeID === i.U
+        is(RSState.Free) {
+          val hit       = entryFreeID === i.U
           val reqHit    = io.chi.txreq.fire & !isWriteX(io.chi.txreq.bits.Opcode) & hit
           val writeHit  = io.chi.txreq.fire & isWriteX(io.chi.txreq.bits.Opcode) & hit
           val snpHit    = io.req2Node.fire & hit
           val respHit   = io.resp2Node.fire & hit
           val ret2Src   = io.req2Node.bits.retToSrc
           val rDB       = io.resp2Node.bits.needReadDB; assert(Mux(hit, !rDB, true.B), "TODO")
-          pcu.state     := Mux(reqHit, PCURS.Req2Slice,
-                            Mux(snpHit & ret2Src, PCURS.GetDBID,
-                              Mux(snpHit & !ret2Src, PCURS.Snp2Node,
-                                Mux(writeHit, PCURS.GetDBID,
-                                  Mux(respHit & rDB, PCURS.RCDB,
-                                    Mux(respHit & !rDB, PCURS.Resp2Node, pcu.state))))))
+          entry.state   := Mux(reqHit, RSState.Req2Slice,
+                            Mux(snpHit & ret2Src, RSState.GetDBID,
+                              Mux(snpHit & !ret2Src, RSState.Snp2Node,
+                                Mux(writeHit, RSState.GetDBID,
+                                  Mux(respHit & rDB, RSState.RCDB,
+                                    Mux(respHit & !rDB, RSState.Resp2Node, entry.state))))))
           assert(PopCount(Seq(reqHit, writeHit, snpHit, respHit)) <= 1.U)
         }
         // State: Req2Slice
-        is(PCURS.Req2Slice) {
-          val hit       = io.req2Slice.fire & pcuSendReqID === i.U
-          pcu.state     := Mux(hit, PCURS.WaitSliceAck, pcu.state)
+        is(RSState.Req2Slice) {
+          val hit       = io.req2Slice.fire & entrySendReqID === i.U
+          entry.state   := Mux(hit, RSState.WaitSliceAck, entry.state)
         }
         // State: WaitSliceAck
-        is(PCURS.WaitSliceAck) {
+        is(RSState.WaitSliceAck) {
           val hit       = io.reqAck2Node.fire & io.reqAck2Node.bits.pcuId === i.U
-          pcu.state     := Mux(hit, Mux(io.reqAck2Node.bits.retry, PCURS.Req2Slice, PCURS.Free), pcu.state)
+          entry.state   := Mux(hit, Mux(io.reqAck2Node.bits.retry, RSState.Req2Slice, RSState.Free), entry.state)
         }
         // State: Resp2Node
-        is(PCURS.Resp2Node) {
+        is(RSState.Resp2Node) {
           val rxDatHit  = io.chi.rxdat.fire & io.chi.rxdat.bits.DBID === i.U & toBeatNum(io.chi.rxdat.bits.DataID) === (nrBeat - 1).U
           val rxRspHit  = io.chi.rxrsp.fire & io.chi.rxrsp.bits.DBID === i.U
-          val expAck    = pcu.chiMes.expCompAck
-          pcu.state     := Mux(rxDatHit | rxRspHit, Mux(expAck, PCURS.WaitCompAck, PCURS.Free), pcu.state)
+          val expAck    = entry.chiMes.expCompAck
+          entry.state   := Mux(rxDatHit | rxRspHit, Mux(expAck, RSState.WaitCompAck, RSState.Free), entry.state)
         }
         // State: WaitCompAck
-        is(PCURS.WaitCompAck) {
+        is(RSState.WaitCompAck) {
           val hit       = io.chi.txrsp.fire & io.chi.txrsp.bits.TxnID === i.U
           assert(Mux(hit, io.chi.txrsp.bits.Opcode === CompAck, true.B))
-          pcu.state     := Mux(hit, PCURS.Free, pcu.state)
+          entry.state   := Mux(hit, RSState.Free, entry.state)
         }
         // State: GetDBID
-        is(PCURS.GetDBID) {
-          val hit       = io.dbSigs.wReq.fire & pcuGetDBID === i.U & pcu.nid === 0.U // TODO: Consider Write can go no sorting required
-          pcu.state     := Mux(hit, PCURS.WaitDBID, pcu.state)
+        is(RSState.GetDBID) {
+          val hit       = io.dbSigs.wReq.fire & entryGetDBID === i.U & entry.nid === 0.U // TODO: Consider Write can go no sorting required
+          entry.state   := Mux(hit, RSState.WaitDBID, entry.state)
         }
         // State: WaitDBID
-        is(PCURS.WaitDBID) {
-          val hit       = io.dbSigs.wResp.fire & pcuRecDBID === i.U
-          pcu.state     := Mux(hit, Mux(pcu.chiMes.isSnp, PCURS.Snp2Node, PCURS.DBIDResp2Node), pcu.state)
+        is(RSState.WaitDBID) {
+          val hit       = io.dbSigs.wResp.fire & entryRecDBID === i.U
+          entry.state   := Mux(hit, Mux(entry.chiMes.isSnp, RSState.Snp2Node, RSState.DBIDResp2Node), entry.state)
         }
         // State: DBIDResp2Node
-        is(PCURS.DBIDResp2Node) {
+        is(RSState.DBIDResp2Node) {
           val hit       = io.chi.rxrsp.fire & io.chi.rxrsp.bits.DBID === i.U
-          pcu.state     := Mux(hit, PCURS.WaitData, pcu.state)
+          entry.state   := Mux(hit, RSState.WaitData, entry.state)
         }
         // State: WaitData
-        is(PCURS.WaitData) {
+        is(RSState.WaitData) {
           val hit       = io.chi.txdat.fire & io.chi.txdat.bits.TxnID === i.U
-          pcu.state     := Mux(hit & pcu.isLastBeat, PCURS.Req2Slice, pcu.state)
+          entry.state   := Mux(hit & entry.isLastBeat, RSState.Req2Slice, entry.state)
         }
         // State: Snp2Node
-        is(PCURS.Snp2Node) {
-          val hit       = io.chi.rxsnp.fire & pcuSendSnpID === i.U
-          pcu.state     := Mux(hit, Mux(snpIsLast, PCURS.WaitSnpResp, PCURS.Snp2NodeIng), pcu.state)
+        is(RSState.Snp2Node) {
+          val hit       = io.chi.rxsnp.fire & entrySendSnpID === i.U
+          entry.state   := Mux(hit, Mux(snpIsLast, RSState.WaitSnpResp, RSState.Snp2NodeIng), entry.state)
         }
         // State: Snp2NodeIng
-        is(PCURS.Snp2NodeIng) {
-          val hit       = io.chi.rxsnp.fire & pcuSendSnpID === i.U
-          pcu.state     := Mux(hit & snpIsLast, PCURS.WaitSnpResp, pcu.state)
+        is(RSState.Snp2NodeIng) {
+          val hit       = io.chi.rxsnp.fire & entrySendSnpID === i.U
+          entry.state   := Mux(hit & snpIsLast, RSState.WaitSnpResp, entry.state)
         }
         // State: WaitSnpResp
-        is(PCURS.WaitSnpResp) {
-          val rspHit    = io.chi.txrsp.fire & pcuRecChiRspID === i.U
-          val datHit    = io.chi.txdat.fire & pcuRecChiDatID === i.U
-          val shlGetNum = PopCount(pcu.getSnpRespOH ^ pcu.chiMes.tgtID)
-          val nowGetNum = rspHit.asTypeOf(UInt(2.W)) + (datHit & pcu.isLastBeat).asTypeOf(UInt(2.W))
-          pcu.state     := Mux(shlGetNum === nowGetNum, PCURS.Resp2Slice, pcu.state)
+        is(RSState.WaitSnpResp) {
+          val rspHit    = io.chi.txrsp.fire & entryRecChiRspID === i.U
+          val datHit    = io.chi.txdat.fire & entryRecChiDatID === i.U
+          val shlGetNum = PopCount(entry.getSnpRespOH ^ entry.chiMes.tgtID)
+          val nowGetNum = rspHit.asTypeOf(UInt(2.W)) + (datHit & entry.isLastBeat).asTypeOf(UInt(2.W))
+          entry.state   := Mux(shlGetNum === nowGetNum, RSState.Resp2Slice, entry.state)
         }
         // State: Resp2Slice
-        is(PCURS.Resp2Slice) {
-          val hit       = io.resp2Slice.fire & pcuResp2SliceID === i.U
-          pcu.state     := Mux(hit, PCURS.Free, pcu.state)
+        is(RSState.Resp2Slice) {
+          val hit       = io.resp2Slice.fire & entryResp2SliceID === i.U
+          entry.state   := Mux(hit, RSState.Free, entry.state)
         }
       }
   }
@@ -419,11 +419,11 @@ class RnSlaveIntf(djBankId: Int, rnSlvId: Int, param: InterfaceParam)(implicit p
 // ---------------------- Receive Req From CHITXREQ, Req2Node From Slice or Resp From Slice------------------------------ //
 // ---------------------------------------------------------------------------------------------------------------------- //
   /*
-   * Get PCU Free ID
+   * Get ENTRY Free ID
    */
-  val pcuFreeVec  = pcus.map(_.isFree)
-  val pcuFreeNum  = PopCount(pcuFreeVec)
-  pcuFreeID       := PriorityEncoder(pcuFreeVec)
+  val entryFreeVec  = entrys.map(_.isFree)
+  val entryFreeNum  = PopCount(entryFreeVec)
+  entryFreeID       := PriorityEncoder(entryFreeVec)
 
   /*
    * Receive req2Node(Snoop)
@@ -432,58 +432,58 @@ class RnSlaveIntf(djBankId: Int, rnSlvId: Int, param: InterfaceParam)(implicit p
   val snpVal        = io.req2Node.valid; assert(Mux(snpVal, io.req2Node.bits.isSnp, true.B))
   val respVal       = io.resp2Node.valid
   // count NID
-  val addrMatchVec  = pcus.map(_.indexMes.addrNoOff === indexSaveInPCU.addrNoOff)
-  val reqOrSnpVec   = pcus.map { case p => p.chiMes.isReq | p.chiMes.isSnp }
-  val taskMatchVec  = pcuFreeVec.zip(addrMatchVec.zip(reqOrSnpVec)).map{ case(a, (b, c)) => !a & b & c }
+  val addrMatchVec  = entrys.map(_.indexMes.addrNoOff === indexSaveInIntf.addrNoOff)
+  val reqOrSnpVec   = entrys.map { case p => p.chiMes.isReq | p.chiMes.isSnp }
+  val taskMatchVec  = entryFreeVec.zip(addrMatchVec.zip(reqOrSnpVec)).map{ case(a, (b, c)) => !a & b & c }
   //                                  | RESP                                  | SNP                                     | REQ
-  taskNID                       := Mux(respVal, 0.U,                          Mux(snpVal, 0.U,                          PopCount(taskMatchVec)))
-  indexSaveInPCU.addr           := Mux(respVal, io.resp2Node.bits.addr,       Mux(snpVal, io.req2Node.bits.addr,        io.chi.txreq.bits.Addr))
-  indexSaveInPCU.from           := Mux(respVal, io.resp2Node.bits.from,       Mux(snpVal, io.req2Node.bits.from,        DontCare))
-  indexSaveInPCU.mshrWay        := Mux(respVal, DontCare,                     Mux(snpVal, io.req2Node.bits.mshrWay,     DontCare))
-  indexSaveInPCU.dbid           := Mux(respVal, io.resp2Node.bits.dbid,       Mux(snpVal, 0.U,                          0.U))
-  taskSaveInPCU.opcode          := Mux(respVal, io.resp2Node.bits.opcode,     Mux(snpVal, io.req2Node.bits.opcode,      io.chi.txreq.bits.Opcode))
-  taskSaveInPCU.tgtID           := Mux(respVal, io.resp2Node.bits.tgtID,      Mux(snpVal, io.req2Node.bits.tgtID,       DontCare))
-  taskSaveInPCU.txnID           := Mux(respVal, io.resp2Node.bits.txnID,      Mux(snpVal, io.req2Node.bits.txnID,       io.chi.txreq.bits.TxnID))
-  taskSaveInPCU.srcID           := Mux(respVal, io.resp2Node.bits.srcID,      Mux(snpVal, io.req2Node.bits.srcID,       io.chi.txreq.bits.SrcID))
-  taskSaveInPCU.retToSrc        := Mux(respVal, DontCare,                     Mux(snpVal, io.req2Node.bits.retToSrc,    DontCare))
-  taskSaveInPCU.doNotGoToSD     := Mux(respVal, DontCare,                     Mux(snpVal, io.req2Node.bits.doNotGoToSD, DontCare))
-  taskSaveInPCU.channel         := Mux(respVal, io.resp2Node.bits.channel,    Mux(snpVal, CHIChannel.SNP,               CHIChannel.REQ))
-  taskSaveInPCU.resp            := Mux(respVal, io.resp2Node.bits.resp,       Mux(snpVal, 0.U,                          0.U))
-  taskSaveInPCU.expCompAck      := Mux(respVal, io.resp2Node.bits.expCompAck, Mux(snpVal, false.B,                      io.chi.txreq.bits.ExpCompAck))
+  taskNID                        := Mux(respVal, 0.U,                          Mux(snpVal, 0.U,                          PopCount(taskMatchVec)))
+  indexSaveInIntf.addr           := Mux(respVal, io.resp2Node.bits.addr,       Mux(snpVal, io.req2Node.bits.addr,        io.chi.txreq.bits.Addr))
+  indexSaveInIntf.from           := Mux(respVal, io.resp2Node.bits.from,       Mux(snpVal, io.req2Node.bits.from,        DontCare))
+  indexSaveInIntf.mshrWay        := Mux(respVal, DontCare,                     Mux(snpVal, io.req2Node.bits.mshrWay,     DontCare))
+  indexSaveInIntf.dbid           := Mux(respVal, io.resp2Node.bits.dbid,       Mux(snpVal, 0.U,                          0.U))
+  taskSaveInIntf.opcode          := Mux(respVal, io.resp2Node.bits.opcode,     Mux(snpVal, io.req2Node.bits.opcode,      io.chi.txreq.bits.Opcode))
+  taskSaveInIntf.tgtID           := Mux(respVal, io.resp2Node.bits.tgtID,      Mux(snpVal, io.req2Node.bits.tgtID,       DontCare))
+  taskSaveInIntf.txnID           := Mux(respVal, io.resp2Node.bits.txnID,      Mux(snpVal, io.req2Node.bits.txnID,       io.chi.txreq.bits.TxnID))
+  taskSaveInIntf.srcID           := Mux(respVal, io.resp2Node.bits.srcID,      Mux(snpVal, io.req2Node.bits.srcID,       io.chi.txreq.bits.SrcID))
+  taskSaveInIntf.retToSrc        := Mux(respVal, DontCare,                     Mux(snpVal, io.req2Node.bits.retToSrc,    DontCare))
+  taskSaveInIntf.doNotGoToSD     := Mux(respVal, DontCare,                     Mux(snpVal, io.req2Node.bits.doNotGoToSD, DontCare))
+  taskSaveInIntf.channel         := Mux(respVal, io.resp2Node.bits.channel,    Mux(snpVal, CHIChannel.SNP,               CHIChannel.REQ))
+  taskSaveInIntf.resp            := Mux(respVal, io.resp2Node.bits.resp,       Mux(snpVal, 0.U,                          0.U))
+  taskSaveInIntf.expCompAck      := Mux(respVal, io.resp2Node.bits.expCompAck, Mux(snpVal, false.B,                      io.chi.txreq.bits.ExpCompAck))
 
   /*
    * Set Ready Value
    */
-  io.chi.txreq.ready    := pcuFreeNum >= param.nrPCUEvictEntry.U & !io.req2Node.valid & !io.resp2Node.valid
-  io.req2Node.ready     := pcuFreeNum > 0.U & !io.resp2Node.valid
-  io.resp2Node.ready    := pcuFreeNum > 0.U
+  io.chi.txreq.ready    := entryFreeNum >= param.nrEvictEntry.U & !io.req2Node.valid & !io.resp2Node.valid
+  io.req2Node.ready     := entryFreeNum > 0.U & !io.resp2Node.valid
+  io.resp2Node.ready    := entryFreeNum > 0.U
   io.reqAck2Node.ready  := true.B
 
 
 // ---------------------------------------------------------------------------------------------------------------------- //
-// ------------------------------------------------- Select PCU send Req to Slice --------------------------------------- //
+// ------------------------------------------------- Select Entry send Req to Slice --------------------------------------- //
 // ---------------------------------------------------------------------------------------------------------------------- //
   /*
-   * Select one PCU
+   * Select one Entry
    */
-  val reqBeSendVec  = pcus.map(_.isReqBeSend)
-  pcuSendReqID      := RREncoder(reqBeSendVec)
+  val reqBeSendVec  = entrys.map(_.isReqBeSend)
+  entrySendReqID    := RREncoder(reqBeSendVec)
 
   /*
    * Send Req To Node
    */
   io.req2Slice.valid            := reqBeSendVec.reduce(_ | _)
-  io.req2Slice.bits.channel     := pcus(pcuSendReqID).chiMes.channel
-  io.req2Slice.bits.opcode      := pcus(pcuSendReqID).chiMes.opcode
-  io.req2Slice.bits.addr        := pcus(pcuSendReqID).indexMes.addr
-  io.req2Slice.bits.srcID       := pcus(pcuSendReqID).chiMes.srcID
-  io.req2Slice.bits.txnID       := pcus(pcuSendReqID).chiMes.txnID
-  io.req2Slice.bits.expCompAck  := pcus(pcuSendReqID).chiMes.expCompAck
+  io.req2Slice.bits.channel     := entrys(entrySendReqID).chiMes.channel
+  io.req2Slice.bits.opcode      := entrys(entrySendReqID).chiMes.opcode
+  io.req2Slice.bits.addr        := entrys(entrySendReqID).indexMes.addr
+  io.req2Slice.bits.srcID       := entrys(entrySendReqID).chiMes.srcID
+  io.req2Slice.bits.txnID       := entrys(entrySendReqID).chiMes.txnID
+  io.req2Slice.bits.expCompAck  := entrys(entrySendReqID).chiMes.expCompAck
   // IdMap
-  io.req2Slice.bits.to.IncoId   := pcus(pcuSendReqID).indexMes.mBank
+  io.req2Slice.bits.to.IncoId   := entrys(entrySendReqID).indexMes.mBank
   io.req2Slice.bits.from.IncoId := rnSlvId.U
-  io.req2Slice.bits.pcuId       := pcuSendReqID
-  io.req2Slice.bits.dbid        := pcus(pcuSendReqID).indexMes.dbid
+  io.req2Slice.bits.pcuId       := entrySendReqID
+  io.req2Slice.bits.dbid        := entrys(entrySendReqID).indexMes.dbid
   // Use in RnMaster
   io.req2Slice.bits.retToSrc    := false.B
   io.req2Slice.bits.doNotGoToSD := false.B
@@ -491,23 +491,23 @@ class RnSlaveIntf(djBankId: Int, rnSlvId: Int, param: InterfaceParam)(implicit p
 
 
 // ---------------------------------------------------------------------------------------------------------------------- //
-// ------------------------------------------------- Select PCU send Resp to Node --------------------------------------- //
+// ------------------------------------------------- Select Entry send Resp to Node --------------------------------------- //
 // ---------------------------------------------------------------------------------------------------------------------- //
   /*
-   * Select one PCU to Send RxDat
+   * Select one Entry to Send RxDat
    */
-  val datBeSendVec  = pcus.map { case p => p.isDatBeSend & p.indexMes.dbid === io.dbSigs.dataFDB.bits.dbid }
+  val datBeSendVec  = entrys.map { case p => p.isDatBeSend & p.indexMes.dbid === io.dbSigs.dataFDB.bits.dbid }
   val datSelId      = PriorityEncoder(datBeSendVec)
 
   io.chi.rxdat.valid        := datBeSendVec.reduce(_ | _)
   io.chi.rxdat.bits         := DontCare
-  io.chi.rxdat.bits.Opcode  := pcus(datSelId).chiMes.opcode
-  io.chi.rxdat.bits.TgtID   := pcus(datSelId).chiMes.srcID
+  io.chi.rxdat.bits.Opcode  := entrys(datSelId).chiMes.opcode
+  io.chi.rxdat.bits.TgtID   := entrys(datSelId).chiMes.srcID
   io.chi.rxdat.bits.SrcID   := hnfNodeIdSeq(djBankId).U
-  io.chi.rxdat.bits.TxnID   := pcus(datSelId).chiMes.txnID
+  io.chi.rxdat.bits.TxnID   := entrys(datSelId).chiMes.txnID
   io.chi.rxdat.bits.HomeNID := hnfNodeIdSeq(djBankId).U
   io.chi.rxdat.bits.DBID    := datSelId
-  io.chi.rxdat.bits.Resp    := pcus(datSelId).chiMes.resp
+  io.chi.rxdat.bits.Resp    := entrys(datSelId).chiMes.resp
   io.chi.rxdat.bits.DataID  := io.dbSigs.dataFDB.bits.dataID
   io.chi.rxdat.bits.Data    := io.dbSigs.dataFDB.bits.data
   io.chi.rxdat.bits.BE      := Fill(io.chi.rxdat.bits.BE.getWidth, 1.U(1.W))
@@ -516,19 +516,19 @@ class RnSlaveIntf(djBankId: Int, rnSlvId: Int, param: InterfaceParam)(implicit p
 
 
   /*
-   * Select one pcu to Send RxRsp
+   * Select one Entry to Send RxRsp
    */
-  val rspBeSendVec          = pcus.map { case p => p.isRspBeSend}
+  val rspBeSendVec          = entrys.map { case p => p.isRspBeSend}
   val rspSelId              = PriorityEncoder(rspBeSendVec)
 
   io.chi.rxrsp.valid        := rspBeSendVec.reduce(_ | _)
   io.chi.rxrsp.bits         := DontCare
-  io.chi.rxrsp.bits.Opcode  := Mux(pcus(rspSelId).chiMes.isRsp, pcus(rspSelId).chiMes.opcode, CompDBIDResp)
-  io.chi.rxrsp.bits.TgtID   := Mux(pcus(rspSelId).chiMes.isRsp, pcus(rspSelId).chiMes.srcID,  pcus(rspSelId).chiMes.srcID)
-  io.chi.rxrsp.bits.SrcID   := Mux(pcus(rspSelId).chiMes.isRsp, hnfNodeIdSeq(djBankId).U,     hnfNodeIdSeq(djBankId).U)
-  io.chi.rxrsp.bits.TxnID   := Mux(pcus(rspSelId).chiMes.isRsp, pcus(rspSelId).chiMes.txnID,  pcus(rspSelId).chiMes.txnID)
-  io.chi.rxrsp.bits.DBID    := Mux(pcus(rspSelId).chiMes.isRsp, rspSelId,                     rspSelId)
-  io.chi.rxrsp.bits.Resp    := Mux(pcus(rspSelId).chiMes.isRsp, pcus(rspSelId).chiMes.resp,   DontCare)
+  io.chi.rxrsp.bits.Opcode  := Mux(entrys(rspSelId).chiMes.isRsp, entrys(rspSelId).chiMes.opcode, CompDBIDResp)
+  io.chi.rxrsp.bits.TgtID   := Mux(entrys(rspSelId).chiMes.isRsp, entrys(rspSelId).chiMes.srcID,  entrys(rspSelId).chiMes.srcID)
+  io.chi.rxrsp.bits.SrcID   := Mux(entrys(rspSelId).chiMes.isRsp, hnfNodeIdSeq(djBankId).U,     hnfNodeIdSeq(djBankId).U)
+  io.chi.rxrsp.bits.TxnID   := Mux(entrys(rspSelId).chiMes.isRsp, entrys(rspSelId).chiMes.txnID,  entrys(rspSelId).chiMes.txnID)
+  io.chi.rxrsp.bits.DBID    := Mux(entrys(rspSelId).chiMes.isRsp, rspSelId,                     rspSelId)
+  io.chi.rxrsp.bits.Resp    := Mux(entrys(rspSelId).chiMes.isRsp, entrys(rspSelId).chiMes.resp,   DontCare)
 
 
 
@@ -536,16 +536,16 @@ class RnSlaveIntf(djBankId: Int, rnSlvId: Int, param: InterfaceParam)(implicit p
 // --------------------------------------------- Receive Rsp Or Dat From Node ------------------------------------------- //
 // ---------------------------------------------------------------------------------------------------------------------- //
   /*
-   * Get PCU ID
+   * Get Entry ID
    */
-  pcuRecChiRspID                  := io.chi.txrsp.bits.TxnID(param.pcuIdBits - 1, 0)
-  pcuRecChiDatID                  := io.chi.txdat.bits.TxnID(param.pcuIdBits - 1, 0)
+  entryRecChiRspID                := io.chi.txrsp.bits.TxnID(param.entryIdBits - 1, 0)
+  entryRecChiDatID                := io.chi.txdat.bits.TxnID(param.entryIdBits - 1, 0)
 
   /*
    * Send Data To DataBuffer
    */
   io.dbSigs.dataTDB.valid         := io.chi.txdat.valid
-  io.dbSigs.dataTDB.bits.dbid     := pcus(pcuRecChiDatID).indexMes.dbid
+  io.dbSigs.dataTDB.bits.dbid     := entrys(entryRecChiDatID).indexMes.dbid
   io.dbSigs.dataTDB.bits.data     := io.chi.txdat.bits.Data
   io.dbSigs.dataTDB.bits.dataID   := io.chi.txdat.bits.DataID
 
@@ -563,38 +563,38 @@ class RnSlaveIntf(djBankId: Int, rnSlvId: Int, param: InterfaceParam)(implicit p
   /*
    * Send Get DBID Req To From DataBuffer
    */
-  val pcuGetDBIDVec         = pcus.map(_.isGetDBID)
-  pcuGetDBID                := PriorityEncoder(pcuGetDBIDVec)
+  val entryGetDBIDVec         = entrys.map(_.isGetDBID)
+  entryGetDBID                := PriorityEncoder(entryGetDBIDVec)
 
   /*
    * Set DataBuffer Req Value
    */
-  io.dbSigs.wReq.valid            := pcuGetDBIDVec.reduce(_ | _)
+  io.dbSigs.wReq.valid            := entryGetDBIDVec.reduce(_ | _)
   io.dbSigs.wReq.bits.from.IncoId := rnSlvId.U
-  io.dbSigs.wReq.bits.pcuId       := pcuGetDBID
+  io.dbSigs.wReq.bits.pcuId     := entryGetDBID
 
   /*
    * Receive DBID From DataBuffer
    */
-  pcuRecDBID                      := io.dbSigs.wResp.bits.pcuId
+  entryRecDBID                    := io.dbSigs.wResp.bits.pcuId
   io.dbSigs.wResp.ready           := true.B
 
 
 
 // ---------------------------------------------------------------------------------------------------------------------- //
-// ------------------------------------------------- Select PCU send Snp to Node ---------------------------------------- //
+// ------------------------------------------------- Select Entry send Snp to Node ---------------------------------------- //
 // ---------------------------------------------------------------------------------------------------------------------- //
   /*
-   * Get PCU ID
+   * Get Entry ID
    */
-  val pcuSendSnpVec     = pcus.map(_.isSendSnp)
-  val pcuSendSnpIngVec  = pcus.map(_.isSendSnpIng)
-  pcuSendSnpID          := Mux(pcuSendSnpIngVec.reduce(_ | _), PriorityEncoder(pcuSendSnpIngVec), PriorityEncoder(pcuSendSnpVec))
+  val entrySendSnpVec     = entrys.map(_.isSendSnp)
+  val entrySendSnpIngVec  = entrys.map(_.isSendSnpIng)
+  entrySendSnpID          := Mux(entrySendSnpIngVec.reduce(_ | _), PriorityEncoder(entrySendSnpIngVec), PriorityEncoder(entrySendSnpVec))
 
   /*
    * Get Tgt ID
    */
-  val snpShouldSendVec  = pcus(pcuSendSnpID).chiMes.snpMetaVec
+  val snpShouldSendVec  = entrys(entrySendSnpID).chiMes.snpMetaVec
   val snpBeSendVec      = snpShouldSendVec ^ snpAlreadySendVecReg
   val snpTgtID          = getNodeIDByMetaId(PriorityEncoder(snpBeSendVec), 0)
   snpIsLast             := PopCount(snpBeSendVec.asBools) === 1.U; dontTouch(snpIsLast)
@@ -603,40 +603,40 @@ class RnSlaveIntf(djBankId: Int, rnSlvId: Int, param: InterfaceParam)(implicit p
   /*
    * Send Snp to Node
    */
-  io.chi.rxsnp.valid          := pcuSendSnpVec.reduce(_ | _) | pcuSendSnpIngVec.reduce(_ | _)
+  io.chi.rxsnp.valid          := entrySendSnpVec.reduce(_ | _) | entrySendSnpIngVec.reduce(_ | _)
   io.chi.rxsnp.bits           := DontCare
-  io.chi.rxsnp.bits.Addr      := pcus(pcuSendSnpID).indexMes.addr(addressBits - 1, 3)
-  io.chi.rxsnp.bits.Opcode    := pcus(pcuSendSnpID).chiMes.opcode
+  io.chi.rxsnp.bits.Addr      := entrys(entrySendSnpID).indexMes.addr(addressBits - 1, 3)
+  io.chi.rxsnp.bits.Opcode    := entrys(entrySendSnpID).chiMes.opcode
   io.chi.rxsnp.bits.TgtID     := snpTgtID
   io.chi.rxsnp.bits.SrcID     := hnfNodeIdSeq(djBankId).U
-  io.chi.rxsnp.bits.TxnID     := pcuSendSnpID
-  io.chi.rxsnp.bits.FwdNID    := pcus(pcuSendSnpID).chiMes.srcID
-  io.chi.rxsnp.bits.FwdTxnID  := pcus(pcuSendSnpID).chiMes.txnID
-  io.chi.rxsnp.bits.RetToSrc  := pcus(pcuSendSnpID).chiMes.retToSrc & snpAlreadySendVecReg === 0.U
-  io.chi.rxsnp.bits.DoNotGoToSD := pcus(pcuSendSnpID).chiMes.doNotGoToSD
+  io.chi.rxsnp.bits.TxnID     := entrySendSnpID
+  io.chi.rxsnp.bits.FwdNID    := entrys(entrySendSnpID).chiMes.srcID
+  io.chi.rxsnp.bits.FwdTxnID  := entrys(entrySendSnpID).chiMes.txnID
+  io.chi.rxsnp.bits.RetToSrc  := entrys(entrySendSnpID).chiMes.retToSrc & snpAlreadySendVecReg === 0.U
+  io.chi.rxsnp.bits.DoNotGoToSD := entrys(entrySendSnpID).chiMes.doNotGoToSD
 
 
 // ---------------------------------------------------------------------------------------------------------------------- //
-// ------------------------------------------------ Select PCU send Resp to Slice --------------------------------------- //
+// ------------------------------------------------ Select Entry send Resp to Slice --------------------------------------- //
 // ---------------------------------------------------------------------------------------------------------------------- //
   /*
-   * Select one PCU to Send RxDat
+   * Select one Entry to Send RxDat
    */
-  val respBeSendVec                 = pcus.map { case p => p.state === PCURS.Resp2Slice }
-  pcuResp2SliceID                   := PriorityEncoder(respBeSendVec)
+  val respBeSendVec                 = entrys.map { case p => p.state === RSState.Resp2Slice }
+  entryResp2SliceID                 := PriorityEncoder(respBeSendVec)
 
   io.resp2Slice.valid               := respBeSendVec.reduce(_ | _)
   io.resp2Slice.bits.from.IncoId    := rnSlvId.U
-  io.resp2Slice.bits.to             := pcus(pcuResp2SliceID).indexMes.from
-  io.resp2Slice.bits.mshrSet        := pcus(pcuResp2SliceID).indexMes.mSet
-  io.resp2Slice.bits.mshrWay        := pcus(pcuResp2SliceID).indexMes.mshrWay
-  io.resp2Slice.bits.dbid           := pcus(pcuResp2SliceID).indexMes.dbid
+  io.resp2Slice.bits.to             := entrys(entryResp2SliceID).indexMes.from
+  io.resp2Slice.bits.mshrSet        := entrys(entryResp2SliceID).indexMes.mSet
+  io.resp2Slice.bits.mshrWay        := entrys(entryResp2SliceID).indexMes.mshrWay
+  io.resp2Slice.bits.dbid           := entrys(entryResp2SliceID).indexMes.dbid
   io.resp2Slice.bits.isSnpResp      := true.B
   io.resp2Slice.bits.isReqResp      := false.B
-  io.resp2Slice.bits.hasData        := pcus(pcuResp2SliceID).hasData
-  io.resp2Slice.bits.resp           := pcus(pcuResp2SliceID).chiMes.resp
-  io.resp2Slice.bits.fwdState.valid := CHIOp.SNP.isSnpXFwd(pcus(pcuResp2SliceID).chiMes.opcode)
-  io.resp2Slice.bits.fwdState.bits  := pcus(pcuResp2SliceID).chiMes.fwdState
+  io.resp2Slice.bits.hasData        := entrys(entryResp2SliceID).hasData
+  io.resp2Slice.bits.resp           := entrys(entryResp2SliceID).chiMes.resp
+  io.resp2Slice.bits.fwdState.valid := CHIOp.SNP.isSnpXFwd(entrys(entryResp2SliceID).chiMes.opcode)
+  io.resp2Slice.bits.fwdState.bits  := entrys(entryResp2SliceID).chiMes.fwdState
 
 
 
@@ -644,7 +644,7 @@ class RnSlaveIntf(djBankId: Int, rnSlvId: Int, param: InterfaceParam)(implicit p
 
 
 // ---------------------------  Assertion  -------------------------------- //
-  val cntReg = RegInit(VecInit(Seq.fill(param.nrPCUEntry) { 0.U(64.W) }))
-  cntReg.zip(pcus).foreach { case(c, p) => c := Mux(p.isFree, 0.U, c + 1.U) }
-  cntReg.zipWithIndex.foreach { case(c, i) => assert(c < TIMEOUT_RSPCU.U, "RNSLV PCU[0x%x] ADDR[0x%x] CHANNEL[%x] OP[0x%x] TIMEOUT", i.U, pcus(i).indexMes.addr, pcus(i).chiMes.channel, pcus(i).chiMes.opcode) }
+  val cntReg = RegInit(VecInit(Seq.fill(param.nrEntry) { 0.U(64.W) }))
+  cntReg.zip(entrys).foreach { case(c, p) => c := Mux(p.isFree, 0.U, c + 1.U) }
+  cntReg.zipWithIndex.foreach { case(c, i) => assert(c < TIMEOUT_RSINTF.U, "RNSLV ENTRY[0x%x] ADDR[0x%x] CHANNEL[%x] OP[0x%x] TIMEOUT", i.U, entrys(i).indexMes.addr, entrys(i).chiMes.channel, entrys(i).chiMes.opcode) }
 }

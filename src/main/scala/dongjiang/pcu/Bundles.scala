@@ -66,7 +66,7 @@ object PipeID { val width = 1; val RESP = "b0".U; val REQ = "b1".U }
 
 trait HasPipeID extends Bundle { this: Bundle => val pipeId = UInt(PipeID.width.W); def toReqPipe = pipeId === PipeID.REQ; def toRespPipe = pipeId === PipeID.RESP }
 
-trait HasPCUID extends DJBundle { this: Bundle => val pcuId = UInt(pcuIdBits.W) }
+trait HasPCUID extends DJBundle { this: Bundle => val pcuId = UInt(intfEntryIdBits.W) }
 
 // ---------------------------------------------------------------- CHI Base Mes Bundle ----------------------------------------------------------------------------- //
 // TODO: Check Unuse singnals
