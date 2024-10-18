@@ -1,5 +1,6 @@
 package zhujiang
 
+import DONGJIANG.DJParam
 import chisel3._
 import chisel3.util.log2Ceil
 import org.chipsalliance.cde.config.{Field, Parameters}
@@ -87,7 +88,7 @@ object ZhujiangGlobal {
           (0L, 0L)
         },
         defaultHni = if(np.nodeType == NodeType.HI) np.defaultHni else false,
-        outstanding = if(np.nodeType == NodeType.HI || np.nodeType == NodeType.CC || np.nodeType == NodeType.S) np.outstanding else 0,
+        outstanding = if(np.nodeType == NodeType.HI || np.nodeType == NodeType.CC || np.nodeType == NodeType.S) np.outstanding else 0
       )
       if(np.nodeType == NodeType.CC) ccId = ccId + np.cpuNum
       n
@@ -169,9 +170,15 @@ case class ZJParameters(
   P: Boolean = false,
   clusterIdBits: Int = 8,
   bankOff: Int = 12,
-  ccnSpaceBits: Int = 16,
+  cpuSpaceBits: Int = 16,
+  cpuDevSpaceBits: Int = 8,
   snoopEjectBufDepth: Int = 8,
   reqEjectBufDepth: Int = 8,
+  externalInterruptNum:Int = 32,
+  clusterCacheSizeInKiB:Int = 1024,
+  cacheSizeInMiB:Int = 16,
+  cacheWays:Int = 16,
+  snoopFilterWays:Int = 16,
   localNodeParams: Seq[NodeParam] = Seq(),
   csnNodeParams: Seq[NodeParam] = Seq(),
   dmaParams: DmaParams = DmaParams(),
@@ -180,6 +187,7 @@ case class ZJParameters(
   tfsParams: Option[TrafficSimParams] = None,
   injectRsvdTimerShift: Int = 8
 ) {
+  lazy val cachelineBytes = 64
   lazy val requestAddrBits = 48
   lazy val snoopAddrBits = requestAddrBits - 3
   lazy val nodeNetBits = 1
@@ -204,11 +212,20 @@ case class ZJParameters(
   ZhujiangGlobal.initialize(nodeNidBits, nodeAidBits, localNodeParams, csnNodeParams, requestAddrBits)
   val localRing = ZhujiangGlobal.localRing
   val csnRing = ZhujiangGlobal.csnRing
+  private lazy val bank = localNodeParams.filter(_.nodeType == NodeType.S).map(_.bankId).max + 1
+  private lazy val clusterTotalCacheSizeInKiB = localRing.count(_.nodeType == NodeType.CC) * clusterCacheSizeInKiB
+  lazy val djParams = DJParam(
+    selfWays = cacheWays,
+    selfSets = cacheSizeInMiB * 1024 * 1024 / cacheWays / bank / cachelineBytes,
+    nrBank = bank,
+    sfDirWays = snoopFilterWays,
+    sfDirSets = clusterTotalCacheSizeInKiB * 1024 * 2 / snoopFilterWays / bank / cachelineBytes,
+  )
 }
 
 trait HasZJParams {
   implicit val p: Parameters
-  val zjParams = p(ZJParametersKey)
+  lazy val zjParams = p(ZJParametersKey)
   lazy val M = zjParams.M
   lazy val PB = zjParams.PB
   lazy val E = zjParams.E
@@ -237,6 +254,8 @@ trait HasZJParams {
 
 class ZJBundle(implicit val p: Parameters) extends Bundle with HasZJParams
 
-class ZJModule(implicit val p: Parameters) extends Module with HasZJParams
+class ZJModule(implicit val p: Parameters) extends Module with HasZJParams {
+  override def resetType = Module.ResetType.Asynchronous
+}
 
 class ZJRawModule(implicit val p: Parameters) extends RawModule with HasZJParams

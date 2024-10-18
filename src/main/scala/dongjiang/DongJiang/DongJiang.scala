@@ -146,7 +146,7 @@ class DongJiang(localHf: Node, csnRf: Option[Node] = None, csnHf: Option[Node] =
 
 // ------------------------------------------ IO declaration ----------------------------------------------//
     val io = IO(new Bundle {
-        val toLocal        = Flipped(new IcnBundle(localHf))
+        val toLocal        = Flipped(new IcnBundle(localHf, true)) //TODO:Use DeviceIcnBundle
         val toCSNOpt       = if (hasCSNIntf) Some(new Bundle {
             val hn         = Flipped(new IcnBundle(csnHf.get))
             val rn         = Flipped(new IcnBundle(csnRf.get))
