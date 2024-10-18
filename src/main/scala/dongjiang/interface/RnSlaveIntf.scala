@@ -76,57 +76,60 @@ import xs.utils._
  *
  * ************************************************************** ID Transfer ********************************************************************************
  *
- * chiIdx: CHI Index
+ * CHI:
  * { TgtID | SrcID | TxnID | DBID | FwdNID | FwdTxnID }
  *
+ * chiIdx: CHI Index
+ * { nodeID | txnID }
+ *
  * pcuIdx: PCU Index
- * { incoID | pcuID | mshrSet | mshrWay }
+ * { from(incoID) | to(incoID) | entryID | mshrIdx(mshrWay | mshrSet) | dbid }
  *
  *
  * Read / Dataless:
- * { Read / Dataless } TxReq  From CHI And Store In PCU         { chiMes.nodeID = SrcID } { chiMes.txnID = TxnID }                                      |
- * { Req2Slice       } Req    From PCU And Send To Slice        { chiMes.nodeID = SrcID } { chiMes.txnID = TxnID }                                      | { idxMes.incoID = LOCALSLV } { idxMes.pcuID = pcuID }
- * { ReqAck          } ReqAck From Slice and Match With PCU ID                                                                                          | { idxMes.pcuID == pcuID }
- * { Resp2Node       } Resp   From Slice And Store In PCU       { chiMes.nodeID = tgtID } { chiMes.txnID = txnID } { idxMes.dbid = dbid }               |
- * { Comp(Data)      } RxRsp  Send To CHI                       { TgtID = chiMes.nodeID } { TxnID = chiMes.txnID } { HomeNID = hnfID } { DBID = pcuID } |
- * { CompAck         } TxRsp  From CHI And Match With PCU ID    { TxnID == pcuID }                                                                      |
+ * { Read / Dataless } TxReq  From CHI And Store In Intf          { chiIdx.nodeID = SrcID } { chiIdx.txnID = TxnID }                                        |
+ * { Req2Slice       } Req    From Intf And Send To Slice         { chiIdx.nodeID = SrcID } { chiIdx.txnID = TxnID }                                        | { pcuIdx.to = chiMes.bankID } { pcuIdx.from = LOCALSLV } { pcuIdx.entryID = entryID }
+ * { ReqAck          } ReqAck From Slice and Match With Entry ID                                                                                            | { pcuIdx.entryID == entryID }
+ * { Resp2Node       } Resp   From Slice And Store In Intf        { chiIdx.nodeID = tgtID } { chiIdx.txnID = txnID }                                        | { pcuIdx.dbid = pcuIdx.dbid }
+ * { Comp(Data)      } RxRsp  Send To CHI                         { TgtID = chiIdx.nodeID } { TxnID = chiIdx.txnID } { HomeNID = hnfID } { DBID = entryID } |
+ * { CompAck         } TxRsp  From CHI And Match With Entry ID    { TxnID == entryID }                                                                      |
  *
  *
  * Read with DMT: TODO
- * { Read            } TxReq  From CHI And Store In PCU         { chiMes.nodeID = SrcID } { chiMes.txnID = TxnID }                                      |
- * { Req2Slice       } Req    From PCU And Send To Slice        { chiMes.nodeID = SrcID } { chiMes.txnID = TxnID }                                      | { idxMes.incoID = LOCALSLV } { idxMes.pcuID = pcuID }
- * { ReqAck          } ReqAck From Slice and Match With PCU ID                                                                                          | { idxMes.pcuID == pcuID }
- * { CompAck         } TxRsp  From CHI And Send Resp To Slice   { chiMes.txnID  = TxnID(Cat(bankID, mshrSet, mshrWay)) }                                |
+ * { Read            } TxReq  From CHI And Store In Intf          { chiIdx.nodeID = SrcID } { chiIdx.txnID = TxnID }                                        |
+ * { Req2Slice       } Req    From Intf And Send To Slice         { chiIdx.nodeID = SrcID } { chiIdx.txnID = TxnID }                                        | { pcuIdx.to = chiMes.bankID } { pcuIdx.from = LOCALSLV } { pcuIdx.entryID = entryID }
+ * { ReqAck          } ReqAck From Slice and Match With Entry ID                                                                                            | { pcuIdx.entryID == entryID }
+ * { CompAck         } TxRsp  From CHI And Send Resp To Slice                                                                                               | { pcuIdx.to = TxnID.head } { pcuIdx.mshrIdx = TxnID.tail }
  *
  *
  * Write:
- * { Write           } TxReq  From CHI And Store In PCU         { chiMes.nodeID = SrcID } { chiMes.txnID = TxnID }                                      |
- * { CompDBIDResp    } RxRsp  Send To CHI                       { TgtID = chiMes.nodeID } { TxnID = chiMes.txnID } { DBID = pcuID }                     |
- * { WriteData       } TxRsp  From CHI And Match With PCU ID    { TxnID == pcuID }                                                                      |
- * { Req2Slice       } Req    From PCU And Send To Slice                                                                                                | { idxMes.incoID = LOCALSLV } { idxMes.pcuID = pcuID }
- * { ReqAck          } ReqAck From Slice and Match With PCU ID                                                                                          | { idxMes.pcuID == pcuID }
+ * { Write           } TxReq  From CHI And Store In Intf          { chiIdx.nodeID = SrcID } { chiIdx.txnID = TxnID }                                        |
+ * { CompDBIDResp    } RxRsp  Send To CHI                         { TgtID = chiIdx.nodeID } { TxnID = chiIdx.txnID } { DBID = entryID }                     |
+ * { WriteData       } TxRsp  From CHI And Match With Entry ID    { TxnID == entryID }                                                                      |
+ * { Req2Slice       } Req    From Intf And Send To Slice                                                                                                   | { pcuIdx.to = chiMes.bankID } { pcuIdx.incfrom = LOCALSLV } { pcuIdx.entryID = entryID } { pcuIdx.dbid = pcuIdx.dbid }
+ * { ReqAck          } ReqAck From Slice and Match With Entry ID                                                                                            | { pcuIdx.entryID == entryID }
  *
  *
- * Write with DWT: TODO
- * { Write           } TxReq  From CHI And Store In PCU         { chiMes.nodeID = SrcID } { chiMes.txnID = TxnID }                                      |
- * { Req2Slice       } Req    From PCU And Send To Slice        { chiMes.nodeID = SrcID } { chiMes.txnID = TxnID }                                      | { idxMes.incoID = LOCALSLV } { idxMes.pcuID = pcuID }
- * { ReqAck          } ReqAck From Slice and Match With PCU ID                                                                                          | { idxMes.pcuID == pcuID }
+ * Write with DWT: Not implemented in the system
+ * { Write           } TxReq  From CHI And Store In Intf          { chiIdx.nodeID = SrcID } { chiIdx.txnID = TxnID }                                        |
+ * { Req2Slice       } Req    From Intf And Send To Slice         { chiIdx.nodeID = SrcID } { chiIdx.txnID = TxnID }                                        | { pcuIdx.to = chiMes.bankID } { pcuIdx.from = LOCALSLV } { pcuIdx.entryID = entryID }
+ * { ReqAck          } ReqAck From Slice and Match With Entry ID                                                                                            | { pcuIdx.entryID == entryID }
  *
  *
  * Snoop:
- * { Req2Node        } Req    From Slice And Store In PCU                                                                                               | { idxMes.snpVec = idx.snpVec } { idxMes.mshrWay = idxMes.mshrWay }
- * { Snoop           } Req    Send To CHI                       { TgtID = snpID } { TxnID = pcuID }                                                     |
- * { SnResp(Data)    } Resp   From CHI And Match With PCU ID    { TxnID == pcuID }                                                                      |
- * { Resp2Slice      } Resp   Send To Slice                                                                                                             | { idxMes.incoID = LOCALSLV } {idxMes.mshrSet = chiMes.mSet } { idxMes.mshrWay = mshrWay }
+ * { Req2Node        } Req    From Slice And Store In Intf                                                                                                  | { pcuIdx.snpVec = idx.snpVec } { pcuIdx.mshrIdx = pcuIdx.mshrIdx }
+ * { Snoop           } Req    Send To CHI                         { TgtID = snpID } { TxnID = entryID }                                                     |
+ * { SnResp(Data)    } Resp   From CHI And Match With Entry ID    { TxnID == entryID }                                                                      |
+ * { Resp2Slice      } Resp   Send To Slice                                                                                                                 | { pcuIdx.to = chiMes.bankID } { pcuIdx.from = LOCALSLV } { pcuIdx.mshrIdx = mshrIdx }
  *
  *
  * Snoop with DCT: TODO
- * { Req2Node        } Req    From Slice And Store In PCU       { chiMes.nodeID =  chiMes.nodeID } { chiMes.txnID =  chiMes.txnID }                     | { idxMes.snpVec = idx.snpVec } { idxMes.mshrWay = idxMes.mshrWay }
- * { Snoop           } Req    Send To CHI                       { TgtID = snpID } { TxnID = pcuID }                                                     |
- * { SnResp          } Resp   From CHI And Match With PCU ID    { TxnID == pcuID }                                                                      |
- * { SnoopFwd        } Req    Send To CHI                       { TgtID = snpID } { TxnID = pcuID } { FwdNID = chiMes.nodeID } { FwdTxnID = chiMes.txnID } |
- * { SnpResp(Data)Fwded } Resp From CHI And Match With PCU ID   { TxnID == pcuID }                                                                      |
- * { Resp2Slice      } Resp   Send To Slice                                                                                                             | { idxMes.incoID = LOCALSLV } {idxMes.mshrSet = chiMes.mSet } { idxMes.mshrWay = mshrWay }
+ * { Req2Node        } Req    From Slice And Store In Intf        { chiIdx.nodeID =  chiIdx.nodeID } { chiIdx.txnID =  chiIdx.txnID }                       | { pcuIdx.snpVec = idx.snpVec } { pcuIdx.mshrIdx = pcuIdx.mshrIdx }
+ * { Snoop           } Req    Send To CHI                         { TgtID = snpID } { TxnID = entryID }                                                     |
+ * { SnResp          } Resp   From CHI And Match With Entry ID    { TxnID == entryID }                                                                      |
+ * { SnoopFwd        } Req    Send To CHI                         { TgtID = snpID } { TxnID = entryID } { FwdNID = chiIdx.nodeID } { FwdTxnID = chiIdx.txnID }
+ * { SnpResp(Data)Fwded } Resp From CHI And Match With Entry ID   { TxnID == entryID }                                                                      |
+ * { Resp2Slice      } Resp   Send To Slice                                                                                                                 | { pcuIdx.to = chiMes.bankID } { pcuIdx.from = LOCALSLV } { pcuIdx.mshrIdx = mshrIdx } { pcuIdx.dbid = pcuIdx.dbid }
  *
  *
  */

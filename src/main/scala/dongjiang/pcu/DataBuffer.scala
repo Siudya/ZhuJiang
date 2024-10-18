@@ -6,6 +6,19 @@ import chisel3.util._
 import org.chipsalliance.cde.config._
 import dongjiang.utils.Encoder.RREncoder
 
+/*
+ * ID Transfer:
+ *
+ * pcuIdx: PCU Index
+ * { from(incoID) | to(incoID) | entryID | mshrIdx(mshrWay | mshrSet) | dbid | dcuIdx }
+ *
+ * { dbRCReq  } Read / Clean Req To DataBuffer      { to }                { dbid }
+ * { getDBID  } Get DBID Req To DataBuffer          { from }  { entryID }
+ * { DBIDResp } Resp With DBID From DataBuffer      { to }    { entryID } { dbid }
+ * { dataTDB  } Send Data To DataBufer                                    { dbid }
+ * { dataFDB  } Send Data From DataBuffer           { to }                { dbid }
+ *
+ */
 
 object DBState {
   val width       = 3

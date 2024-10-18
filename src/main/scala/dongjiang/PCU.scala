@@ -18,114 +18,28 @@ import zhujiang.HasZJParams
 
 class ProtocolCtrlUnit(localHf: Node, csnRf: Option[Node] = None, csnHf: Option[Node] = None)(implicit p: Parameters) extends DJModule {
 /*
- * TODO: Update It
- * System Architecture: (2 RNSLAVE, 1 RNMASTER, 1 SNMASTER and 2 Slice)
+ * System Architecture: (2 RNSLAVE, 1 RNMASTER, 1 SNMASTER, 1 DataBuffer and 2 EXU)
  *
- *                                          ----------------------------------------------------------
- *                                          |                       |   Dir    |                     |
- *               ------------               |      -----------      ------------      ---------      |                ------------
- *     CSN <---> | RNSLAVE  | <---> | <---> | ---> |  MSHR   | ---> | MainPipe | ---> | Queue | ---> |  <---> | <---> | RNMASTER | <---> CSN
- *               ------------       |       |      -----------      ------------      ---------      |        |       ------------
- *                                  |       |                            |                           |        |
- *                                  |       ----------------------------------------------------------        |
- *                                  |                                    |                                    |
- *                                  |                              --------------                             |
- *                                 XBar <------------------------> | DataBuffer | <------------------------> XBar
- *                                  |                              --------------                             |
- *                                  |                                    |                                    |
- *                                  |       ----------------------------------------------------------        |
- *                                  |       |                            |                           |        |
- *               ------------       |       |      -----------      ------------      ---------      |        |       ------------
- *   Local <---> | RNSLAVE  | <---> | <---> | ---> |  MSHR   | ---> | MainPipe | ---> | Queue | ---> |  <---> | <---> | SNMASTER | <---> Local
- *               ------------               |      -----------      ------------      ---------      |                ------------
- *                                          |                       |   Dir    |                     |
- *                                          ----------------------------------------------------------
- *                                                      
+ *                                          -----------------------------------------------------------------
+ *                                          |                       |       Dir       |                     |
+ *               ------------               |      -----------      -------------------      ---------      |                ------------
+ *     CSN <---> | RNSLAVE  | <---> | <---> | ---> |  MSHR   | ---> | ProcessPipe * 2 | ---> | Queue | ---> |  <---> | <---> | RNMASTER | <---> CSN
+ *               ------------       |       |      -----------      -------------------      ---------      |        |       ------------
+ *                                  |       |                                |                              |        |
+ *                                  |       -----------------------------------------------------------------        |
+ *                                  |                                        |                                       |
+ *                                  |                                 --------------                                 |
+ *                                 XBar <-------------------------->  | DataBuffer | <----------------------------> XBar
+ *                                  |                                 --------------                                 |
+ *                                  |                                        |                                       |
+ *                                  |       -----------------------------------------------------------------        |
+ *                                  |       |                                |                              |        |
+ *               ------------       |       |      -----------      -------------------      ---------      |        |       ------------
+ *   Local <---> | RNSLAVE  | <---> | <---> | ---> |  MSHR   | ---> | ProcessPipe * 2 | ---> | Queue | ---> |  <---> | <---> | SNMASTER | <---> Local
+ *               ------------               |      -----------      -------------------      ---------      |                ------------
+ *                                          |                       |       Dir       |                     |
+ *                                          -----------------------------------------------------------------
  */
-
-
-
-/*
- * TODO: Update It
- * CHI ID Map Table:
- *
- * *********************************************************** RNSLAVE ***************************************************************************
- *
- * tgtNodeID    <-> Get from Slice req
- * nodeID       <-> RnSlave
- * reqBufId     <-> ReqBuf
- * fwdNId       <-> Get from Slice req
- * fwdTxnID     <-> Get from Slice req
- *
- *
- *
- * { Read / Dataless / Atomic / CMO }   TxReq: Store {                    |  SrcID_g = SrcID     |   TxnID_g = TxnID     |                      }
- * { CompAck                        }   TxRsp: Match {                    |                      |   TxnID  == reqBufId  |                      }
- * { CompData                       }   RxDat: Send  { TgtID   = SrcID_g  |  SrcID   = nodeID    |   TxnID   = TxnID_g   |  DBID    = reqBufId  }
- * { Comp                           }   RxRsp: Send  { TgtID   = SrcID_g  |  SrcID   = nodeID    |   TxnID   = TxnID_g   |  DBID    = reqBufId  }
- *
- *
- * { Write                          }   TxReq: Store {                    |  SrcID_g = SrcID     |   TxnID_g = TxnID     |                      }
- * { WriteData                      }   TxDat: Match {                    |                      |   TxnID  == reqBufId  |                      }
- * { CompDBIDResp                   }   RxRsp: Send  { TgtID   = SrcID_g  |  SrcID   = nodeID    |   TxnID   = TxnID_g   |  DBID    = reqBufId  }
- *
- *
- * { SnoopResp                      }   TxRsp: Match {                    |                      |   TxnID  == reqBufId  |                      }
- * { SnoopRespData                  }   TxDat: Match {                    |                      |   TxnID  == reqBufId  |                      }
- * { Snoop                          }   RxSnp: Send  { TgtID  = tgtNodeID |  SrcID   = nodeID    |   TxnID   = reqBufId  |                      }
- *
- *
- * { SnpRespFwded                   }   TxRsp: Match {                    |                      |   TxnID  == reqBufId  |                      }
- * { SnpRespDataFwded               }   TxDat: Match {                    |                      |   TxnID  == reqBufId  |                      }
- * { SnoopFwd                       }   RxSnp: Send  {                    |  SrcID   = nodeID    |   TxnID   = reqBufId  |                      |   FwdNId  = fwdNId    |   FwdTxnID    = fwdTxnID }
- *
- *
- *
- * *********************************************************** RNMASTRE *************************************************************************
- *
- * tgtNodeID    <-> Get from Slice req
- * nodeID       <-> RnMaster
- * reqBufId     <-> ReqBuf
- *
- *
- * { Read / Dataless / Atomic / CMO }   TxReq: Send  { TgtID = tgtNodeID  |  SrcID   = nodeID    |   TxnID   = reqBufId  |                      }
- * { CompAck(When get CompData)     }   TxRsp: Send  { TgtID = HomeNID_g  |  SrcID   = nodeID    |   TxnID   = DBID_g    |                      }
- * { CompAck(When get Comp)         }   TxRsp: Send  { TgtID = SrcID_g    |  SrcID   = nodeID    |   TxnID   = DBID_g    |                      }
- * { CompData                       }   RxDat: M & S {                    |                      |   TxnID  == reqBufId  |  DBID_g  = DBID      |   HomeNID_g   = HomeNID   }
- * { Comp                           }   RxRsp: M & S {                    |  SrcID_g = SrcID     |   TxnID  == reqBufId  |  DBID_g  = DBID      }
- *
- *
- * { Write                          }   TxReq: Send  { TgtID = tgtNodeID  |  SrcID   = nodeID    |   TxnID   = reqBufId  |                      }
- * { WriteData                      }   TxDat: Send  { TgtID = tgtNodeID  |  SrcID   = nodeID    |   TxnID   = DBID_g    |                      }
- * { CompDBIDResp                   }   RxRsp: M & G {                    |                      |   TxnID  == reqBufId  |  DBID_g = DBID       }
- *
- *
- * { SnoopResp                      }   TxRsp: Match { TgtID = SrcID_g    |  SrcID   = nodeID    |   TxnID   = TxnID_g   |                      }
- * { SnoopRespData                  }   TxDat: Send  { TgtID = SrcID_g    |  SrcID   = nodeID    |   TxnID   = TxnID_g   |                      }
- * { Snoop                          }   RxSnp: Store {                    |  SrcID_g = SrcID     |   TxnID_g = TxnID     |                      }
- *
- *
- * { SnpRespFwded                   }   TxRsp: Match { TgtID = SrcID_g    |  SrcID   = nodeID    |   TxnID   = TxnID_g   |                      }
- * { SnpRespDataFwded               }   TxDat: Match { TgtID = SrcID_g    |  SrcID   = nodeID    |   TxnID   = TxnID_g   |                      }
- * { CompData                       }   TxDat: Match { TgtID = FwdNId_g   |  SrcID   = nodeID    |   TxnID   = FwdTxnID  |  DBID = TxnID_g      |   HomeNID     = SrcID_g   }
- * { SnoopFwd                       }   RxSnp: Store {                    |  SrcID_g = SrcID     |   TxnID_g = TxnID     |                      |   FwdNId_g    = FwdNId    |   FwdTxnID_g  = FwdTxnID }
- *
- *
- *
- * *********************************************************** SNMASTRE *************************************************************************
- *
- * nodeID       <-> RnMaster
- * reqBufId     <-> ReqBuf
- *
- * { Read                           }   TxReq: Send  { TgtID = 0          |  SrcID   = nodeID    |   TxnID   = reqBufId  |                      }
- * { CompData                       }   RxDat: Match {                    |                      |   TxnID  == reqBufId  |                      }
- *
- * { Write                          }   TxReq: Send  { TgtID = 0          |  SrcID   = nodeID    |   TxnID   = reqBufId  |                      }
- * { WriteData                      }   TxDat: Send  { TgtID = 0          |  SrcID   = nodeID    |   TxnID   = DBID_g    |                      }
- * { CompDBIDResp                   }   RxRsp: M & G {                    |                      |   TxnID  == reqBufId  |  DBID_g = DBID       }
- *
- */
-
 
 // ------------------------------------------ IO declaration ----------------------------------------------//
     val io = IO(new Bundle {

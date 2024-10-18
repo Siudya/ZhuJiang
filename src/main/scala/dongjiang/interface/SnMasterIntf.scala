@@ -10,11 +10,64 @@ import org.chipsalliance.cde.config._
 import dongjiang.utils.FastArb._
 
 /*
+ * ************************************************************** State transfer ***********************************************************************************
+ *
  * Read Req:  [Free] -----> [GetDBID] -----> [WaitDBID] -----> [Req2Node] -----> [WaitNodeData] -----> [Resp2Slice]
  *
  * Write Req: [Free] -----> [Req2Node] -----> [WaitNodeDBID] -----> [RCDB] -----> [WriteData2Node] -----> [WaitNodeComp] -----> [Resp2Slice]
  *
  * Replace:   [Free] -----> [Req2Node] -----> [WaitNodeDBID] -----> [Replace2Node] -----> [WaitReplDBID] -----> [RCDB] -----> [WriteData2Node] -----> [WaitNodeComp] -----> [Resp2Slice]
+ *
+ *
+ * ************************************************************** ID Transfer ********************************************************************************
+ *
+ * CHI:
+ * { TgtID | SrcID | TxnID | DBID | FwdNID | FwdTxnID }
+ *
+ * chiIdx: CHI Index
+ * { nodeID | txnID }
+ *
+ * pcuIdx: PCU Index
+ * { from(incoID) | to(incoID) | entryID | mshrIdx(mshrWay | mshrSet) | dbid | dcuIdx }
+ *
+ *
+ * Read: TODO: When using Read without DMT need to make sure that the RnSlave does not fill up the DataBuffer.
+ * { Req2Node        } Req    From Slice And Store In Intf                                                                                                  | { pcuIdx.mshrIdx = pcuIdx.mshrIdx } { pcuIdx.dcuIdx = pcuIdx.dcuIdx }
+ * { Read            } Req    Send To CHI                         { TgtID = tgtID } { ReturnNID = hnfID } { ReturnTxnID = entryID }                         |
+ * { CompData        } Resp   From CHI And Match With Entry ID    { TxnID == entryID }                                                                      |
+ * { Resp2Slice      } Resp   Send To Slice                                                                                                                 | { pcuIdx.to = chiMes.bankID } { pcuIdx.from = LOCALMAS } { pcuIdx.mshrIdx = mshrIdx }
+ *
+ *
+ * Read With DMT: Not implemented in the system
+ * { Req2Node        } Req    From Slice And Store In Intf        { chiIdx.nodeID = chiIdx.nodeID } { chiIdx.txnID =  chiIdx.txnID }                        | { pcuIdx.mshrIdx = pcuIdx.mshrIdx }
+ * { Read            } Req    Send To CHI                         { TgtID = chiMes.tgtID } { TxnID = Cat(chiMes.bankID, pcuIdx.mshrIdx) } { ReturnNID = chiIdx.nodeID } { ReturnTxnID = chiIdx.txnID }
+ *
+ *
+ * Write:
+ * { Req2Node        } Req    From Slice And Store In Intf                                                                                                  | { pcuIdx.mshrIdx = pcuIdx.mshrIdx } { pcuIdx.dbid = pcuIdx.dbid } { pcuIdx.dcuIdx = pcuIdx.dcuIdx }
+ * { Write           } Req    Send To CHI                         { TgtID = tgtID } { TxnID = entryID } { ReturnNID = hnfID } { ReturnTxnID = entryID }     |
+ * { DBIDResp        } Resp   From CHI And Match With Entry ID    { TxnID == entryID } { chiIdx.txnID = DBID } (Store DBID In chiIdx.txnID)                 |
+ * { NCBWrData       } Data   Send To CHI                         { TgtID = tgtID } { TxnID = chiIdx.txnID }                                                |
+ * { Comp            } Resp   From CHI And Match With Entry ID    { TxnID == entryID }                                                                      |
+ * { Resp2Slice      } Resp   Send To Slice                                                                                                                 | { pcuIdx.to = chiMes.bankID } { pcuIdx.from = LOCALMAS } { pcuIdx.mshrIdx = mshrIdx }
+ *
+ *
+ * Write With DWT: TODO
+ * { Req2Node        } Req    From Slice And Store In Intf        { chiIdx.nodeID = chiIdx.nodeID } { chiIdx.txnID =  chiIdx.txnID }                        | { pcuIdx.mshrIdx = pcuIdx.mshrIdx } { pcuIdx.dcuIdx = pcuIdx.dcuIdx }
+ * { Write           } Req    Send To CHI                         { TgtID = tgtID } { TxnID = entryID } { ReturnNID = chiIdx.nodeID } { ReturnTxnID = chiIdx.txnID } |
+ * { Comp            } Resp   From CHI And Match With Entry ID    { TxnID == entryID }                                                                      |
+ * { Resp2Slice      } Resp   Send To Slice                                                                                                                 | { pcuIdx.to = chiMes.bankID } { pcuIdx.from = LOCALMAS } { pcuIdx.mshrIdx = mshrIdx }
+ *
+ * Replace:
+ * { Req2Node        } Req    From Slice And Store In Intf                                                                                                  | { pcuIdx.mshrIdx = pcuIdx.mshrIdx } { pcuIdx.dbid = pcuIdx.dbid } { pcuIdx.dcuIdx = pcuIdx.dcuIdx }
+ * { Write           } Req    Send To CHI                         { TgtID = ddrcID } { TxnID = entryID } { ReturnNID = hnfID } { ReturnTxnID = entryID }    |
+ * { DBIDResp        } Resp   From CHI And Match With Entry ID    { TxnID == entryID } { chiIdx.txnID = DBID } (Store DBID In chiIdx.txnID)                 |
+ * { Replace         } Req    Send To CHI                         { TgtID = tgtID } { TxnID = entryID } { ReturnNID = ddrcID } { ReturnTxnID = chiIdx.txnID } |
+ * { NCBWrData       } Data   Send To CHI                         { TgtID = tgtID } { TxnID = chiIdx.txnID }                                                |
+ * { Comp            } Resp   From CHI And Match With Entry ID    { TxnID == entryID }                                                                      |
+ * { Resp2Slice      } Resp   Send To Slice                                                                                                                 | { pcuIdx.to = chiMes.bankID } { pcuIdx.from = LOCALMAS } { pcuIdx.mshrIdx = mshrIdx }
+ *
+ *
  */
 
 object SMState {
