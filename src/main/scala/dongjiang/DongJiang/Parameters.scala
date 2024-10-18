@@ -60,7 +60,6 @@ case class DJParam(
                     nrMpRespQueue: Int = 4,
                     // MSHR
                     nrMSHRSets: Int = 4,
-                    nrMSHRWays: Int = 16,
                     // ------------------------ Directory Mes Per Bank ------------------ //
                     // self dir & ds mes, dont care when hasLLC is false
                     selfWays: Int = 16,
@@ -75,6 +74,7 @@ case class DJParam(
                     dirMulticycle: Int = 2,
                     dirHoldMcp: Boolean = true,
                   ) {
+    val nrMSHRWays = min(selfWays, sfDirWays)
     require(nrDirBank >= nrMSHRSets)
     require(isPow2(nrDirBank))
     require(isPow2(nrMSHRSets))
@@ -83,7 +83,6 @@ case class DJParam(
     require(nrMpRespQueue > 0)
     require(nrMSHRSets <= selfSets)
     require(nrBank == 1 | nrBank == 2 | nrBank == 4)
-    require(nrMSHRWays <= min(selfWays, sfDirWays))
     require(selfReplacementPolicy == "random" || selfReplacementPolicy == "plru")
     require(sfReplacementPolicy == "random" || sfReplacementPolicy == "plru")
     require(log2Ceil(nrDCUWBuf) <= chiDBIDBits)
@@ -137,7 +136,7 @@ trait HasParseZJParam extends HasZJParams {
     }
 
     def getMetaIdByNodeID(x: UInt): UInt = {
-        val metaId = WireInit((nrRnfNode + 1).U((rnfNodeIdBits + 1).W))
+        val metaId = WireInit(0.U((rnfNodeIdBits + 1).W))
         rnNodeIdSeq.zipWithIndex.foreach {
             case (id, i) =>
                 when(x === id.U) {
