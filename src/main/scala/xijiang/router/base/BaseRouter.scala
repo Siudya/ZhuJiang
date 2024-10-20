@@ -39,8 +39,8 @@ class RouterRingIO(csn: Boolean)(implicit p: Parameters) extends ZJBundle {
 }
 
 class ResetRingIO extends Bundle {
-  val tx = Output(UInt(2.W))
-  val rx = Input(UInt(2.W))
+  val tx = Output(Vec(2, Bool()))
+  val rx = Input(Vec(2, Bool()))
 }
 
 trait BaseRouterUtils {
@@ -66,8 +66,14 @@ trait BaseRouterUtils {
 
   private val resetReg0 = withReset(router.reset.rx(0).asAsyncReset)(RegInit(3.U(2.W)))
   private val resetReg1 = withReset(router.reset.rx(1).asAsyncReset)(RegInit(3.U(2.W)))
-  if(isDefaultHi) router.reset.tx := icn.resetInject.get else router.reset.tx := Cat(resetReg1(0), resetReg0(0))
-  icn.resetState.get := Cat(resetReg1(0), resetReg0(0))
+  if(isDefaultHi) {
+    router.reset.tx := icn.resetInject.get
+  } else {
+    router.reset.tx(0) := resetReg0(0)
+    router.reset.tx(1) := resetReg1(0)
+  }
+  icn.resetState.get(0) := resetReg0(0)
+  icn.resetState.get(1) := resetReg1(0)
   resetReg0 := Cat(false.B, resetReg0(1))
   resetReg1 := Cat(false.B, resetReg1(1))
 
