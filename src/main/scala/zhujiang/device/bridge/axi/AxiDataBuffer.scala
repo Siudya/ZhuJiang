@@ -51,7 +51,7 @@ class AxiDataBufferFreelist(ctrlSize: Int, bufferSize: Int)(implicit p: Paramete
   private val headPtr = RegInit(AxiDataBufferFreelistPtr(f = false.B, v = 0.U))
   private val tailPtr = RegInit(AxiDataBufferFreelistPtr(f = true.B, v = 0.U))
   private val availableSlots = RegInit(bufferSize.U(log2Ceil(bufferSize + 1).W))
-  assert(availableSlots === (distanceBetween(tailPtr, headPtr) +& 1.U))
+  assert(availableSlots === distanceBetween(tailPtr, headPtr))
 
   when(io.req.valid) {
     assert(io.req.bits.size <= 6.U)
