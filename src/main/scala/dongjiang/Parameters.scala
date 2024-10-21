@@ -6,11 +6,9 @@ import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config._
 import xijiang.NodeType
-import zhujiang.HasZJParams
+import zhujiang.{HasZJParams, ZJParametersKey}
 
 import scala.math.{max, min}
-
-case object DJParamKey extends Field[DJParam](DJParam())
 
 
 // Node Interface Params, used for generation
@@ -63,7 +61,6 @@ case class DJParam(
                     nrMpRespQueue: Int = 4,
                     // MSHR
                     nrMSHRSets: Int = 4,
-                    nrMSHRWays: Int = 16,
                     // ------------------------ Directory Mes Per Bank ------------------ //
                     // self dir & ds mes, dont care when hasLLC is false
                     selfWays: Int = 16,
@@ -78,6 +75,7 @@ case class DJParam(
                     dirMulticycle: Int = 2,
                     dirHoldMcp: Boolean = true,
                   ) {
+    val nrMSHRWays = min(selfWays, sfDirWays)
     require(nrDirBank >= nrMSHRSets)
     require(isPow2(nrDirBank))
     require(isPow2(nrMSHRSets))
@@ -86,7 +84,6 @@ case class DJParam(
     require(nrMpRespQueue > 0)
     require(nrMSHRSets <= selfSets)
     require(nrBank == 1 | nrBank == 2 | nrBank == 4)
-    require(nrMSHRWays <= min(selfWays, sfDirWays))
     require(selfReplacementPolicy == "random" || selfReplacementPolicy == "plru")
     require(sfReplacementPolicy == "random" || sfReplacementPolicy == "plru")
     require(log2Ceil(nrDCUWBuf) <= chiDBIDBits)
@@ -114,7 +111,7 @@ trait HasParseZJParam extends HasZJParams {
     lazy val chiNodeIdBits   = zjParams.nodeIdBits
 
     // Local Base Node Mes
-    lazy val nrBankPerDJ     = localSnNode.length / localHnfNode.length
+    lazy val nrBankPerDJ     = p(ZJParametersKey).djParams.nrBank / localHnfNode.length
     lazy val nrRnfNode       = zjParams.localRing.count(_.nodeType == NodeType.CC)
     lazy val rnfNodeIdBits   = log2Ceil(nrRnfNode)
     lazy val rnNodeIdSeq     = localRnfNode.map(_.nodeId)
@@ -140,7 +137,7 @@ trait HasParseZJParam extends HasZJParams {
     }
 
     def getMetaIdByNodeID(x: UInt): UInt = {
-        val metaId = WireInit((nrRnfNode + 1).U((rnfNodeIdBits + 1).W))
+        val metaId = WireInit(0.U((rnfNodeIdBits + 1).W))
         rnNodeIdSeq.zipWithIndex.foreach {
             case (id, i) =>
                 when(x === id.U) {
@@ -168,7 +165,7 @@ trait HasParseZJParam extends HasZJParams {
 
 trait HasDJParam extends HasParseZJParam {
     val p: Parameters
-    val djparam = p(DJParamKey)
+    val djparam = p(ZJParametersKey).djParams //TODO: use lazy val in all parameters
 
     // Base Mes Parameters
     lazy val nrBeat          = djparam.blockBytes / djparam.beatBytes

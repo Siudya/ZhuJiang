@@ -17,13 +17,7 @@ class AxiBridge(node: Node)(implicit p: Parameters) extends ZJModule {
   private val axiParams = AxiParams(idBits = log2Ceil(node.outstanding), dataBits = dw)
 
   val icn = IO(new DeviceIcnBundle(node))
-  val axi = IO(new Bundle {
-    val aw = Decoupled(new AWFlit(axiParams))
-    val ar = Decoupled(new ARFlit(axiParams))
-    val w = Decoupled(new WFlit(axiParams))
-    val b = Flipped(Decoupled(new BFlit(axiParams)))
-    val r = Flipped(Decoupled(new RFlit(axiParams)))
-  })
+  val axi = IO(new AxiBundle(axiParams))
 
   private def compareTag(addr0: UInt, addr1: UInt): Bool = {
     addr0(compareTagBits + tagOffset - 1, tagOffset) === addr1(compareTagBits + tagOffset - 1, tagOffset)
@@ -41,8 +35,8 @@ class AxiBridge(node: Node)(implicit p: Parameters) extends ZJModule {
   axi.ar <> arArb.io.out
 
   private val dataBuffer = Module(new AxiDataBuffer(axiParams, node.outstanding, node.outstanding))
-  private val allocArb = Module(new RRArbiter(new AxiDataBufferAllocReq(node.outstanding), node.outstanding))
-  dataBuffer.io.alloc <> allocArb.io.out
+  private val dataBufferallocSelector = Module(new DataBufferAllocReqSelector(node.outstanding))
+  dataBuffer.io.alloc <> dataBufferallocSelector.io.out
   dataBuffer.io.icn.valid := icn.rx.data.get.valid
   dataBuffer.io.icn.bits := icn.rx.data.get.bits.asTypeOf(dataBuffer.io.icn.bits)
   icn.rx.data.get.ready := dataBuffer.io.icn.ready
@@ -60,7 +54,8 @@ class AxiBridge(node: Node)(implicit p: Parameters) extends ZJModule {
     cm.icn.tx.resp.ready := icnRspArb.io.in(idx).ready
     awArb.io.in(idx) <> cm.axi.aw
     arArb.io.in(idx) <> cm.axi.ar
-    allocArb.io.in(idx) <> cm.dataBufferAlloc
+    dataBufferallocSelector.io.in(idx) <> cm.dataBufferAlloc.req
+    cm.dataBufferAlloc.resp := dataBufferallocSelector.io.out.fire && dataBufferallocSelector.io.out.bits.idxOH(idx)
     cm
   }
 
@@ -120,6 +115,7 @@ class AxiBridge(node: Node)(implicit p: Parameters) extends ZJModule {
   readDataPipe.io.enq.bits.SrcID := 0.U
   readDataPipe.io.enq.bits.TgtID := ctrlSel.returnNid.get
   readDataPipe.io.enq.bits.HomeNID := ctrlSel.srcId
+  readDataPipe.io.enq.bits.DBID := ctrlSel.txnId
   readDataPipe.io.enq.bits.Resp := "b010".U
 
   icn.tx.data.get.valid := readDataPipe.io.deq.valid

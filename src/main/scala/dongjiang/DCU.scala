@@ -75,10 +75,10 @@ class DCUWEntry(implicit p: Parameters) extends DJBundle {
 /*
  * DCUs do not have sorting capabilities and must use the DWT transfer structure to sort by using Comp
  */
-class DataCtrlUnit(node: Node, nrIntf: Int = 1)(implicit p: Parameters) extends DJModule {
+class DataCtrlUnit(node: Node, nrIntf: Int = 1, hasReset: Boolean = true)(implicit p: Parameters) extends DJModule {
 // ------------------------------------------ IO declaration --------------------------------------------- //
   val io = IO(new Bundle {
-    val sn = Vec(nrIntf, Flipped(new IcnBundle(node)))
+    val sn = Vec(nrIntf, Flipped(new IcnBundle(node, hasReset)))
   })
 
   require(node.splitFlit)

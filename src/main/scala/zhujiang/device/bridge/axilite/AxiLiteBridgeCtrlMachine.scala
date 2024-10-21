@@ -9,27 +9,28 @@ import zhujiang.device.bridge.BaseCtrlMachine
 
 class AxiLiteBridgeCtrlMachine(
   icnNode: Node,
-  axiParams:AxiParams,
-  outstanding:Int,
-  ioDataBits: Int,
+  axiParams: AxiParams,
+  outstanding: Int,
+  bufDataBits: Int,
   compareTag: (UInt, UInt) => Bool
 )(implicit p: Parameters)
   extends BaseCtrlMachine(
     genOpVec = new AxiLiteBridgeCtrlOpVec,
-    genInfo = new AxiLiteCtrlInfo(ioDataBits),
-    genRsEntry = new AxiLiteRsEntry(ioDataBits),
+    genInfo = new AxiLiteCtrlInfo(bufDataBits),
+    genRsEntry = new AxiLiteRsEntry(bufDataBits),
     node = icnNode,
     outstanding = outstanding,
-    ioDataBits = ioDataBits,
+    ioDataBits = bufDataBits,
+    slvBusDataBits = axiParams.dataBits,
     compareTag = compareTag
-  ){
+  ) {
   val axi = IO(new Bundle {
     val aw = Decoupled(new AWFlit(axiParams))
     val ar = Decoupled(new ARFlit(axiParams))
     val w = Decoupled(new WFlit(axiParams))
     val b = Flipped(Decoupled(new BFlit(axiParams)))
   })
-
+  require(axiParams.dataBits >= bufDataBits)
   wakeupOutCond := allDone && valid
 
   when(io.wakeupOut.valid) {
@@ -64,8 +65,8 @@ class AxiLiteBridgeCtrlMachine(
 
   axi.w.valid := valid && payload.state.axiWdata && !waiting.orR
   axi.w.bits := DontCare
-  axi.w.bits.data := payload.info.data.get
-  axi.w.bits.strb := payload.info.mask.get
+  axi.w.bits.data := slvData
+  axi.w.bits.strb := slvMask
   axi.w.bits.last := true.B
 
   when(axi.aw.fire) {

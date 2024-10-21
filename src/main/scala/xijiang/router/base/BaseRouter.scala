@@ -38,11 +38,17 @@ class RouterRingIO(csn: Boolean)(implicit p: Parameters) extends ZJBundle {
   val rx = Input(new RingSide(csn))
 }
 
+class ResetRingIO extends Bundle {
+  val tx = Output(UInt(2.W))
+  val rx = Input(UInt(2.W))
+}
+
 trait BaseRouterUtils {
   m: ZJModule =>
   def node: Node
   override val desiredName = node.routerStr
   val tfbNodeType = if(node.csnNode) ((1 << NodeType.width) | node.nodeType).U else node.nodeType.U
+  private val isDefaultHi = node.nodeType == NodeType.HI && node.defaultHni
 
   val local = !node.csnNode
   val c2c = node.csnNode && node.nodeType == NodeType.C
@@ -54,8 +60,16 @@ trait BaseRouterUtils {
     val chip = Input(UInt(p(ZJParametersKey).nodeAidBits.W))
     val nodeId = Output(UInt(niw.W))
     val c2cIds = if(!local && !c2c && node.nodeType != NodeType.P) Some(Input(Vec(csnC2cNum, new NodeIdBundle))) else None
+    val reset = new ResetRingIO
   })
-  val icn = IO(new IcnBundle(node))
+  val icn = IO(new IcnBundle(node, true))
+
+  private val resetReg0 = withReset(router.reset.rx(0).asAsyncReset)(RegInit(3.U(2.W)))
+  private val resetReg1 = withReset(router.reset.rx(1).asAsyncReset)(RegInit(3.U(2.W)))
+  if(isDefaultHi) router.reset.tx := icn.resetInject.get else router.reset.tx := Cat(resetReg1(0), resetReg0(0))
+  icn.resetState.get := Cat(resetReg1(0), resetReg0(0))
+  resetReg0 := Cat(false.B, resetReg0(1))
+  resetReg1 := Cat(false.B, resetReg1(1))
 
   val nid = if(local) node.nodeId.U(niw.W) else node.nodeId.U(niw.W) | router.chip
 
@@ -160,13 +174,10 @@ trait BaseRouterUtils {
     }
 
     if(icnTx.isDefined) {
-      val buf = Module(new Queue(flitMap(chn), 1, pipe = true))
       val mon = if(hasTfb) Some(Module(new FlitMonitor)) else None
-      buf.suggestName(s"eject${chn.toLowerCase().capitalize}Buffer")
-      icnTx.get.valid := buf.io.deq.valid
-      icnTx.get.bits := buf.io.deq.bits.asTypeOf(icnTx.get.bits)
-      buf.io.deq.ready := icnTx.get.ready
-      buf.io.enq <> tap.get.io.eject
+      icnTx.get.valid := tap.get.io.eject.valid
+      icnTx.get.bits := tap.get.io.eject.bits.asTypeOf(icnTx.get.bits)
+      tap.get.io.eject.ready := icnTx.get.ready
       mon.foreach(m => {
         m.suggestName(s"eject${chn.toLowerCase().capitalize}Monitor")
         m.io.clock := clock

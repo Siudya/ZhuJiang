@@ -16,7 +16,6 @@ import xijiang.router.base.IcnBundle
 import zhujiang.HasZJParams
 
 
-class ProtocolCtrlUnit(localHf: Node, csnRf: Option[Node] = None, csnHf: Option[Node] = None)(implicit p: Parameters) extends DJModule {
 /*
  * System Architecture: (2 RNSLAVE, 1 RNMASTER, 1 SNMASTER, 1 DataBuffer and 2 EXU)
  *
@@ -41,9 +40,11 @@ class ProtocolCtrlUnit(localHf: Node, csnRf: Option[Node] = None, csnHf: Option[
  *                                          -----------------------------------------------------------------
  */
 
+
+class ProtocolCtrlUnit(localHf: Node, csnRf: Option[Node] = None, csnHf: Option[Node] = None, hasReset: Boolean = true)(implicit p: Parameters) extends DJModule {
 // ------------------------------------------ IO declaration ----------------------------------------------//
     val io = IO(new Bundle {
-        val toLocal        = Flipped(new IcnBundle(localHf))
+        val toLocal        = Flipped(new IcnBundle(localHf, hasReset)) //TODO:Use DeviceIcnBundle
         val toCSNOpt       = if (hasCSNIntf) Some(new Bundle {
             val hn         = Flipped(new IcnBundle(csnHf.get))
             val rn         = Flipped(new IcnBundle(csnRf.get))
