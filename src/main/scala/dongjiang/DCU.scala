@@ -179,9 +179,9 @@ class DataCtrlUnit(node: Node, nrIntf: Int = 1, hasReset: Boolean = true)(implic
   /*
     * Get Read CHI Resp
     */
-  val earlyRValid             = ds.map(_.io.earlyRReq.fire).reduce(_ | _)
-  rRespReg.valid              := Mux(earlyRValid, true.B, rRespReg.valid & !rRespCanGo)
-  rRespCanGo                  := rRespQ.io.enq.ready
+  val earlyRValid           = ds.map(_.io.earlyRReq.fire).reduce(_ | _)
+  rRespReg.valid            := Mux(earlyRValid, true.B, rRespReg.valid & !rRespCanGo)
+  rRespCanGo                := rRespQ.io.enq.ready
   when(earlyRValid & rRespCanGo) {
     rRespReg.bits.Opcode    := Mux(earlyRepl, CHIOp.DAT.NonCopyBackWrData,      CHIOp.DAT.CompData)
     rRespReg.bits.TgtID     := Mux(earlyRepl, ddrcNodeId.U,                     rBufRegVec(earlyRID).srcID)

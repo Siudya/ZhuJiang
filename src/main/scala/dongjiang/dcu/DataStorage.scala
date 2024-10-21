@@ -65,7 +65,7 @@ class DataStorage(sets: Int)(implicit p: Parameters) extends DJModule {
   })
 
 // --------------------- Modules declaration ------------------------//
-  val array       = Module(new SRAMTemplate(UInt(dataBits.W), sets, way = 1, singlePort = true, multicycle = 2, holdMcp = true))
+  val arrays      = Seq.fill(nrBeat) { Module(new SRAMTemplate(UInt(beatBits.W), sets, way = 1, singlePort = true, multicycle = 2, holdMcp = true)) }
 
 //// ----------------------- Reg/Wire declaration --------------------------//
   // Base
@@ -100,15 +100,19 @@ class DataStorage(sets: Int)(implicit p: Parameters) extends DJModule {
    * Read / Write Req SRAM
    */
   // early
-  array.io.earlyRen.get       := io.earlyRReq.fire
-  array.io.earlyWen.get       := io.earlyWReq.fire
-  // ren
-  array.io.r.req.valid        := sramCtrlReg.isRReqFire
-  array.io.r.req.bits.setIdx  := io.read
-  // wen
-  array.io.w.req.valid        := sramCtrlReg.isWReqFire
-  array.io.w.req.bits.setIdx  := io.write.index
-  array.io.w.req.bits.data.foreach(_ := io.write.data)
+  arrays.zipWithIndex.foreach {
+    case(a, i) =>
+      a.io.earlyRen.get       := io.earlyRReq.fire
+      a.io.earlyWen.get       := io.earlyWReq.fire
+      // ren
+      a.io.r.req.valid        := sramCtrlReg.isRReqFire
+      a.io.r.req.bits.setIdx  := io.read
+      // wen
+      a.io.w.req.valid        := sramCtrlReg.isWReqFire
+      a.io.w.req.bits.setIdx  := io.write.index
+      a.io.w.req.bits.data.foreach(_ := io.write.data(beatBits * (i + 1) - 1, beatBits * i))
+  }
+
 
 
 // ---------------------------------------------------------------------------------------------------------------------- //
@@ -119,11 +123,11 @@ class DataStorage(sets: Int)(implicit p: Parameters) extends DJModule {
    * Receive Meta SRAM resp
    */
   valid_s2      := sramCtrlReg.isGetResp
-  resp_s2       := array.io.r.resp.data(0)
+  resp_s2       := Cat(arrays.map(_.io.r.resp.data(0)).reverse)
 
 
 // ---------------------------------------------------------------------------------------------------------------------- //
-// -------------------------------------------------- S3: Output DirResp  ----------------------------------------------- //
+// ---------------------------------------------------- S3: Output Resp  ------------------------------------------------ //
 // ---------------------------------------------------------------------------------------------------------------------- //
   /*
    * Receive S2
