@@ -8,6 +8,7 @@ import dongjiang.chi.CHIOp.REQ._
 import dongjiang.chi.CHIOp.RSP._
 import dongjiang.chi.CHIOp.DAT._
 import chisel3._
+import chisel3.experimental.hierarchy.{instantiable, public}
 import chisel3.util._
 import org.chipsalliance.cde.config._
 import xs.utils.perf.{DebugOptions, DebugOptionsKey}
@@ -75,11 +76,17 @@ class DCUWEntry(implicit p: Parameters) extends DJBundle {
 /*
  * DCUs do not have sorting capabilities and must use the DWT transfer structure to sort by using Comp
  */
-class DataCtrlUnit(node: Node, nrIntf: Int = 1, hasReset: Boolean = true)(implicit p: Parameters) extends DJModule {
-// ------------------------------------------ IO declaration --------------------------------------------- //
-  val io = IO(new Bundle {
+@instantiable
+class DataCtrlUnit(node: Node, nrIntf: Int = 1, hasReset: Boolean = true)(implicit p: Parameters) extends DJRawModule
+  with ImplicitClock with ImplicitReset {
+  // ------------------------------------------ IO declaration --------------------------------------------- //
+  @public val io = IO(new Bundle {
     val sn = Vec(nrIntf, Flipped(new IcnBundle(node, hasReset)))
   })
+  @public val reset = IO(Input(AsyncReset()))
+  @public val clock = IO(Input(Clock()))
+  val implicitClock = clock
+  val implicitReset = reset
 
   require(node.splitFlit)
   require(1 <= nrIntf & nrIntf <= 2)

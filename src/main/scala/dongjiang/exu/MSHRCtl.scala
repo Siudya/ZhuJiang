@@ -50,7 +50,7 @@ class MSHREntry(implicit p: Parameters) extends DJBundle {
 
 
 class MSHRCtl()(implicit p: Parameters) extends DJModule {
-// --------------------- IO declaration ------------------------//
+  // --------------------- IO declaration ------------------------//
   val io = IO(new Bundle {
     val sliceId       = Input(UInt(bankBits.W))
     // Req To Slice
@@ -75,10 +75,10 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
   // TODO: Delete the following code when the coding is complete
   dontTouch(io)
 
-// ------------------------ Module declaration ------------------------- //
+  // ------------------------ Module declaration ------------------------- //
   val reqAck_s0_q           = Module(new Queue(new ReqAck2NodeBundle(), entries = 4, flow = false, pipe = true))
 
-// --------------------- Reg / Wire declaration ------------------------ //
+  // --------------------- Reg / Wire declaration ------------------------ //
   // mshrTable
   val mshrTableReg          = RegInit(VecInit(Seq.fill(djparam.nrMSHRSets) { VecInit(Seq.fill(djparam.nrMSHRWays) { 0.U.asTypeOf(new MSHREntry()) }) }))
   val mshrLockVecReg        = RegInit(VecInit(Seq.fill(djparam.nrMSHRSets) { false.B })) // TODO: nrMSHRSets -> nrDirSet
@@ -103,9 +103,9 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
   val resp2dirRegVec        = RegInit(0.U.asTypeOf(io.mshrResp2Dir))
 
 
-// ---------------------------------------------------------------------------------------------------------------------- //
-// --------------------------------------- S0: Receive Req From Node or Let It Retry ------------------------------------ //
-// ---------------------------------------------------------------------------------------------------------------------- //
+  // ---------------------------------------------------------------------------------------------------------------------- //
+  // --------------------------------------- S0: Receive Req From Node or Let It Retry ------------------------------------ //
+  // ---------------------------------------------------------------------------------------------------------------------- //
   /*
    * Get MSHR Mes
    */
@@ -161,9 +161,9 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
   io.reqAck2node                <> reqAck_s0_q.io.deq
 
 
-// ---------------------------------------------------------------------------------------------------------------------- //
-// ---------------------------------------------- S0: Update MSHR Table Value  ------------------------------------------ //
-// ---------------------------------------------------------------------------------------------------------------------- //
+  // ---------------------------------------------------------------------------------------------------------------------- //
+  // ---------------------------------------------- S0: Update MSHR Table Value  ------------------------------------------ //
+  // ---------------------------------------------------------------------------------------------------------------------- //
   /*
    * Update MSHRTable
    */
@@ -189,9 +189,9 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
             m.waitIntfVec       := io.updMSHR.bits.waitIntfVec
             assert(PopCount(m.waitIntfVec) === 0.U, s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x] STATE[0x%x]", i.U, j.U, m.addr(i.U), m.chiMes.channel, m.chiMes.opcode, m.state)
             assert(m.isAlreadySend, s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x] STATE[0x%x]", i.U, j.U, m.addr(i.U), m.chiMes.channel, m.chiMes.opcode, m.state)
-          /*
-           * Resp Update mshrTable value
-           */
+            /*
+             * Resp Update mshrTable value
+             */
           }.elsewhen(io.resp2Slice.valid & io.resp2Slice.bits.mshrMatch(i.U, j.U)) {
             assert(!io.resp2Slice.bits.isUpdate, "TODO")
             // Recovery of pending intf identifiers
@@ -216,16 +216,16 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
             }
             assert(m.waitIntfVec(io.resp2Slice.bits.from.intfId), s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x] STATE[0x%x]", i.U, j.U, m.addr(i.U), m.chiMes.channel, m.chiMes.opcode, m.state)
             assert(m.isWaitResp, s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x] STATE[0x%x]", i.U, j.U, m.addr(i.U), m.chiMes.channel, m.chiMes.opcode, m.state)
-          /*
-           * Receive Node Req
-           */
+            /*
+             * Receive Node Req
+             */
           }.elsewhen(io.req2Slice.fire & canReceiveNode & i.U === io.req2Slice.bits.mSet & j.U === nodeReqInvWay) {
             m := 0.U.asTypeOf(m)
             m := mshrAlloc_s0
             assert(m.isFree, s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x] STATE[0x%x]", i.U, j.U, m.addr(i.U), m.chiMes.channel, m.chiMes.opcode, m.state)
-          /*
-           * Clean MSHR Entry When Its Free
-           */
+            /*
+             * Clean MSHR Entry When Its Free
+             */
           }.elsewhen(m.isFree) {
             m := 0.U.asTypeOf(m)
           }
@@ -249,7 +249,7 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
         lock := false.B
         assert(lock)
       }.elsewhen((taskReq_s0.valid & canGoReq_s0 & taskReq_s0.bits.readDir & taskReq_s0.bits.mSet === i.U) | // Req Fire
-                 (taskResp_s0.valid & canGoResp_s0 & taskResp_s0.bits.readDir & taskResp_s0.bits.mSet === i.U)) { // Resp Fire
+        (taskResp_s0.valid & canGoResp_s0 & taskResp_s0.bits.readDir & taskResp_s0.bits.mSet === i.U)) { // Resp Fire
         lock := true.B
       }
   }
@@ -257,9 +257,9 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
 
 
 
-// ---------------------------------------------------------------------------------------------------------------------- //
-// --------------------------------------------- S0: Update MHSR Table State -------------------------------------------- //
-// ---------------------------------------------------------------------------------------------------------------------- //
+  // ---------------------------------------------------------------------------------------------------------------------- //
+  // --------------------------------------------- S0: Update MHSR Table State -------------------------------------------- //
+  // ---------------------------------------------------------------------------------------------------------------------- //
   /*
    * Update MSHR Table State
    */
@@ -286,8 +286,8 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
               val update  = hit & io.updMSHR.bits.isUpdate
               val clean   = hit & io.updMSHR.bits.isClean
               m.state     := Mux(retry, MSHRState.BeSend,
-                                Mux(update, MSHRState.WaitResp,
-                                    Mux(clean, MSHRState.Free, MSHRState.AlreadySend)))
+                Mux(update, MSHRState.WaitResp,
+                  Mux(clean, MSHRState.Free, MSHRState.AlreadySend)))
             }
             // WaitResp
             is(MSHRState.WaitResp) {
@@ -300,9 +300,9 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
       }
   }
 
-// ---------------------------------------------------------------------------------------------------------------------- //
-// --------------------------------------------- S0: Get task_s0 from MSHR ---------------------------------------------- //
-// ---------------------------------------------------------------------------------------------------------------------- //
+  // ---------------------------------------------------------------------------------------------------------------------- //
+  // --------------------------------------------- S0: Get task_s0 from MSHR ---------------------------------------------- //
+  // ---------------------------------------------------------------------------------------------------------------------- //
   /*
    * Get Can Send Set From Dir Read Ready and mshrLockVecReg
    */
@@ -366,9 +366,9 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
   assert(PopCount(io.earlyRReqVec.map(_.fire)) === PopCount(Seq(taskResp_s0.valid & canGoResp_s0, taskReq_s0.valid & canGoReq_s0)))
 
 
-// ---------------------------------------------------------------------------------------------------------------------- //
-// ---------------------------------- S0: Read Dir and send task to MainPipe -------------------------------------------- //
-// ---------------------------------------------------------------------------------------------------------------------- //
+  // ---------------------------------------------------------------------------------------------------------------------- //
+  // ---------------------------------- S0: Read Dir and send task to MainPipe -------------------------------------------- //
+  // ---------------------------------------------------------------------------------------------------------------------- //
   /*
    * Set Task S1 Value
    */
@@ -409,7 +409,7 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
 
 
 
-// ------------------------ S2: Dir Read MSHR and MSHR Resp to Dir --------------------------//
+  // ------------------------ S2: Dir Read MSHR and MSHR Resp to Dir --------------------------//
   io.dirReadMshr.zip(resp2dirRegVec).foreach {
     case (read, resp) =>
       when(read.valid) {
@@ -429,7 +429,7 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
   io.mshrResp2Dir     := resp2dirRegVec
 
 
-// ---------------------------  Assertion  -------------------------------- //
+  // ---------------------------  Assertion  -------------------------------- //
   // MSHR Timeout Check
   val cntMSHRReg = RegInit(VecInit(Seq.fill(djparam.nrMSHRSets) { VecInit(Seq.fill(djparam.nrMSHRWays) { 0.U(64.W) }) }))
   cntMSHRReg.zipWithIndex.foreach { case (c0, i) => c0.zipWithIndex.foreach { case(c1, j) => c1 := Mux(mshrTableReg(i)(j).isFree, 0.U, c1 + 1.U)  } }

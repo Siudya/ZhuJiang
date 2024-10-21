@@ -174,11 +174,11 @@ case class ZJParameters(
   cpuDevSpaceBits: Int = 8,
   snoopEjectBufDepth: Int = 8,
   reqEjectBufDepth: Int = 8,
-  externalInterruptNum:Int = 32,
-  clusterCacheSizeInKiB:Int = 1024,
-  cacheSizeInMiB:Int = 16,
-  cacheWays:Int = 16,
-  snoopFilterWays:Int = 16,
+  externalInterruptNum: Int = 32,
+  clusterCacheSizeInKiB: Int = 1024,
+  cacheSizeInMiB: Int = 16,
+  cacheWays: Int = 16,
+  snoopFilterWays: Int = 16,
   localNodeParams: Seq[NodeParam] = Seq(),
   csnNodeParams: Seq[NodeParam] = Seq(),
   dmaParams: DmaParams = DmaParams(),
@@ -220,6 +220,7 @@ case class ZJParameters(
     nrBank = bank,
     sfDirWays = snoopFilterWays,
     sfDirSets = clusterTotalCacheSizeInKiB * 1024 * 2 / snoopFilterWays / bank / cachelineBytes,
+    nrDirBank = 1
   )
 }
 

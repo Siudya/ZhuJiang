@@ -8,6 +8,7 @@ import dongjiang.pcu._
 import dongjiang.pcu.exu._
 import dongjiang.pcu.intf._
 import chisel3._
+import chisel3.experimental.hierarchy.{instantiable, public}
 import chisel3.util._
 import org.chipsalliance.cde.config._
 import xs.utils.perf.{DebugOptions, DebugOptionsKey}
@@ -40,17 +41,22 @@ import zhujiang.HasZJParams
  *                                          -----------------------------------------------------------------
  */
 
-
-class ProtocolCtrlUnit(localHf: Node, csnRf: Option[Node] = None, csnHf: Option[Node] = None, hasReset: Boolean = true)(implicit p: Parameters) extends DJModule {
-// ------------------------------------------ IO declaration ----------------------------------------------//
-    val io = IO(new Bundle {
-        val hnfID          = Input(UInt(chiNodeIdBits.W))
-        val toLocal        = Flipped(new IcnBundle(localHf, hasReset)) //TODO:Use DeviceIcnBundle
-        val toCSNOpt       = if (hasCSNIntf) Some(new Bundle {
-            val hn         = Flipped(new IcnBundle(csnHf.get))
-            val rn         = Flipped(new IcnBundle(csnRf.get))
-        }) else None
-    })
+@instantiable
+class ProtocolCtrlUnit(localHf: Node, csnRf: Option[Node] = None, csnHf: Option[Node] = None, hasReset: Boolean = true)(implicit p: Parameters) extends DJRawModule
+  with ImplicitClock with ImplicitReset {
+  // ------------------------------------------ IO declaration ----------------------------------------------//
+  @public val io  = IO(new Bundle {
+    val hnfID     = Input(UInt(chiNodeIdBits.W))
+    val toLocal   = Flipped(new IcnBundle(localHf, hasReset)) //TODO:Use DeviceIcnBundle
+    val toCSNOpt  = if(hasCSNIntf) Some(new Bundle {
+      val hn      = Flipped(new IcnBundle(csnHf.get))
+      val rn      = Flipped(new IcnBundle(csnRf.get))
+    }) else None
+  })
+  @public val reset = IO(Input(AsyncReset()))
+  @public val clock = IO(Input(Clock()))
+  val implicitClock = clock
+  val implicitReset = reset
 
 // ------------------------------------------ Modules declaration ----------------------------------------------//
 
@@ -107,21 +113,21 @@ class ProtocolCtrlUnit(localHf: Node, csnRf: Option[Node] = None, csnHf: Option[
      */
     if(hasCSNIntf) {
         // tx
-        io.toCSNOpt.get.hn.tx.req.get <> csnRnSlaveOpt.get.io.chi.txreq
-        io.toCSNOpt.get.hn.tx.resp.get <> csnRnSlaveOpt.get.io.chi.txrsp
-        io.toCSNOpt.get.hn.tx.data.get <> csnRnSlaveOpt.get.io.chi.txdat
+        io.toCSNOpt.get.hn.tx.req.get   <> csnRnSlaveOpt.get.io.chi.txreq
+        io.toCSNOpt.get.hn.tx.resp.get  <> csnRnSlaveOpt.get.io.chi.txrsp
+        io.toCSNOpt.get.hn.tx.data.get  <> csnRnSlaveOpt.get.io.chi.txdat
         // rx
-        csnRnSlaveOpt.get.io.chi.rxsnp <> io.toCSNOpt.get.hn.rx.snoop.get
-        csnRnSlaveOpt.get.io.chi.rxrsp <> io.toCSNOpt.get.hn.rx.resp.get
-        csnRnSlaveOpt.get.io.chi.rxdat <> io.toCSNOpt.get.hn.rx.data.get
+        csnRnSlaveOpt.get.io.chi.rxsnp  <> io.toCSNOpt.get.hn.rx.snoop.get
+        csnRnSlaveOpt.get.io.chi.rxrsp  <> io.toCSNOpt.get.hn.rx.resp.get
+        csnRnSlaveOpt.get.io.chi.rxdat  <> io.toCSNOpt.get.hn.rx.data.get
         // tx
         csnRnMasterOpt.get.io.chi.txreq <> io.toCSNOpt.get.rn.rx.req.get
         csnRnMasterOpt.get.io.chi.txrsp <> io.toCSNOpt.get.rn.rx.resp.get
         csnRnMasterOpt.get.io.chi.txdat <> io.toCSNOpt.get.rn.rx.data.get
         // rx
         io.toCSNOpt.get.rn.tx.snoop.get <> csnRnMasterOpt.get.io.chi.rxsnp
-        io.toCSNOpt.get.rn.tx.resp.get <> csnRnMasterOpt.get.io.chi.rxrsp
-        io.toCSNOpt.get.rn.tx.data .get<> csnRnMasterOpt.get.io.chi.rxdat
+        io.toCSNOpt.get.rn.tx.resp.get  <> csnRnMasterOpt.get.io.chi.rxrsp
+        io.toCSNOpt.get.rn.tx.data.get  <> csnRnMasterOpt.get.io.chi.rxdat
     }
 
     /*
@@ -130,7 +136,7 @@ class ProtocolCtrlUnit(localHf: Node, csnRf: Option[Node] = None, csnHf: Option[
 
     intfs.zipWithIndex.foreach {
         case(intf, i) =>
-            intf.io.hnfID                          := io.hnfID
+            intf.io.hnfID                           := io.hnfID
             // slice ctrl signals
             if (intf.io.req2SliceOpt.nonEmpty) {
                 xbar.io.req2Slice.in(i)             <> intf.io.req2SliceOpt.get

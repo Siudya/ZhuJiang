@@ -86,8 +86,8 @@ class IcnRxBundle(node: Node)(implicit p: Parameters) extends ZJBundle with Base
 class IcnBundle(val node: Node, hasReset:Boolean = false)(implicit p: Parameters) extends ZJBundle {
   val tx = new IcnTxBundle(node)
   val rx = new IcnRxBundle(node)
-  val resetState = if(hasReset) Some(Output(UInt(2.W))) else None
-  val resetInject = if(hasReset && node.defaultHni && node.nodeType == NodeType.HI) Some(Input(UInt(2.W))) else None
+  val resetState = if(hasReset) Some(Output(Vec(2, Bool()))) else None
+  val resetInject = if(hasReset && node.defaultHni && node.nodeType == NodeType.HI) Some(Input(Vec(2, Bool()))) else None
   def <>(that: DeviceIcnBundle): Unit = {
     this.rx <> that.tx
     that.rx <> this.tx

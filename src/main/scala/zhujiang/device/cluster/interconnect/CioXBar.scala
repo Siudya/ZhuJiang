@@ -18,8 +18,11 @@ class CioXBar(val mstParams: Seq[TilelinkParams])(implicit p: Parameters) extend
   })
   private def slvMatcher(local: Boolean)(addr: UInt): Bool = {
     val reqAddr = addr.asTypeOf(new ReqAddrBundle)
+    val mmio = reqAddr.mmio
+    val chipMatch = reqAddr.chip === misc.chip
+    val tagMatch = addr(raw - nodeAidBits - 2, cpuSpaceBits + coreIdBits) === 0.U
     val coreMatch = Cat(misc.core.map(_ === addr(cpuSpaceBits + coreIdBits - 1, cpuSpaceBits))).orR
-    val matchRes = WireInit(reqAddr.mmio && reqAddr.chip === misc.chip && coreMatch)
+    val matchRes = WireInit(mmio & chipMatch & tagMatch & coreMatch)
     if(local) matchRes else !matchRes
   }
   val slvMatchersSeq = Seq(slvMatcher(local = true), slvMatcher(local = false))
