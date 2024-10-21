@@ -66,10 +66,12 @@ class DirectoryBase(
                       replPolicy: String = "plru",
                       mcp: Int = 2, // TODO
                       holdMcp: Boolean = true, // TODO
+                      nrWayBank: Int = 1,
                    )
   (implicit p: Parameters) extends DJModule {
 
   require(mcp == 2 & holdMcp)
+  require(nrWayBank < ways)
 
   val repl        = ReplacementPolicy.fromString(replPolicy, ways)
   val useRepl     = replPolicy != "random"
@@ -92,7 +94,7 @@ class DirectoryBase(
   })
 
 // --------------------- Modules declaration ------------------------//
-  val metaArray     = Module(new SRAMTemplate(new DirEntry(tagBits, nrMetas), sets, ways, singlePort = true, shouldReset = true, multicycle = mcp, holdMcp = holdMcp))
+  val metaArrays    = Seq.fill(nrWayBank) { Module(new SRAMTemplate(new DirEntry(tagBits, nrMetas), sets, ways / nrWayBank, singlePort = true, shouldReset = true, multicycle = mcp, holdMcp = holdMcp)) }
 
   val replArrayOpt  = if(!useRepl) None else Some(Module(new SRAMTemplate(UInt(repl.nBits.W), sets, way = 1, singlePort = true, shouldReset = true)))
 
@@ -165,19 +167,22 @@ class DirectoryBase(
   /*
    * Read / Write Req SRAM
    */
-  // early
-  metaArray.io.earlyRen.get       := io.earlyRReq.fire
-  metaArray.io.earlyWen.get       := io.earlyWReq.fire
-  // ren
-  metaArray.io.r.req.valid        := sramCtrlReg.isReqFire & sramCtrlReg.ren
-  metaArray.io.r.req.bits.setIdx  := rSet
-  // wen
-  metaArray.io.w.req.valid        := sramCtrlReg.isReqFire & sramCtrlReg.wen
-  metaArray.io.w.req.bits.setIdx  := wSet
-  metaArray.io.w.req.bits.data.foreach(_.tag      := wTag)
-  metaArray.io.w.req.bits.data.foreach(_.bank     := wBank)
-  metaArray.io.w.req.bits.data.foreach(_.metaVec  := io.dirWrite.metaVec)
-  metaArray.io.w.req.bits.waymask.get := io.dirWrite.wayOH
+  metaArrays.zipWithIndex.foreach {
+    case (m, i) =>
+      // early
+      m.io.earlyRen.get       := io.earlyRReq.fire
+      m.io.earlyWen.get       := io.earlyWReq.fire
+      // ren
+      m.io.r.req.valid        := sramCtrlReg.isReqFire & sramCtrlReg.ren
+      m.io.r.req.bits.setIdx  := rSet
+      // wen
+      m.io.w.req.valid        := sramCtrlReg.isReqFire & sramCtrlReg.wen
+      m.io.w.req.bits.setIdx  := wSet
+      m.io.w.req.bits.data.foreach(_.tag      := wTag)
+      m.io.w.req.bits.data.foreach(_.bank     := wBank)
+      m.io.w.req.bits.data.foreach(_.metaVec  := io.dirWrite.metaVec)
+      m.io.w.req.bits.waymask.get             := io.dirWrite.wayOH
+  }
 
 
 // ---------------------------------------------------------------------------------------------------------------------- //
@@ -208,7 +213,13 @@ class DirectoryBase(
    * Receive Meta SRAM resp
    */
   valid_s2        := sramCtrlReg.isGetResp & sramCtrlReg.ren
-  metaResp_s2     := metaArray.io.r.resp.data
+  metaArrays.zipWithIndex.foreach {
+    case (m, i) =>
+      m.io.r.resp.data.zipWithIndex.foreach {
+        case(d, j) =>
+          metaResp_s2((i*(ways/nrWayBank))+j) := d
+      }
+  }
 
   /*
    * Receive Repl SRAM resp
@@ -311,9 +322,9 @@ class DirectoryBase(
    * PLRU: update replacer only when read hit or write Dir
    */
   if (replPolicy == "plru") {
-    replArrayOpt.get.io.w.req.valid               := metaArray.io.w.req.fire | (io.dirResp.fire & hit)
-    replArrayOpt.get.io.w.req.bits.setIdx         := Mux(metaArray.io.w.req.fire, wSet, set_s3)
-    replArrayOpt.get.io.w.req.bits.data.foreach(_ := Mux(metaArray.io.w.req.fire,
+    replArrayOpt.get.io.w.req.valid               := metaArrays.map(_.io.w.req.fire).reduce(_ | _) | (io.dirResp.fire & hit)
+    replArrayOpt.get.io.w.req.bits.setIdx         := Mux(metaArrays.map(_.io.w.req.fire).reduce(_ | _), wSet, set_s3)
+    replArrayOpt.get.io.w.req.bits.data.foreach(_ := Mux(metaArrays.map(_.io.w.req.fire).reduce(_ | _),
                                                        repl.get_next_state(io.dirWrite.replMes, OHToUInt(io.dirWrite.wayOH)),
                                                        repl.get_next_state(replResp_s3_g, OHToUInt(io.dirResp.bits.wayOH))))
   } else if(replPolicy == "random") {

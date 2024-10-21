@@ -31,7 +31,8 @@ class DirectoryWrapper()(implicit p: Parameters) extends DJModule {
                                                                       nrMetas = 1,
                                                                       replPolicy = djparam.selfReplacementPolicy,
                                                                       mcp = djparam.dirMulticycle,
-                                                                      holdMcp = djparam.dirHoldMcp)) }
+                                                                      holdMcp = djparam.dirHoldMcp,
+                                                                      nrWayBank = 4)) }
 
   selfs.zipWithIndex.foreach { case(s, i) => s.io.id := i.U }
 
@@ -41,7 +42,8 @@ class DirectoryWrapper()(implicit p: Parameters) extends DJModule {
                                                                       nrMetas = nrRnfNode,
                                                                       replPolicy = djparam.sfReplacementPolicy,
                                                                       mcp = djparam.dirMulticycle,
-                                                                      holdMcp = djparam.dirHoldMcp)) }
+                                                                      holdMcp = djparam.dirHoldMcp,
+                                                                      nrWayBank = 4)) }
 
   sfs.zipWithIndex.foreach { case(sf, i) => sf.io.id := i.U }
 
