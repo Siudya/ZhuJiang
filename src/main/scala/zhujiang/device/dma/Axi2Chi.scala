@@ -38,7 +38,7 @@ class Axi2Chi(node: Node)(implicit p: Parameters) extends ZJModule {
   txReqFlit.Opcode := ReqOpcode.ReadOnce
   txReqFlit.Addr := 0x12345678L.U
   icn.tx.req.get.bits := txReqFlit.asTypeOf(icn.tx.req.get.bits)
-  icn.tx.req.get.valid := true.B
+  icn.tx.req.get.valid := false.B
 
   icn.rx.resp.get.ready := false.B
   icn.rx.data.get.ready := false.B
