@@ -16,6 +16,11 @@ object TrafficBoardFileManager {
     FileRegisters.add("env/tfb/src", "traffic_board.cpp", source(p), true)
   }
 
+  def release(header_dir:String, src_dir:String, p: Parameters):Unit = {
+    FileRegisters.add(header_dir, "traffic_board.h", header, dontCarePrefix = true)
+    FileRegisters.add(src_dir, "traffic_board.cpp", source(p), dontCarePrefix = true)
+  }
+
   private def getEject(nt: Int, csn: Boolean) = {
     if(csn) {
       Node(nodeType = nt).ejects.filterNot(_ == "ERQ")
