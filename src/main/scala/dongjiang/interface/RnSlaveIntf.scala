@@ -171,7 +171,7 @@ class RSEntry(param: InterfaceParam)(implicit p: Parameters) extends DJBundle  {
   def isReqBeSend   = state === RSState.Req2Slice & !nestMes.asUInt.orR & nid === 0.U
   def isRspBeSend   = (state === RSState.Resp2Node & chiMes.isRsp) | state === RSState.DBIDResp2Node
   def isDatBeSend   = state === RSState.Resp2Node & chiMes.isDat
-  def isGetDBID     = state === RSState.GetDBID
+  def isGetDBID     = state === RSState.GetDBID & nid === 0.U
   def isSendSnp     = state === RSState.Snp2Node
   def isSendSnpIng  = state === RSState.Snp2NodeIng
   def isLastBeat    = getDataNum === (nrBeat - 1).U
@@ -223,7 +223,6 @@ class RnSlaveIntf(djBankId: Int, rnSlvId: Int, param: InterfaceParam)(implicit p
        */
       when((io.chi.txreq.fire | io.req2Node.fire | io.resp2Node.fire) & entryFreeID === i.U) {
         entry               := 0.U.asTypeOf(entry)
-        entry.nid           := 0.U
         entry.indexMes      := indexSaveInIntf
         entry.chiMes        := taskSaveInIntf
         entry.nestMes       := 0.U.asTypeOf(entry.nestMes)
@@ -282,7 +281,7 @@ class RnSlaveIntf(djBankId: Int, rnSlvId: Int, param: InterfaceParam)(implicit p
        * Modify NID
        */
       }.elsewhen(!entry.isFree & entry.chiMes.isReq) {
-        val snp2IntfHit    = io.req2Node.fire    & io.req2Node.bits.addrNoOff                         === entry.indexMes.addrNoOff & io.req2Node.bits.isSnp  // SNP add NID
+        val snp2IntfHit   = io.req2Node.fire    & io.req2Node.bits.addrNoOff                         === entry.indexMes.addrNoOff & io.req2Node.bits.isSnp  // SNP add NID
         val resp2SliceHit = io.resp2Slice.fire  & entrys(entryResp2SliceID).indexMes.addrNoOff           === entry.indexMes.addrNoOff                           // SNP reduce NID
         val reqAckHit     = io.reqAck2Node.fire & entrys(io.reqAck2Node.bits.pcuId).indexMes.addrNoOff === entry.indexMes.addrNoOff & !io.reqAck2Node.bits.retry & io.reqAck2Node.bits.pcuId =/= i.U // REQ reduce NID
         entry.nid         := entry.nid + snp2IntfHit.asUInt - resp2SliceHit.asUInt - reqAckHit.asUInt
@@ -373,7 +372,7 @@ class RnSlaveIntf(djBankId: Int, rnSlvId: Int, param: InterfaceParam)(implicit p
         }
         // State: GetDBID
         is(RSState.GetDBID) {
-          val hit       = io.dbSigs.wReq.fire & entryGetDBID === i.U & entry.nid === 0.U // TODO: Consider Write can go no sorting required
+          val hit       = io.dbSigs.wReq.fire & entryGetDBID === i.U; assert(Mux(hit, entry.nid === 0.U, true.B)) // TODO: Consider Write can go no sorting required
           entry.state   := Mux(hit, RSState.WaitDBID, entry.state)
         }
         // State: WaitDBID

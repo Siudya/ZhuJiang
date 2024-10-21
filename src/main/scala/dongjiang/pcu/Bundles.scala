@@ -19,9 +19,9 @@ object ChipType {
 object IncoID {
     val width       = 2
     val LOCALSLV    = 0
-    val LOCALMAS    = 1
+    val LOCALMAS    = 1 // TODO: MAS -> MST
     val CSNSLV      = 2
-    val CSNMAS      = 3
+    val CSNMAS      = 3 // TODO: MAS -> MST
 }
 
 class IDBundle(implicit p: Parameters) extends DJBundle {

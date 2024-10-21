@@ -272,7 +272,7 @@ trait HasDJParam extends HasParseZJParam {
 
     def parseAddress(x: UInt, modBankBits: Int = 1, setBits: Int = 1, tagBits: Int = 1): (UInt, UInt, UInt, UInt, UInt) = {
         val offset  = x
-        val bank    = offset    >> offsetBits
+        val bank    = offset    >> offsetBits // TODO
         val modBank = bank      >> bankBits
         val set     = modBank   >> modBankBits
         val tag     = set       >> setBits

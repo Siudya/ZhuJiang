@@ -73,18 +73,18 @@ import dongjiang.utils.FastArb._
 object SMState {
   val width = 4
   // commom
-  val Free            = "b0000".U
-  val GetDBID         = "b0001".U
-  val WaitDBID        = "b0010".U
-  val Req2Node        = "b0011".U
-  val WaitNodeData    = "b0100".U
-  val Resp2Slice      = "b0101".U
-  val WaitNodeDBID    = "b0110".U
-  val RCDB            = "b0111".U
-  val WriteData2Node  = "b1000".U
-  val WaitNodeComp    = "b1001".U
-  val Replace2Node    = "b1010".U
-  val WaitReplDBID    = "b1011".U
+  val Free            = "b0000".U // 0x0
+  val GetDBID         = "b0001".U // 0x1
+  val WaitDBID        = "b0010".U // 0x2
+  val Req2Node        = "b0011".U // 0x3
+  val WaitNodeData    = "b0100".U // 0x4
+  val Resp2Slice      = "b0101".U // 0x5
+  val WaitNodeDBID    = "b0110".U // 0x6
+  val RCDB            = "b0111".U // 0x7
+  val WriteData2Node  = "b1000".U // 0x8
+  val WaitNodeComp    = "b1001".U // 0x9
+  val Replace2Node    = "b1010".U // 0xa
+  val WaitReplDBID    = "b1011".U // 0xb
 }
 
 object SMType {
