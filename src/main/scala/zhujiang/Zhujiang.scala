@@ -5,9 +5,13 @@ import chisel3.util._
 import chisel3.experimental.{ChiselAnnotation, annotate}
 import org.chipsalliance.cde.config.Parameters
 import xijiang.{NodeType, Ring}
+import dongjiang.pcu._
+import dongjiang.dcu._
+import dongjiang.ddrc._
+import chisel3.util.{Decoupled, DecoupledIO}
+import xijiang.c2c.C2cLinkPort
+import zhujiang.chi.{DataFlit, ReqFlit, RespFlit}
 import sifive.enterprise.firrtl.NestedPrefixModulesAnnotation
-import DONGJIANG._
-import DONGJIANG.DCU._
 import xijiang.router.base.IcnBundle
 import xs.utils.{DFTResetSignals, ResetGen}
 import zhujiang.axi.AxiBundle
@@ -85,15 +89,16 @@ class Zhujiang(implicit p: Parameters) extends ZJModule {
 
   require(localRing.icnHfs.get.nonEmpty)
   private val pcuIcnSeq = localRing.icnHfs.get
-  private val pcuDevSeq = pcuIcnSeq.map(icn => Module(new DongJiang(icn.node)))
+  private val pcuDevSeq = pcuIcnSeq.map(icn => Module(new ProtocolCtrlUnit(icn.node)))
   for(i <- pcuIcnSeq.indices) {
+    pcuDevSeq(i).io.hnfID := pcuIcnSeq(i).node.nodeId.U
     pcuDevSeq(i).io.toLocal <> pcuIcnSeq(i)
     pcuDevSeq(i).reset := placeResetGen(s"pcu_$i", pcuIcnSeq(i))
   }
 
   require(!localRing.icnSns.get.forall(_.node.mainMemory))
   private val dcuIcnSeq = localRing.icnSns.get.filterNot(_.node.mainMemory).groupBy(_.node.bankId).toSeq
-  private val dcuDevSeq = dcuIcnSeq.map(is => Module(new DCU(is._2.head.node, is._2.length)))
+  private val dcuDevSeq = dcuIcnSeq.map(is => Module(new DataCtrlUnit(is._2.head.node, is._2.length)))
   for(i <- dcuIcnSeq.indices) {
     for(j <- dcuIcnSeq(i)._2.indices) dcuDevSeq(i).io.sn(j) <> dcuIcnSeq(i)._2(j)
     dcuDevSeq(i).reset := placeResetGen(s"dcu_$i", dcuIcnSeq(i)._2.head)

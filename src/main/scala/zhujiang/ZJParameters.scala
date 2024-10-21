@@ -1,6 +1,6 @@
 package zhujiang
 
-import DONGJIANG.DJParam
+import dongjiang.DJParam
 import chisel3._
 import chisel3.util.log2Ceil
 import org.chipsalliance.cde.config.{Field, Parameters}

@@ -1,6 +1,6 @@
 package zhujiang.device.cluster.tl2axi
 
-import DONGJIANG.CHI.{MemAttr, Order, RespErr}
+import dongjiang.chi.{MemAttr, Order, RespErr}
 import chisel3._
 import chisel3.util._
 import xs.utils.debug.LeakChecker
