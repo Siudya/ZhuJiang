@@ -91,6 +91,7 @@ class Zhujiang(implicit p: Parameters) extends ZJModule {
   private val pcuIcnSeq = localRing.icnHfs.get
   private val pcuDevSeq = pcuIcnSeq.map(icn => Module(new ProtocolCtrlUnit(icn.node)))
   for(i <- pcuIcnSeq.indices) {
+    pcuDevSeq(i).io.hnfID := pcuIcnSeq(i).node.nodeId.U
     pcuDevSeq(i).io.toLocal <> pcuIcnSeq(i)
     pcuDevSeq(i).reset := placeResetGen(s"pcu_$i", pcuIcnSeq(i))
   }

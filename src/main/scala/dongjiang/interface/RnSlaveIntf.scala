@@ -180,7 +180,7 @@ class RSEntry(param: InterfaceParam)(implicit p: Parameters) extends DJBundle  {
 
 
 
-class RnSlaveIntf(djBankId: Int, rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) extends IntfBaseIO(isSlv = true, hasReq2Slice = true, hasDBRCReq = true) {
+class RnSlaveIntf(rnSlvId: Int, param: InterfaceParam)(implicit p: Parameters) extends IntfBaseIO(isSlv = true, hasReq2Slice = true, hasDBRCReq = true) {
   // Del it
   io <> DontCare
   dontTouch(io)
@@ -505,9 +505,9 @@ class RnSlaveIntf(djBankId: Int, rnSlvId: Int, param: InterfaceParam)(implicit p
   io.chi.rxdat.bits         := DontCare
   io.chi.rxdat.bits.Opcode  := entrys(datSelId).chiMes.opcode
   io.chi.rxdat.bits.TgtID   := entrys(datSelId).chiMes.srcID
-  io.chi.rxdat.bits.SrcID   := hnfNodeIdSeq(djBankId).U
+  io.chi.rxdat.bits.SrcID   := io.hnfID
   io.chi.rxdat.bits.TxnID   := entrys(datSelId).chiMes.txnID
-  io.chi.rxdat.bits.HomeNID := hnfNodeIdSeq(djBankId).U
+  io.chi.rxdat.bits.HomeNID := io.hnfID
   io.chi.rxdat.bits.DBID    := datSelId
   io.chi.rxdat.bits.Resp    := entrys(datSelId).chiMes.resp
   io.chi.rxdat.bits.DataID  := io.dbSigs.dataFDB.bits.dataID
@@ -527,9 +527,9 @@ class RnSlaveIntf(djBankId: Int, rnSlvId: Int, param: InterfaceParam)(implicit p
   io.chi.rxrsp.bits         := DontCare
   io.chi.rxrsp.bits.Opcode  := Mux(entrys(rspSelId).chiMes.isRsp, entrys(rspSelId).chiMes.opcode, CompDBIDResp)
   io.chi.rxrsp.bits.TgtID   := Mux(entrys(rspSelId).chiMes.isRsp, entrys(rspSelId).chiMes.srcID,  entrys(rspSelId).chiMes.srcID)
-  io.chi.rxrsp.bits.SrcID   := Mux(entrys(rspSelId).chiMes.isRsp, hnfNodeIdSeq(djBankId).U,     hnfNodeIdSeq(djBankId).U)
+  io.chi.rxrsp.bits.SrcID   := Mux(entrys(rspSelId).chiMes.isRsp, io.hnfID,                       io.hnfID)
   io.chi.rxrsp.bits.TxnID   := Mux(entrys(rspSelId).chiMes.isRsp, entrys(rspSelId).chiMes.txnID,  entrys(rspSelId).chiMes.txnID)
-  io.chi.rxrsp.bits.DBID    := Mux(entrys(rspSelId).chiMes.isRsp, rspSelId,                     rspSelId)
+  io.chi.rxrsp.bits.DBID    := Mux(entrys(rspSelId).chiMes.isRsp, rspSelId,                       rspSelId)
   io.chi.rxrsp.bits.Resp    := Mux(entrys(rspSelId).chiMes.isRsp, entrys(rspSelId).chiMes.resp,   DontCare)
 
 
@@ -610,7 +610,7 @@ class RnSlaveIntf(djBankId: Int, rnSlvId: Int, param: InterfaceParam)(implicit p
   io.chi.rxsnp.bits.Addr      := entrys(entrySendSnpID).indexMes.addr(addressBits - 1, 3)
   io.chi.rxsnp.bits.Opcode    := entrys(entrySendSnpID).chiMes.opcode
   io.chi.rxsnp.bits.TgtID     := snpTgtID
-  io.chi.rxsnp.bits.SrcID     := hnfNodeIdSeq(djBankId).U
+  io.chi.rxsnp.bits.SrcID     := io.hnfID
   io.chi.rxsnp.bits.TxnID     := entrySendSnpID
   io.chi.rxsnp.bits.FwdNID    := entrys(entrySendSnpID).chiMes.srcID
   io.chi.rxsnp.bits.FwdTxnID  := entrys(entrySendSnpID).chiMes.txnID

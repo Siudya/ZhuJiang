@@ -12,6 +12,7 @@ import dongjiang.utils.FastArb._
 abstract class IntfBaseIO(isSlv:Boolean, hasFree: Boolean = false, hasReq2Slice: Boolean = false, hasDBRCReq: Boolean = false)(implicit p: Parameters) extends DJModule {
 // --------------------- IO declaration ------------------------//
   val io = IO(new Bundle {
+    val hnfID           = Input(UInt(chiNodeIdBits.W))
     val freeOpt         = if(hasFree) Some(Output(Bool())) else None
     // CHI
     val chiOpt          = if(isSlv) Some(Flipped(new CHIBundleDecoupled)) else Some(new CHIBundleDecoupled)

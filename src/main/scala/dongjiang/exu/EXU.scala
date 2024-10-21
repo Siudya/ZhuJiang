@@ -8,9 +8,10 @@ import org.chipsalliance.cde.config._
 import xs.utils._
 import dongjiang.utils.FastArb._
 
-class ExecuteUnit(djBankId: Int)(implicit p: Parameters) extends DJModule {
+class ExecuteUnit(implicit p: Parameters) extends DJModule {
 // --------------------- IO declaration ------------------------//
   val io = IO(new Bundle {
+    val hnfID           = Input(UInt(chiNodeIdBits.W))
     val valid           = Input(Bool())
     val sliceId         = Input(UInt(bankBits.W))
     // slice ctrl signals: RnNode <> Slice
@@ -25,8 +26,8 @@ class ExecuteUnit(djBankId: Int)(implicit p: Parameters) extends DJModule {
 
 // --------------------- Modules declaration ------------------------//
   val directory     = Module(new DirectoryWrapper())
-  val reqPipe       = Module(new ProcessPipe(djBankId))
-  val respPipe      = Module(new ProcessPipe(djBankId))
+  val reqPipe       = Module(new ProcessPipe())
+  val respPipe      = Module(new ProcessPipe())
   val mshrCtl       = Module(new MSHRCtl())
   val mpReqQueue    = Module(new Queue(gen = new Req2NodeBundle(), entries = djparam.nrMpReqQueue, pipe = true, flow = true))
   val mpRespQueue   = Module(new Queue(gen = new Resp2NodeBundle(),entries = djparam.nrMpRespQueue, pipe = true, flow = true))
@@ -52,6 +53,8 @@ class ExecuteUnit(djBankId: Int)(implicit p: Parameters) extends DJModule {
   mshrCtl.io.updLockMSHR(0) <> respPipe.io.updLockMSHR
   mshrCtl.io.updLockMSHR(1) <> reqPipe.io.updLockMSHR
 
+  reqPipe.io.hnfID          := io.hnfID
+  respPipe.io.hnfID         := io.hnfID
   reqPipe.io.sliceId        := io.sliceId
   respPipe.io.sliceId       := io.sliceId
 

@@ -125,7 +125,7 @@ class SMEntry(param: InterfaceParam)(implicit p: Parameters) extends DJBundle {
   def isRepl        = isReplace(chiMes.opcode)
 }
 
-class SnMasterIntf(djBankId: Int, snMasId: Int, param: InterfaceParam)(implicit p: Parameters) extends IntfBaseIO(isSlv = false, hasReq2Slice = false, hasDBRCReq = true) {
+class SnMasterIntf(snMasId: Int, param: InterfaceParam)(implicit p: Parameters) extends IntfBaseIO(isSlv = false, hasReq2Slice = false, hasDBRCReq = true) {
   // Del it
   io <> DontCare
   dontTouch(io)
@@ -352,7 +352,7 @@ class SnMasterIntf(djBankId: Int, snMasId: Int, param: InterfaceParam)(implicit 
   io.chi.txreq.bits.Opcode      := Mux(writeDDR, WriteNoSnpFull,                      entrys(entryReq2NodeID).chiMes.opcode)
   io.chi.txreq.bits.TgtID       := Mux(writeDDR, ddrcNodeId.U,                        entrys(entryReq2NodeID).chiMes.tgtID)
   io.chi.txreq.bits.TxnID       := entryReq2NodeID
-  io.chi.txreq.bits.SrcID       := hnfNodeIdSeq(djBankId).U
+  io.chi.txreq.bits.SrcID       := io.hnfID
   io.chi.txreq.bits.Size        := log2Ceil(djparam.blockBytes).U
   io.chi.txreq.bits.MemAttr     := entrys(entryReq2NodeID).chiMes.resp // Multiplex MemAttr to transfer CHI State // Use in Read Req
   // only use in replace
@@ -391,7 +391,7 @@ class SnMasterIntf(djBankId: Int, snMasId: Int, param: InterfaceParam)(implicit 
   io.chi.txdat.bits             := DontCare
   io.chi.txdat.bits.Opcode      := CHIOp.DAT.NonCopyBackWrData
   io.chi.txdat.bits.TgtID       := entrys(entrySendDatID).chiMes.tgtID
-  io.chi.txdat.bits.SrcID       := hnfNodeIdSeq(djBankId).U
+  io.chi.txdat.bits.SrcID       := io.hnfID
   io.chi.txdat.bits.TxnID       := entrys(entrySendDatID).chiMes.chiDBID
   io.chi.txdat.bits.DataID      := io.dbSigs.dataFDB.bits.dataID
   io.chi.txdat.bits.Data        := io.dbSigs.dataFDB.bits.data

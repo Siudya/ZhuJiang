@@ -44,6 +44,7 @@ import zhujiang.HasZJParams
 class ProtocolCtrlUnit(localHf: Node, csnRf: Option[Node] = None, csnHf: Option[Node] = None, hasReset: Boolean = true)(implicit p: Parameters) extends DJModule {
 // ------------------------------------------ IO declaration ----------------------------------------------//
     val io = IO(new Bundle {
+        val hnfID          = Input(UInt(chiNodeIdBits.W))
         val toLocal        = Flipped(new IcnBundle(localHf, hasReset)) //TODO:Use DeviceIcnBundle
         val toCSNOpt       = if (hasCSNIntf) Some(new Bundle {
             val hn         = Flipped(new IcnBundle(csnHf.get))
@@ -53,20 +54,20 @@ class ProtocolCtrlUnit(localHf: Node, csnRf: Option[Node] = None, csnHf: Option[
 
 // ------------------------------------------ Modules declaration ----------------------------------------------//
 
-    val localRnSlave    = Module(new RnSlaveIntf(localHf.bankId, IncoID.LOCALSLV, djparam.localRnSlaveIntf))
-    val localSnMaster   = Module(new SnMasterIntf(localHf.bankId, IncoID.LOCALMAS, djparam.localSnMasterIntf))
-    val csnRnSlaveOpt   = if (hasCSNIntf) Some(Module(new RnSlaveIntf(localHf.bankId, IncoID.CSNSLV, djparam.csnRnSlaveIntf.get))) else None
-    val csnRnMasterOpt  = if (hasCSNIntf) Some(Module(new RnMasterIntf(localHf.bankId, IncoID.CSNMAS, djparam.csnRnMasterIntf.get))) else None
+    val localRnSlave    = Module(new RnSlaveIntf(IncoID.LOCALSLV, djparam.localRnSlaveIntf))
+    val localSnMaster   = Module(new SnMasterIntf(IncoID.LOCALMAS, djparam.localSnMasterIntf))
+    val csnRnSlaveOpt   = if (hasCSNIntf) Some(Module(new RnSlaveIntf(IncoID.CSNSLV, djparam.csnRnSlaveIntf.get))) else None
+    val csnRnMasterOpt  = if (hasCSNIntf) Some(Module(new RnMasterIntf(IncoID.CSNMAS, djparam.csnRnMasterIntf.get))) else None
     val intfs           = if (hasCSNIntf) Seq(localRnSlave, localSnMaster, csnRnSlaveOpt.get, csnRnMasterOpt.get)
                           else            Seq(localRnSlave, localSnMaster)
     val databuffer      = Module(new DataBuffer())
 
     val xbar            = Module(new Xbar())
-    val slices          = Seq.fill(nrBankPerDJ) { Module(new ExecuteUnit(localHf.bankId)) }
-    slices.zipWithIndex.foreach { case(s, i) => s.io.sliceId := i.U }
+    val exus            = Seq.fill(nrBankPerDJ) { Module(new ExecuteUnit()) }
+    exus.zipWithIndex.foreach { case(s, i) => s.io.sliceId := i.U }
 
     // TODO:
-    slices.foreach(_.io.valid := true.B)
+    exus.foreach(_.io.valid := true.B)
 
 
 // ---------------------------------------------- Connection ---------------------------------------------------//
@@ -129,6 +130,7 @@ class ProtocolCtrlUnit(localHf: Node, csnRf: Option[Node] = None, csnHf: Option[
 
     intfs.zipWithIndex.foreach {
         case(intf, i) =>
+            intf.io.hnfID                          := io.hnfID
             // slice ctrl signals
             if (intf.io.req2SliceOpt.nonEmpty) {
                 xbar.io.req2Slice.in(i)             <> intf.io.req2SliceOpt.get
@@ -160,18 +162,19 @@ class ProtocolCtrlUnit(localHf: Node, csnRf: Option[Node] = None, csnHf: Option[
     }
 
     /*
-     * Connect Slice <-> Xbar
+     * Connect EXUs <-> Xbar
      */
-    slices.zipWithIndex.foreach {
-        case (slice, i) =>
+    exus.zipWithIndex.foreach {
+        case (exu, i) =>
+            exu.io.hnfID                    := io.hnfID
             // slice ctrl signals
-            xbar.io.req2Slice.out(i)        <> slice.io.req2Slice
-            xbar.io.reqAck2Node.in(i)       <> slice.io.reqAck2Node
-            xbar.io.resp2Node.in(i)         <> slice.io.resp2Node
-            xbar.io.req2Node.in(i)          <> slice.io.req2Node
-            xbar.io.resp2Slice.out(i)       <> slice.io.resp2Slice
+            xbar.io.req2Slice.out(i)        <> exu.io.req2Slice
+            xbar.io.reqAck2Node.in(i)       <> exu.io.reqAck2Node
+            xbar.io.resp2Node.in(i)         <> exu.io.resp2Node
+            xbar.io.req2Node.in(i)          <> exu.io.req2Node
+            xbar.io.resp2Slice.out(i)       <> exu.io.resp2Slice
             // slice DataBuffer signals
-            xbar.io.dbSigs.in0(i+nrIntf)    <> slice.io.dbRCReq
+            xbar.io.dbSigs.in0(i+nrIntf)    <> exu.io.dbRCReq
     }
 
     /*

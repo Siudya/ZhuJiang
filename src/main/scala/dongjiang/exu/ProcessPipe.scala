@@ -9,9 +9,10 @@ import chisel3.util._
 import org.chipsalliance.cde.config._
 import xs.utils.ParallelLookUp
 
-class ProcessPipe(djBankId: Int)(implicit p: Parameters) extends DJModule {
+class ProcessPipe(implicit p: Parameters) extends DJModule {
 // --------------------- IO declaration ------------------------//
   val io = IO(new Bundle {
+    val hnfID       = Input(UInt(chiNodeIdBits.W))
     val sliceId     = Input(UInt(bankBits.W))
     // Req To DataBuffer
     val dbRCReq   = Decoupled(new DBRCReq())
@@ -238,7 +239,7 @@ class ProcessPipe(djBankId: Int)(implicit p: Parameters) extends DJModule {
   taskRD_s3.addr        := task_s3_g.bits.addr
   taskRD_s3.mshrWay     := task_s3_g.bits.mshrWay
   taskRD_s3.tgtID       := Mux(taskChipType === ChipType.Local, ddrcNodeId.U, DontCare); assert(Mux(valid_s3, !inst_s3.chipType === ChipType.CSN, true.B), "TODO")
-  taskRD_s3.srcID       := Mux(taskChipType === ChipType.Local, hnfNodeIdSeq(djBankId).U, csnHnfNodeId.U)
+  taskRD_s3.srcID       := Mux(taskChipType === ChipType.Local, io.hnfID, csnHnfNodeId.U)
   taskRD_s3.opcode      := decode_s3.rdOp
   taskRD_s3.expCompAck  := Mux(taskChipType === ChipType.Local, false.B, true.B)
   taskRD_s3.from.IncoId := io.sliceId
@@ -305,7 +306,7 @@ class ProcessPipe(djBankId: Int)(implicit p: Parameters) extends DJModule {
   taskRepl_s3.from.IncoId   := io.sliceId
   taskRepl_s3.to.IncoId     := IncoID.LOCALMAS.U
   taskRepl_s3.tgtID         := getSnNodeIDByBankId(task_s3_g.bits.bank, 2)
-  taskRepl_s3.srcID         := hnfNodeIdSeq(djBankId).U
+  taskRepl_s3.srcID         := io.hnfID
   taskRepl_s3.dbid          := rcDBID
 
 
