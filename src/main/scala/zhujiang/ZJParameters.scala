@@ -220,8 +220,7 @@ case class ZJParameters(
     nrBank = bank,
     sfDirWays = snoopFilterWays,
     sfDirSets = clusterTotalCacheSizeInKiB * 1024 * 2 / snoopFilterWays / bank / cachelineBytes,
-    nrDirBank = 1,
-    nrMSHRSets = 1
+    nrDirBank = 1
   )
 }
 

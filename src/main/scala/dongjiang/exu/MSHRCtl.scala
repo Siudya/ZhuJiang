@@ -43,11 +43,11 @@ class MSHREntry(implicit p: Parameters) extends DJBundle {
   def reqBeSend = isBeSend & isReq
 
   def addr(x: UInt): UInt = {
-    require(x.getWidth <= mshrSetBits);
+    require(x.getWidth <= mshrSetBits)
     Cat(tag, x.asTypeOf(UInt(mshrSetBits.W)), bank, 0.U(offsetBits.W))
   }
   def dirBank(x: UInt): UInt = {
-    require(x.getWidth <= mshrSetBits);
+    require(x.getWidth <= mshrSetBits)
     getDirBank(addr(x))
   }
 }
@@ -194,8 +194,8 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
             // req or update
             m.respMes := 0.U.asTypeOf(m.respMes)
             m.waitIntfVec := io.updMSHR.bits.waitIntfVec
-            assert(PopCount(m.waitIntfVec) === 0.U, s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x] STATE[0x%x]", i.U, j.U, m.addr(i.U), m.chiMes.channel, m.chiMes.opcode, m.state)
-            assert(m.isAlreadySend, s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x] STATE[0x%x]", i.U, j.U, m.addr(i.U), m.chiMes.channel, m.chiMes.opcode, m.state)
+            assert(PopCount(m.waitIntfVec) === 0.U, s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x] STATE[0x%x]", i.U, j.U, m.addr(i.U(mshrSetBits.W)), m.chiMes.channel, m.chiMes.opcode, m.state)
+            assert(m.isAlreadySend, s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x] STATE[0x%x]", i.U, j.U, m.addr(i.U(mshrSetBits.W)), m.chiMes.channel, m.chiMes.opcode, m.state)
             /*
              * Resp Update mshrTable value
              */
@@ -217,19 +217,19 @@ class MSHRCtl()(implicit p: Parameters) extends DJModule {
               m.respMes.masDBID.valid := io.resp2Slice.bits.hasData
               m.respMes.masDBID.bits := io.resp2Slice.bits.dbid
             }.elsewhen(io.resp2Slice.bits.isWriResp) {
-              assert(PopCount(m.waitIntfVec) === 1.U, s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x] STATE[0x%x]", i.U, j.U, m.addr(i.U), m.chiMes.channel, m.chiMes.opcode, m.state)
-              assert(m.respMes.noRespValid, s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x] STATE[0x%x]", i.U, j.U, m.addr(i.U), m.chiMes.channel, m.chiMes.opcode, m.state)
+              assert(PopCount(m.waitIntfVec) === 1.U, s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x] STATE[0x%x]", i.U, j.U, m.addr(i.U(mshrSetBits.W)), m.chiMes.channel, m.chiMes.opcode, m.state)
+              assert(m.respMes.noRespValid, s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x] STATE[0x%x]", i.U, j.U, m.addr(i.U(mshrSetBits.W)), m.chiMes.channel, m.chiMes.opcode, m.state)
               // Nothing to do and State Will be Free
             }
-            assert(m.waitIntfVec(io.resp2Slice.bits.from.intfId), s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x] STATE[0x%x]", i.U, j.U, m.addr(i.U), m.chiMes.channel, m.chiMes.opcode, m.state)
-            assert(m.isWaitResp, s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x] STATE[0x%x]", i.U, j.U, m.addr(i.U), m.chiMes.channel, m.chiMes.opcode, m.state)
+            assert(m.waitIntfVec(io.resp2Slice.bits.from.intfId), s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x] STATE[0x%x]", i.U, j.U, m.addr(i.U(mshrSetBits.W)), m.chiMes.channel, m.chiMes.opcode, m.state)
+            assert(m.isWaitResp, s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x] STATE[0x%x]", i.U, j.U, m.addr(i.U(mshrSetBits.W)), m.chiMes.channel, m.chiMes.opcode, m.state)
             /*
              * Receive Node Req
              */
           }.elsewhen(io.req2Slice.fire & canReceiveNode & i.U === io.req2Slice.bits.mSet & j.U === nodeReqInvWay) {
             m := 0.U.asTypeOf(m)
             m := mshrAlloc_s0
-            assert(m.isFree, s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x] STATE[0x%x]", i.U, j.U, m.addr(i.U), m.chiMes.channel, m.chiMes.opcode, m.state)
+            assert(m.isFree, s"MSHR[0x%x][0x%x] ADDR[0x%x] CHANNEL[0x%x] OP[0x%x] STATE[0x%x]", i.U, j.U, m.addr(i.U(mshrSetBits.W)), m.chiMes.channel, m.chiMes.opcode, m.state)
             /*
              * Clean MSHR Entry When Its Free
              */

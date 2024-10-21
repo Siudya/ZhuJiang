@@ -58,7 +58,7 @@ case class DJParam(
   nrMpReqQueue: Int = 4,
   nrMpRespQueue: Int = 4,
   // MSHR
-  nrMSHRSets: Int = 4,
+  nrMSHRSets: Int = 2,
   // ------------------------ Directory Mes Per Bank ------------------ //
   // self dir & ds mes, dont care when hasLLC is false
   selfWays: Int = 16,
@@ -73,14 +73,13 @@ case class DJParam(
   dirMulticycle: Int = 2,
   dirHoldMcp: Boolean = true,
 ) {
-  val nrMSHRWays = min(selfWays, sfDirWays)
-  require(nrDirBank >= nrMSHRSets)
+  val nrMSHRWays = min(selfWays, sfDirWays) // TODO
+  require(min(selfSets, sfDirSets) >= nrMSHRSets)
   require(isPow2(nrDirBank))
   require(isPow2(nrMSHRSets))
   require(nrMpTaskQueue > 0)
   require(nrMpReqQueue > 0)
   require(nrMpRespQueue > 0)
-  require(nrMSHRSets <= selfSets)
   require(nrBank == 1 | nrBank == 2 | nrBank == 4)
   require(selfReplacementPolicy == "random" || selfReplacementPolicy == "plru")
   require(sfReplacementPolicy == "random" || sfReplacementPolicy == "plru")
