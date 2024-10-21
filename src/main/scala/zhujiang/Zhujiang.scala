@@ -1,6 +1,7 @@
 package zhujiang
 
 import chisel3._
+import chisel3.experimental.hierarchy.{Definition, Instance}
 import chisel3.util._
 import chisel3.experimental.{ChiselAnnotation, annotate}
 import org.chipsalliance.cde.config.Parameters
@@ -89,19 +90,23 @@ class Zhujiang(implicit p: Parameters) extends ZJModule {
 
   require(localRing.icnHfs.get.nonEmpty)
   private val pcuIcnSeq = localRing.icnHfs.get
-  private val pcuDevSeq = pcuIcnSeq.map(icn => Module(new ProtocolCtrlUnit(icn.node)))
+  private val pcuDef = Definition(new ProtocolCtrlUnit(pcuIcnSeq.head.node))
+  private val pcuDevSeq = pcuIcnSeq.map(icn => Instance(pcuDef))
   for(i <- pcuIcnSeq.indices) {
     pcuDevSeq(i).io.hnfID := pcuIcnSeq(i).node.nodeId.U
     pcuDevSeq(i).io.toLocal <> pcuIcnSeq(i)
     pcuDevSeq(i).reset := placeResetGen(s"pcu_$i", pcuIcnSeq(i))
+    pcuDevSeq(i).clock := clock
   }
 
   require(!localRing.icnSns.get.forall(_.node.mainMemory))
   private val dcuIcnSeq = localRing.icnSns.get.filterNot(_.node.mainMemory).groupBy(_.node.bankId).toSeq
-  private val dcuDevSeq = dcuIcnSeq.map(is => Module(new DataCtrlUnit(is._2.head.node, is._2.length)))
+  private val dcuDef = Definition(new DataCtrlUnit(dcuIcnSeq.head._2.head.node, dcuIcnSeq.head._2.length))
+  private val dcuDevSeq = dcuIcnSeq.map(is => Instance(dcuDef))
   for(i <- dcuIcnSeq.indices) {
     for(j <- dcuIcnSeq(i)._2.indices) dcuDevSeq(i).io.sn(j) <> dcuIcnSeq(i)._2(j)
     dcuDevSeq(i).reset := placeResetGen(s"dcu_$i", dcuIcnSeq(i)._2.head)
+    dcuDevSeq(i).clock := clock
   }
 
   val io = IO(new Bundle {
