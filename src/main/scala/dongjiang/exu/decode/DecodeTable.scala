@@ -253,7 +253,8 @@ object LoaclWriteDecode {
     LocalReqInst(WriteBackFull,  I,  I, UD, HasData) -> CleanDB,
 
     LocalReqInst(WriteBackFull, UD,  I,  I, HasData) -> (WSFDir | WSDir | SrcState(I) | OthState(I)  | HnState(UD) | WriteDCU | WriOp(WriteNoSnpFull)),
-    LocalReqInst(WriteBackFull, UC,  I,  I, HasData) -> (WSFDir | WSDir | SrcState(I) | OthState(I)  | HnState(UC) | WriteDCU | WriOp(WriteNoSnpFull)),
+    //temporary fix
+    LocalReqInst(WriteBackFull, UC,  I,  I, HasData) -> (WSFDir | WSDir | SrcState(I) | OthState(I)  | HnState(UD) | WriteDCU | WriOp(WriteNoSnpFull)),
     LocalReqInst(WriteBackFull, SC,  I,  I, HasData) -> (WSFDir | WSDir | SrcState(I) | OthState(I)  | HnState(UC) | WriteDCU | WriOp(WriteNoSnpFull)),
     LocalReqInst(WriteBackFull, SC, SC,  I, HasData) -> (WSFDir | WSDir | SrcState(I) | OthState(SC) | HnState(SC) | WriteDCU | WriOp(WriteNoSnpFull)),
     LocalReqInst(WriteBackFull, SC, SC, SC, HasData) -> (WSFDir |         SrcState(I) | OthState(SC) | HnState(SC) | CleanDB),
