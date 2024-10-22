@@ -227,7 +227,9 @@ object TrafficBoardFileManager {
        |  uint16_t src_id = get_field(*((const uint64_t *)flit), SRC_ID_OFF, NODE_ID_BITS);
        |  bool c2c = node_type == C2C_TYPE;
        |  bool csn = get_field(node_type, TYPE_NET_OFF, TYPE_NET_BITS) == 0x1;
-       |  uint16_t final_tgt_id = tgt_id;
+       |  const uint16_t router_aid_mask = (1 << NODE_AID_BITS) - 1;
+       |  const uint16_t router_match_mask = ~router_aid_mask;
+       |  uint16_t final_tgt_id = tgt_id & router_match_mask;
        |  if(verbose) {
        |    string &&flit_str = get_flit_str((const uint8_t *)flit);
        |    TFB_INFO("node_id 0x%x inject flit with src_id: 0x%x tgt_id: 0x%x on chn %d flit:\\n%s\\n", node_id, src_id, tgt_id, chn, flit_str.c_str());
@@ -239,7 +241,7 @@ object TrafficBoardFileManager {
        |    MONITOR_ERR(src_chip == tgt_chip, "csn node 0x%x injects illegal flit with tgt_id: 0x%x, target chip_id cannot be chip_id of itself!\\n", node_id, tgt_id);
        |    MONITOR_ERR(final_tgt_id == 0, "csn node 0x%x injects illegal flit with tgt_id: 0x%x tgt_chip: 0x%x, target c2c cannot be found!\\n", node_id, tgt_id, tgt_chip);
        |  }
-       |  MONITOR_ERR(scoreboard.count(final_tgt_id) == 0, "node 0x%x injected flit target node 0x%x is not registered on chn %d!\\n", node_id, final_tgt_id, chn);
+       |  MONITOR_ERR(scoreboard.count(final_tgt_id) == 0, "node 0x%x injected flit target node 0x%x is not registered on chn %d!\\n", node_id, tgt_id, chn);
        |  auto entry = make_unique<TrafficBoardEntry>();
        |  memcpy(entry->flit, flit, FLIT_BUF_SIZE);
        |  entry->inject_time = global_timer;
