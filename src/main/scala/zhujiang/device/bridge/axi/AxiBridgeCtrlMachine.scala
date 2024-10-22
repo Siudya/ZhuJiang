@@ -56,7 +56,7 @@ class AxiBridgeCtrlMachine(
     assert(icn.rx.data.bits.Opcode === DatOpcode.NCBWrDataCompAck)
   }
 
-  wakeupOutCond := allDone && valid
+  wakeupOutCond := payload.state.d.waddr && payload.state.d.raddr && valid && payload.info.isSnooped
   when(io.wakeupOut.valid) {
     payloadMiscNext.info.isSnooped := false.B
   }
