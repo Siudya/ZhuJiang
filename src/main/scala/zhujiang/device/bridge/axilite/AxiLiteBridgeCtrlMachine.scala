@@ -51,6 +51,7 @@ class AxiLiteBridgeCtrlMachine(
 
   axi.aw.valid := valid && payload.state.axiWaddr && !waiting.orR
   axi.aw.bits := DontCare
+  axi.aw.bits.burst := 1.U
   axi.aw.bits.id := io.idx
   axi.aw.bits.addr := payload.info.addr
   axi.aw.bits.len := 0.U
@@ -58,6 +59,7 @@ class AxiLiteBridgeCtrlMachine(
 
   axi.ar.valid := valid && payload.state.axiRaddr && !waiting.orR
   axi.ar.bits := DontCare
+  axi.ar.bits.burst := 1.U
   axi.ar.bits.id := io.idx
   axi.ar.bits.addr := payload.info.addr
   axi.ar.bits.len := 0.U
