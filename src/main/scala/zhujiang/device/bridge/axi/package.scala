@@ -46,7 +46,7 @@ package object axi {
     def icnDBID: Bool = bufferAllocated && !u.dbidResp
     def icnComp: Bool = d.waddr && u.dbidResp  && !u.comp
 
-    def axiWaddr: Bool = bufferAllocated && !d.waddr
+    def axiWaddr: Bool = bufferAllocated && !d.waddr && u.wdata
     def axiRaddr: Bool = !d.raddr
     def axiWdata: Bool = d.waddr && !d.wdata && u.wdata
 
