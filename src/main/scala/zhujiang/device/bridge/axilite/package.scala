@@ -48,7 +48,7 @@ package object axilite {
     def icnDBID: Bool = !u.dbidResp
     def icnComp: Bool = d.waddr && u.dbidResp  && !u.comp
 
-    def axiWaddr: Bool = !d.waddr
+    def axiWaddr: Bool = !d.waddr && u.wdata
     def axiRaddr: Bool = !d.raddr
     def axiWdata: Bool = d.waddr && !d.wdata && u.wdata
 
