@@ -110,7 +110,7 @@ class AxiBridge(node: Node)(implicit p: Parameters) extends ZJModule {
   readDataPipe.io.enq.bits := DontCare
   readDataPipe.io.enq.bits.Data := axi.r.bits.data
   readDataPipe.io.enq.bits.Opcode := DatOpcode.CompData
-  readDataPipe.io.enq.bits.DataID := ctrlSel.readCnt
+  readDataPipe.io.enq.bits.DataID := ctrlSel.readCnt << log2Ceil(dw / 128)
   readDataPipe.io.enq.bits.TxnID := ctrlSel.returnTxnId.get
   readDataPipe.io.enq.bits.SrcID := 0.U
   readDataPipe.io.enq.bits.TgtID := ctrlSel.returnNid.get
