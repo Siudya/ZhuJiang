@@ -100,6 +100,7 @@ class DirectoryBase(
 
 
 //// ----------------------- Reg/Wire declaration --------------------------//
+  val resetDone       = RegInit(false.B)
   // Base
   val sramCtrlReg     = RegInit(0.U.asTypeOf(new DirCtrlBundle(setBits)))
   // s2
@@ -135,6 +136,20 @@ class DirectoryBase(
 // ---------------------------------------------------------------------------------------------------------------------- //
 // -------------------------------------------------- S1: Read / Write SRAM --------------------------------------------- //
 // ---------------------------------------------------------------------------------------------------------------------- //
+
+  /*
+   * Check Reset Done
+   */
+  when(metaArrays.map { case m => m.io.w.req.ready & m.io.r.req.ready }.reduce(_ & _)){
+    if(useRepl) {
+      when(replArrayOpt.get.io.w.req.ready & replArrayOpt.get.io.r.req.ready) {
+        resetDone := true.B
+      }
+    } else {
+      resetDone := true.B
+    }
+  }
+
   /*
    * Parse Req Addr
    */
@@ -160,8 +175,8 @@ class DirectoryBase(
   /*
    * Get Req Form MSHR or ProcessPipe_S3 EXU
    */
-  io.earlyRReq.ready        := sramCtrlReg.canRecReq & !io.earlyWReq.valid
-  io.earlyWReq.ready        := sramCtrlReg.canRecReq
+  io.earlyRReq.ready        := sramCtrlReg.canRecReq & !io.earlyWReq.valid & resetDone
+  io.earlyWReq.ready        := sramCtrlReg.canRecReq & resetDone
 
 
   /*
@@ -183,6 +198,9 @@ class DirectoryBase(
       m.io.w.req.bits.data.foreach(_.metaVec  := io.dirWrite.metaVec)
       m.io.w.req.bits.waymask.get             := io.dirWrite.wayOH
   }
+
+  when(sramCtrlReg.isReqFire & sramCtrlReg.ren) { assert(metaArrays.map(_.io.r.req.ready).reduce(_ & _)) }
+  when(sramCtrlReg.isReqFire & sramCtrlReg.wen) { assert(metaArrays.map(_.io.w.req.ready).reduce(_ & _)) }
 
 
 // ---------------------------------------------------------------------------------------------------------------------- //
@@ -217,7 +235,7 @@ class DirectoryBase(
     case (m, i) =>
       m.io.r.resp.data.zipWithIndex.foreach {
         case(d, j) =>
-          metaResp_s2((i*(ways/nrWayBank))+j) := d
+          metaResp_s2((i*(ways/nrWayBank))+j) := Mux(valid_s2, d, 0.U.asTypeOf(d))
       }
   }
 
