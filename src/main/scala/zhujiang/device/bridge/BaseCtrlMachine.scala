@@ -63,13 +63,14 @@ abstract class BaseCtrlMachine[
   icn.rx.resp.foreach(_.ready := true.B)
   icn.rx.data.ready := true.B
 
-  private val wakeupVec = Cat(io.wakeupIns.map(wkp => wkp.valid && compareTag(wkp.bits, payload.info.addr)))
-  private val wakeupValid = RegNext(wakeupVec.orR, false.B)
-  private val wakeupNum = RegEnable(PopCount(wakeupVec), wakeupValid)
+  private val wakeupVec = Cat(io.wakeupIns.map(wkp => wkp.valid && compareTag(wkp.bits, payload.info.addr) && valid))
+  private val wakeupValid = wakeupVec.orR
+  private val wakeupValidReg = RegNext(wakeupValid, false.B)
+  private val wakeupNumReg = RegEnable(PopCount(wakeupVec), wakeupValid)
   when(icn.rx.req.fire) {
     waiting := io.waitNum
-  }.elsewhen(wakeupValid) {
-    assert(wakeupNum === 1.U)
+  }.elsewhen(wakeupValidReg) {
+    assert(wakeupNumReg === 1.U)
     waiting := waiting - 1.U
   }
 
