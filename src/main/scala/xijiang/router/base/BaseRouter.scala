@@ -132,7 +132,7 @@ trait BaseRouterUtils {
       dontTouch(routerTgt)
       routerTgt.suggestName(s"routerTgt$chn")
       if(local) {
-        routerTgt := tgt.asUInt
+        routerTgt := Cat(tgt.net, tgt.nid, 0.U(nodeAidBits.W))
       } else if(c2c) {
         routerTgt := tgt.router
       } else {
