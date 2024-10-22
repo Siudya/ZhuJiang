@@ -348,16 +348,16 @@ class SnMasterIntf(snMasId: Int, param: InterfaceParam)(implicit p: Parameters) 
 
   io.chi.txreq.valid            := entryReq2NodeVec.reduce(_ | _)
   io.chi.txreq.bits.Addr        := entrys(entryReq2NodeID).reqAddr(io.chi.txreq.bits.TgtID)
-  //                                             Send Write To DDR                    Send Req To DDR / DCU
+  //                                             Send Write To DDR(When its Repl)     Send Req To DDR / DCU
   io.chi.txreq.bits.Opcode      := Mux(writeDDR, WriteNoSnpFull,                      entrys(entryReq2NodeID).chiMes.opcode)
   io.chi.txreq.bits.TgtID       := Mux(writeDDR, ddrcNodeId.U,                        entrys(entryReq2NodeID).chiMes.tgtID)
   io.chi.txreq.bits.TxnID       := entryReq2NodeID
   io.chi.txreq.bits.SrcID       := io.hnfID
   io.chi.txreq.bits.Size        := log2Ceil(djparam.blockBytes).U
   io.chi.txreq.bits.MemAttr     := entrys(entryReq2NodeID).chiMes.resp // Multiplex MemAttr to transfer CHI State // Use in Read Req
-  // only use in replace
-  io.chi.txreq.bits.ReturnNID   := ddrcNodeId.U
-  io.chi.txreq.bits.ReturnTxnID := entrys(entryReq2NodeID).chiMes.chiDBID
+  //                                                                   Send Replace To DCU                      Send Req To DDR / DCU
+  io.chi.txreq.bits.ReturnNID   := Mux(entrys(entryReq2NodeID).isRepl, ddrcNodeId.U,                            io.hnfID)
+  io.chi.txreq.bits.ReturnTxnID := Mux(entrys(entryReq2NodeID).isRepl, entrys(entryReq2NodeID).chiMes.chiDBID,  entryReq2NodeID)
 
 
 // ---------------------------------------------------------------------------------------------------------------------- //
