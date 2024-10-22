@@ -88,6 +88,10 @@ class DataCtrlUnit(node: Node, nrIntf: Int = 1, hasReset: Boolean = true)(implic
   val implicitClock = clock
   val implicitReset = reset
 
+  if(p(DebugOptionsKey).EnableDebug) {
+    dontTouch(io)
+  }
+
   require(node.splitFlit)
   require(1 <= nrIntf & nrIntf <= 2)
 
