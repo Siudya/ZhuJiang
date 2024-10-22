@@ -2,6 +2,7 @@ package zhujiang.axi
 
 import chisel3._
 import chisel3.util._
+import xs.utils.ResetRRArbiter
 
 abstract class BaseAxiXbar(mstParams:Seq[AxiParams]) extends Module {
   def slvMatchersSeq: Seq[UInt => Bool]
@@ -32,7 +33,7 @@ abstract class BaseAxiXbar(mstParams:Seq[AxiParams]) extends Module {
       val recordQueue = Module(new Queue(UInt(mstSize.W), entries = 16))
       val awQueue = Module(new Queue(new AWFlit(slvParams(sidx)), entries = 2))
       val wQueue = Module(new Queue(new WFlit(slvParams(sidx)), entries = 2))
-      val arb = Module(new RRArbiter(new AWFlit(slvParams(sidx)), mstParams.length))
+      val arb = Module(new ResetRRArbiter(new AWFlit(slvParams(sidx)), mstParams.length))
       recordQueue.suggestName(s"aw_rq_$sidx")
       arb.suggestName(s"aw_arb_$sidx")
       awQueue.suggestName(s"aw_q_$sidx")
@@ -76,7 +77,7 @@ abstract class BaseAxiXbar(mstParams:Seq[AxiParams]) extends Module {
     arDnStrmRdyMat.suggestName("arDnStrmRdyMat")
     for(sidx <- slvParams.indices) {
       val arQueue = Module(new Queue(new ARFlit(slvParams(sidx)), entries = 2))
-      val arb = Module(new RRArbiter(new ARFlit(slvParams(sidx)), mstParams.length))
+      val arb = Module(new ResetRRArbiter(new ARFlit(slvParams(sidx)), mstParams.length))
       arb.suggestName(s"ar_arb_$sidx")
       arQueue.suggestName(s"ar_q_$sidx")
       io.downstream(sidx).ar <> arQueue.io.deq
@@ -102,7 +103,7 @@ abstract class BaseAxiXbar(mstParams:Seq[AxiParams]) extends Module {
     bUpStrmRdyMat.suggestName("bUpStrmRdyMat")
     for(midx <- mstParams.indices) {
       val bQueue = Module(new Queue(new BFlit(mstParams(midx)), entries = 2))
-      val arb = Module(new RRArbiter(new BFlit(mstParams(midx)), slvParams.length))
+      val arb = Module(new ResetRRArbiter(new BFlit(mstParams(midx)), slvParams.length))
       bQueue.suggestName(s"b_q_$midx")
       arb.suggestName(s"b_arb_$midx")
       io.upstream(midx).b <> bQueue.io.deq
@@ -129,7 +130,7 @@ abstract class BaseAxiXbar(mstParams:Seq[AxiParams]) extends Module {
     rUpStrmRdyMat.suggestName("rUpStrmRdyMat")
     for(midx <- mstParams.indices) {
       val rQueue = Module(new Queue(new RFlit(mstParams(midx)), entries = 2))
-      val arb = Module(new RRArbiter(new RFlit(mstParams(midx)), slvParams.length))
+      val arb = Module(new ResetRRArbiter(new RFlit(mstParams(midx)), slvParams.length))
       rQueue.suggestName(s"r_queue_$midx")
       arb.suggestName(s"r_arb_$midx")
       io.upstream(midx).r <> rQueue.io.deq

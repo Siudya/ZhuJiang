@@ -3,6 +3,7 @@ package zhujiang.tilelink
 import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config.Parameters
+import xs.utils.ResetRRArbiter
 import zhujiang.ZJModule
 
 abstract class BaseTLULXbar(implicit p: Parameters) extends ZJModule {
@@ -31,7 +32,7 @@ abstract class BaseTLULXbar(implicit p: Parameters) extends ZJModule {
     aDnStrmRdyMat.suggestName("aDnStrmRdyMat")
     for(sidx <- slvParams.indices) {
       val aQueue = Module(new Queue(new AFlit(slvParams(sidx)), entries = 2))
-      val arb = Module(new RRArbiter(new AFlit(slvParams(sidx)), mstParams.length))
+      val arb = Module(new ResetRRArbiter(new AFlit(slvParams(sidx)), mstParams.length))
       arb.suggestName(s"a_arb_$sidx")
       aQueue.suggestName(s"a_q_$sidx")
       io.downstream(sidx).a <> aQueue.io.deq
@@ -57,7 +58,7 @@ abstract class BaseTLULXbar(implicit p: Parameters) extends ZJModule {
     dUpStrmRdyMat.suggestName("dUpStrmRdyMat")
     for(midx <- mstParams.indices) {
       val dQueue = Module(new Queue(new DFlit(mstParams(midx)), entries = 2))
-      val arb = Module(new RRArbiter(new DFlit(mstParams(midx)), slvParams.length))
+      val arb = Module(new ResetRRArbiter(new DFlit(mstParams(midx)), slvParams.length))
       dQueue.suggestName(s"d_q_$midx")
       arb.suggestName(s"d_arb_$midx")
       io.upstream(midx).d <> dQueue.io.deq

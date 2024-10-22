@@ -6,6 +6,7 @@ import chisel3.stage.ChiselGeneratorAnnotation
 import circt.stage.{ChiselStage, FirtoolOption}
 import xijiang.tfb.TrafficBoardFileManager
 import xs.utils.FileRegisters
+import xs.utils.perf.{DebugOptions, DebugOptionsKey}
 
 import scala.annotation.tailrec
 
@@ -38,6 +39,7 @@ class ZhujiangTopConfig extends Config((site, here, up) => {
       NodeParam(nodeType = NodeType.S, mainMemory = true, splitFlit = true, outstanding = 32, attr = "ddr_data")
     )
   )
+  case DebugOptionsKey => DebugOptions()
 })
 
 object ZhujiangTopParser {

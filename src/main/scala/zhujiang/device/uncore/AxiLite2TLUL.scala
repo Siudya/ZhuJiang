@@ -2,6 +2,7 @@ package zhujiang.device.uncore
 
 import chisel3._
 import chisel3.util._
+import xs.utils.ResetRRArbiter
 import zhujiang.axi._
 import zhujiang.tilelink._
 
@@ -36,7 +37,7 @@ class AxiLite2TLUL(axiParams: AxiParams) extends Module {
     assert(io.axi.ar.bits.size <= busSize.U)
   }
 
-  private val arb = Module(new RRArbiter(new AFlit(tlParams), 2))
+  private val arb = Module(new ResetRRArbiter(new AFlit(tlParams), 2))
   io.tl.a <> arb.io.out
   private val wp = arb.io.in.head
   private val rp = arb.io.in.last

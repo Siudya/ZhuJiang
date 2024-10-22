@@ -5,7 +5,7 @@ import chisel3.util._
 import org.chipsalliance.cde.config.Parameters
 import xijiang.{Node, NodeType}
 import xijiang.router.base.{DeviceIcnBundle, IcnBundle}
-import xs.utils.DFTResetSignals
+import xs.utils.{DFTResetSignals, ResetRRArbiter}
 import xs.utils.sram.SramBroadcastBundle
 import zhujiang.chi._
 import zhujiang.device.async.{DeviceIcnAsyncBundle, DeviceSideAsyncModule, IcnAsyncBundle}
@@ -112,11 +112,11 @@ class ClusterHub(node: Node)(implicit p: Parameters) extends ZJModule {
     (chn, pipe.io.enq)
   }).toMap
 
-  private val icnTxReqArb = Module(new RRArbiter(UInt(reqFlitBits.W), 2))
+  private val icnTxReqArb = Module(new ResetRRArbiter(UInt(reqFlitBits.W), 2))
   txChnMap("REQ") <> icnTxReqArb.io.out
-  private val icnTxRespArb = Module(new RRArbiter(UInt(respFlitBits.W), 3))
+  private val icnTxRespArb = Module(new ResetRRArbiter(UInt(respFlitBits.W), 3))
   txChnMap("RSP") <> icnTxRespArb.io.out
-  private val icnTxDataArb = Module(new RRArbiter(UInt(dataFlitBits.W), 3))
+  private val icnTxDataArb = Module(new ResetRRArbiter(UInt(dataFlitBits.W), 3))
   txChnMap("DAT") <> icnTxDataArb.io.out
 
   private val flitMap = Seq(

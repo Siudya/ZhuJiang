@@ -4,6 +4,7 @@ import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config.Parameters
 import xijiang.{Node, NodeType}
+import xs.utils.ResetRRArbiter
 import zhujiang.{ZJModule, ZJParametersKey}
 import zhujiang.chi.{Flit, NodeIdBundle}
 
@@ -113,7 +114,7 @@ class ChannelTap[T <: Flit](
     s"ChannelTapCsn$channel"
   }
   private val taps = Seq.fill(2)(Module(new SingleChannelTap(gen, channel, node)))
-  private val ejectArb = Module(new RRArbiter(gen, 2))
+  private val ejectArb = Module(new ResetRRArbiter(gen, 2))
   for(idx <- taps.indices) {
     taps(idx).io.in := io.rx(idx)
     io.tx(idx) := taps(idx).io.out

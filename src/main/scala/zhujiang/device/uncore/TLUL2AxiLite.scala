@@ -2,6 +2,7 @@ package zhujiang.device.uncore
 
 import chisel3._
 import chisel3.util._
+import xs.utils.ResetRRArbiter
 import zhujiang.axi._
 import zhujiang.tilelink._
 
@@ -20,7 +21,7 @@ class TLUL2AxiLite(axiParams: AxiParams) extends Module {
   private val wPipe = Module(new Queue(new WFlit(axiParams), entries = 2))
   private val arPipe = Module(new Queue(new ARFlit(axiParams), entries = 2))
   private val dPipe = Module(new Queue(new DFlit(tlParams), entries = 2))
-  private val arb = Module(new RRArbiter(new DFlit(tlParams), 2))
+  private val arb = Module(new ResetRRArbiter(new DFlit(tlParams), 2))
   private val rp = arb.io.in.head
   private val bp = arb.io.in.last
 

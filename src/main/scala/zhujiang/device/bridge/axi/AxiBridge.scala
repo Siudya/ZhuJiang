@@ -5,7 +5,7 @@ import chisel3.util._
 import org.chipsalliance.cde.config.Parameters
 import xijiang.{Node, NodeType}
 import xijiang.router.base.DeviceIcnBundle
-import xs.utils.PickOneLow
+import xs.utils.{PickOneLow, ResetRRArbiter}
 import zhujiang.ZJModule
 import zhujiang.axi._
 import zhujiang.chi.{DatOpcode, DataFlit, ReqFlit, RespFlit}
@@ -25,13 +25,13 @@ class AxiBridge(node: Node)(implicit p: Parameters) extends ZJModule {
 
   private val wakeups = Wire(Vec(node.outstanding, Valid(UInt(raw.W))))
 
-  private val icnRspArb = Module(new RRArbiter(icn.tx.resp.get.bits.cloneType, node.outstanding))
+  private val icnRspArb = Module(new ResetRRArbiter(icn.tx.resp.get.bits.cloneType, node.outstanding))
   icn.tx.resp.get <> icnRspArb.io.out
 
-  private val awArb = Module(new RRArbiter(new AWFlit(axiParams), node.outstanding))
+  private val awArb = Module(new ResetRRArbiter(new AWFlit(axiParams), node.outstanding))
   axi.aw <> awArb.io.out
 
-  private val arArb = Module(new RRArbiter(new ARFlit(axiParams), node.outstanding))
+  private val arArb = Module(new ResetRRArbiter(new ARFlit(axiParams), node.outstanding))
   axi.ar <> arArb.io.out
 
   private val dataBuffer = Module(new AxiDataBuffer(axiParams, node.outstanding, node.outstanding))
