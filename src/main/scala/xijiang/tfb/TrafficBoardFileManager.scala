@@ -11,12 +11,12 @@ case class TrafficBoardParams(
 )
 
 object TrafficBoardFileManager {
-  def release(p: Parameters):Unit = {
+  def release(p: Parameters): Unit = {
     FileRegisters.add("env/tfb/include", "traffic_board.h", header, true)
     FileRegisters.add("env/tfb/src", "traffic_board.cpp", source(p), true)
   }
 
-  def release(header_dir:String, src_dir:String, p: Parameters):Unit = {
+  def release(header_dir: String, src_dir: String, p: Parameters): Unit = {
     FileRegisters.add(header_dir, "traffic_board.h", header, dontCarePrefix = true)
     FileRegisters.add(src_dir, "traffic_board.cpp", source(p), dontCarePrefix = true)
   }
@@ -191,7 +191,7 @@ object TrafficBoardFileManager {
        |    TFB_ERR("cannot register node 0x%x more than once!\\n", node_id);
        |    return;
        |  }
-       |  if(!nodes_pool.contains(node_type)) {
+       |  if(nodes_pool.count(node_type) == 0) {
        |    TFB_ERR("unknown node type %d!\\n", node_type);
        |    return;
        |  }
@@ -320,7 +320,7 @@ object TrafficBoardFileManager {
        |
        |uint16_t tfb_get_nodes_size(uint16_t type) {
        |  const auto &tfb = TrafficBoard::get_instance();
-       |  if(!tfb.nodes_pool.contains(type)) {
+       |  if(tfb.nodes_pool.count(type) == 0) {
        |    TFB_ERR("wrong node type %d\\n", type);
        |    return 0;
        |  }
@@ -329,7 +329,7 @@ object TrafficBoardFileManager {
        |
        |uint16_t tfb_get_nodes(uint16_t type, uint16_t *nodes_array_ptr) {
        |  const auto &tfb = TrafficBoard::get_instance();
-       |  if(!tfb.nodes_pool.contains(type)) {
+       |  if(tfb.nodes_pool.count(type) == 0) {
        |    TFB_ERR("wrong node type %d\\n", type);
        |    return 1;
        |  }
