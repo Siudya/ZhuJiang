@@ -139,7 +139,7 @@ trait HasParseZJParam extends HasZJParams {
     val metaId = WireInit(0.U((rnfNodeIdBits + 1).W))
     rnNodeIdSeq.zipWithIndex.foreach {
       case (id, i) =>
-        when(x === id.U) {
+        when(x === (id.U + 1.U)) {
           metaId := i.U
         }
     }
@@ -153,7 +153,7 @@ trait HasParseZJParam extends HasZJParams {
     rnNodeIdSeq.zipWithIndex.foreach {
       case (id, i) =>
         when(x === i.U) {
-          nodeID := id.U
+          nodeID := id.U + 1.U
         }
     }
     assert(nodeID =/= 0xfff.U, "getNodeIDByMetaId ERROR MetaId[0x%x] Index[0x%x]", x, i.U)
