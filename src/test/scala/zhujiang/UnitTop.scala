@@ -79,15 +79,6 @@ object ClusterPLLTop extends App {
   ))
 }
 
-object UncoreTop extends App {
-  val (config, firrtlOpts) = ZhujiangTopParser(args)
-  val cfgNode = Node(nodeType = NodeType.HI, defaultHni = true)
-  val memNode = Node(nodeType = NodeType.RI)
-  (new ChiselStage).execute(firrtlOpts, firtoolOpts ++ Seq(
-    ChiselGeneratorAnnotation(() => new UncoreComplex(cfgNode, memNode)(config))
-  ))
-}
-
 object ClusterHubTop extends App {
   val (config, firrtlOpts) = ZhujiangTopParser(args)
   val icnNode = Node(nodeType = NodeType.CC, outstanding = 8, cpuNum = 2)
