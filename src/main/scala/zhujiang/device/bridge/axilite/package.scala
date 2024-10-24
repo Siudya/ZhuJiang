@@ -46,7 +46,7 @@ package object axilite {
     val d = new AxiLiteDownstreamOpVec
     def icnReadReceipt: Bool = !u.receiptResp
     def icnDBID: Bool = !u.dbidResp
-    def icnComp: Bool = d.waddr && u.dbidResp  && !u.comp
+    def icnComp: Bool = !u.comp
 
     def axiWaddr: Bool = !d.waddr && u.wdata
     def axiRaddr: Bool = !d.raddr

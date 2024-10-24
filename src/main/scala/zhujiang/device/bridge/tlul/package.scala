@@ -40,9 +40,9 @@ package object tlul {
 
   class TLULBridgeCtrlOpVec(implicit p: Parameters) extends IcnIoDevCtrlOpVecCommon {
     val d = new TlulDownstreamOpVec
-    def icnReadReceipt: Bool = d.rreq && !u.receiptResp
+    def icnReadReceipt: Bool = !u.receiptResp
     def icnDBID: Bool = !u.dbidResp
-    def icnComp: Bool = d.wreq && !u.comp
+    def icnComp: Bool = !u.comp
 
     def tlaPut: Bool = !d.wreq & u.wdata
     def tlaGet: Bool = !d.rreq

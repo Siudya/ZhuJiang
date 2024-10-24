@@ -110,25 +110,27 @@ abstract class BaseCtrlMachine[
     plmnu.compAck := icnDatOp === DatOpcode.NCBWrDataCompAck || plu.compAck
   }
 
+  private val dwt = payload.info.dwt.getOrElse(false.B)
   private val icnReadReceipt = payload.state.icnReadReceipt
   private val icnDBID = payload.state.icnDBID
-  private val icnComp = payload.state.icnComp
+  private val icnComp = Mux(dwt, payload.state.icnComp && payload.state.u.wdata, payload.state.icnComp)
+  private val icnCompDBID = icnDBID && icnComp
   icn.tx.resp.valid := valid & (icnReadReceipt || icnDBID || icnComp)
   icn.tx.resp.bits := DontCare
-  icn.tx.resp.bits.Opcode := MuxCase(0.U, Seq(
+  icn.tx.resp.bits.Opcode := Mux(icnCompDBID, RspOpcode.CompDBIDResp, MuxCase(0.U, Seq(
     icnReadReceipt -> RspOpcode.ReadReceipt,
     icnDBID -> RspOpcode.DBIDResp,
     icnComp -> RspOpcode.Comp
-  ))
+  )))
   icn.tx.resp.bits.DBID := io.idx
-  icn.tx.resp.bits.TxnID := Mux(icnDBID && payload.info.dwt.getOrElse(false.B), payload.info.returnTxnId.getOrElse(0.U), payload.info.txnId)
+  icn.tx.resp.bits.TxnID := Mux(icnDBID && dwt, payload.info.returnTxnId.getOrElse(0.U), payload.info.txnId)
   icn.tx.resp.bits.SrcID := 0.U
-  icn.tx.resp.bits.TgtID := Mux(icnDBID && payload.info.dwt.getOrElse(false.B), payload.info.returnNid.getOrElse(0.U), payload.info.srcId)
+  icn.tx.resp.bits.TgtID := Mux(icnDBID && dwt, payload.info.returnNid.getOrElse(0.U), payload.info.srcId)
   icn.tx.resp.bits.Resp := Mux(icnDBID || icnComp, "b000".U, "b010".U)
   when(icn.tx.resp.fire) {
     plmnu.receiptResp := icn.tx.resp.bits.Opcode === RspOpcode.ReadReceipt || plu.receiptResp
-    plmnu.dbidResp := icn.tx.resp.bits.Opcode === RspOpcode.DBIDResp || plu.dbidResp
-    plmnu.comp := icn.tx.resp.bits.Opcode === RspOpcode.Comp || plu.comp
+    plmnu.dbidResp := icn.tx.resp.bits.Opcode === RspOpcode.DBIDResp || icn.tx.resp.bits.Opcode === RspOpcode.CompDBIDResp || plu.dbidResp
+    plmnu.comp := icn.tx.resp.bits.Opcode === RspOpcode.Comp || icn.tx.resp.bits.Opcode === RspOpcode.CompDBIDResp || plu.comp
   }
 
   private val busDataBytes = slvBusDataBits / 8
