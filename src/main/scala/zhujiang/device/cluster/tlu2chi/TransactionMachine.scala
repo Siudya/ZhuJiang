@@ -75,12 +75,14 @@ class TransactionMachine(node: Node, tlParams: TilelinkParams, outstanding: Int)
   private val rspDBID = RegInit(0.U(rxrsp.bits.DBID.getWidth.W))
   private val rspSrcID = RegInit(0.U(niw.W))
   private val datHomeNID = RegInit(0.U(niw.W)) // TODO: used when CompAck is required
+  private val datIsSend = RegInit(false.B)
   private val rspGetComp = RegInit(false.B)
   private val rspGetDBID = RegInit(false.B)
 
   when(io.alloc.fire) {
     task := io.alloc.bits
 
+    datIsSend := false.B
     rspGetComp := false.B
     rspGetDBID := false.B
   }
@@ -132,7 +134,7 @@ class TransactionMachine(node: Node, tlParams: TilelinkParams, outstanding: Int)
       when(rxrsp.fire && (rspIsComp || rspIsDBID || rspIsCompDBID)) {
         assert(rxrsp.bits.RespErr === RespErr.NormalOkay, "TODO: handle error")
 
-        rspGetComp := rspGetComp || rspIsComp
+        rspGetComp := rspGetComp || rspIsComp || rspIsCompDBID
         rspGetDBID := rspGetDBID || rspIsDBID
 
         when(rspIsDBID || rspIsCompDBID) {
@@ -148,6 +150,18 @@ class TransactionMachine(node: Node, tlParams: TilelinkParams, outstanding: Int)
 
     is(MachineState.SEND_DAT) {
       when(txdat.fire) {
+        datIsSend := true.B
+        when(rspGetComp) {
+          nextState := MachineState.RETURN_ACK
+        }
+      }
+
+      when(rxrsp.fire) {
+        val rspIsComp = rxrsp.bits.Opcode === RspOpcode.Comp
+        rspGetComp := rspGetComp || rspIsComp
+        assert(!rspGetComp)
+        assert(rspIsComp)
+
         nextState := MachineState.RETURN_ACK
       }
     }
@@ -177,7 +191,7 @@ class TransactionMachine(node: Node, tlParams: TilelinkParams, outstanding: Int)
   txreq.bits.Size := 3.U // 2^3 = 8 bytes
   txreq.bits.Order := Mux(task.opcode === AOpcode.Get, Order.RequestOrder, Order.OWO)
 
-  txdat.valid := state === MachineState.SEND_DAT
+  txdat.valid := state === MachineState.SEND_DAT && !datIsSend
   txdat.bits := DontCare
   txdat.bits.DBID := rspDBID
   txdat.bits.TgtID := rspSrcID
