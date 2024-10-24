@@ -8,7 +8,7 @@ import zhujiang.ZJModule
 import zhujiang.device.bridge.tlul.TLULBridge
 import zhujiang.device.cluster.interconnect._
 import zhujiang.device.cluster.peripheral.{ClusterPLL, CpuCtrl}
-import zhujiang.device.cluster.tl2axi.TLUL2ChiBridge
+import zhujiang.device.cluster.tlu2chi.TLUL2ChiBridge
 import zhujiang.tilelink.{TLULBundle, TilelinkParams}
 
 class ClusterInterconnectComplex(node: Node, cioParams: TilelinkParams)(implicit p: Parameters) extends ZJModule {
