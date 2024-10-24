@@ -87,12 +87,3 @@ object ClusterHubTop extends App {
     ChiselGeneratorAnnotation(() => new ClusterInterconnectComplex(icnNode, cioParams)(config))
   ))
 }
-
-object MemCxTop extends App {
-  val (config, firrtlOpts) = ZhujiangTopParser(args)
-  val cfgNode = Node(nodeType = NodeType.HI)
-  val memNode = Node(nodeType = NodeType.S, mainMemory = true)
-  (new ChiselStage).execute(firrtlOpts, firtoolOpts ++ Seq(
-    ChiselGeneratorAnnotation(() => new MemoryComplex(cfgNode, memNode)(config))
-  ))
-}

@@ -3,22 +3,14 @@ package zhujiang
 import chisel3._
 import chisel3.experimental.hierarchy.{Definition, Instance}
 import chisel3.util._
-import chisel3.experimental.{ChiselAnnotation, annotate}
 import org.chipsalliance.cde.config.Parameters
 import xijiang.{NodeType, Ring}
 import dongjiang.pcu._
 import dongjiang.dcu._
-import dongjiang.ddrc._
-import chisel3.util.{Decoupled, DecoupledIO}
-import xijiang.c2c.C2cLinkPort
-import zhujiang.chi.{DataFlit, ReqFlit, RespFlit}
-import sifive.enterprise.firrtl.NestedPrefixModulesAnnotation
 import xijiang.router.base.IcnBundle
-import xs.utils.{DFTResetSignals, ResetGen}
-import zhujiang.axi.AxiBundle
+import xs.utils.ResetGen
 import zhujiang.device.async.{IcnAsyncBundle, IcnSideAsyncModule}
 import zhujiang.device.cluster.interconnect.DftWires
-import zhujiang.device.ddr.MemoryComplex
 import zhujiang.device.reset.ResetDevice
 
 class Zhujiang(implicit p: Parameters) extends ZJModule {
@@ -56,10 +48,6 @@ class Zhujiang(implicit p: Parameters) extends ZJModule {
   require(localRing.icnSns.get.count(_.node.attr == "ddr_data") == 1)
   private val memCfgIcn = localRing.icnHis.get.filter(_.node.attr == "ddr_cfg").head
   private val memDatIcn = localRing.icnSns.get.filter(_.node.attr == "ddr_data").head
-  private val memSubSys = Module(new MemoryComplex(memCfgIcn.node, memDatIcn.node))
-  memSubSys.io.icn.cfg <> memCfgIcn
-  memSubSys.io.icn.mem <> memDatIcn
-  memSubSys.reset := placeResetGen(s"ddr", memCfgIcn)
 
   require(localRing.icnHis.get.count(_.node.defaultHni) == 1)
   require(localRing.icnRis.get.count(_.node.attr == "dma") == 1)
@@ -116,7 +104,11 @@ class Zhujiang(implicit p: Parameters) extends ZJModule {
   }
 
   val io = IO(new Bundle {
-    val ddr = new AxiBundle(memSubSys.io.ddr.params)
+    val ddr = new Bundle {
+      val cfg = new IcnBundle(memCfgIcn.node, true)
+      val dat = new IcnBundle(memDatIcn.node, true)
+      val reset = Output(AsyncReset())
+    }
     val soc = new Bundle {
       val cfg = new IcnAsyncBundle(socCfgDev.io.icn.node)
       val dma = new IcnAsyncBundle(socDmaDev.io.icn.node)
@@ -127,7 +119,9 @@ class Zhujiang(implicit p: Parameters) extends ZJModule {
   })
   io.onReset := resetDev.io.onReset
   io.cluster.suggestName("cluster_async")
-  io.ddr <> memSubSys.io.ddr
+  io.ddr.cfg <> memCfgIcn
+  io.ddr.dat <> memDatIcn
+  io.ddr.reset := placeResetGen(s"ddr", memCfgIcn)
   io.soc.cfg <> socCfgDev.io.async
   io.soc.dma <> socDmaDev.io.async
   for(i <- ccnDevSeq.indices) io.cluster(i) <> ccnDevSeq(i).io.async
