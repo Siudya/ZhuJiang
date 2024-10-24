@@ -22,6 +22,15 @@ object ZhujiangGlobal {
   var raw: Long = 0
   private var initialized = false
 
+  private var ccid = 0
+  private var rfid = 0
+  private var riid = 0
+  private var hfid = 0
+  private var hiid = 0
+  private var c2cid = 0
+  private var sid = 0
+  private var pid = 0
+
   lazy val localRing: Seq[Node] = if(localNodeParams.nonEmpty) getRing(localNodeParams, false) else Seq()
   lazy val csnRing: Seq[Node] = if(csnNodeParams.nonEmpty) getRing(csnNodeParams, true) else Seq()
 
@@ -55,6 +64,29 @@ object ZhujiangGlobal {
     val mmioBase = 1L << (raw - 1)
 
     if(!csn) require(nodeParams.count(n => n.nodeType == NodeType.HI && n.defaultHni) == 1)
+
+    var ccid = 0
+    var rfid = 0
+    var riid = 0
+    var hfid = 0
+    var hiid = 0
+    var c2cid = 0
+    var sid = 0
+    var pid = 0
+
+    def getDomainId(nt:Int):Int = {
+      nt match {
+        case NodeType.CC => ccid = ccid + 1; ccid - 1
+        case NodeType.RF => rfid = rfid + 1; rfid - 1
+        case NodeType.RI => riid = riid + 1; riid - 1
+        case NodeType.HF => hfid = hfid + 1; hfid - 1
+        case NodeType.HI => hiid = hiid + 1; hiid - 1
+        case NodeType.C => c2cid = c2cid + 1; c2cid - 1
+        case NodeType.S => sid = sid + 1; sid - 1
+        case _ => pid = pid + 1; pid - 1
+      }
+    }
+
     val nodes = for((np, idx) <- nodeParams.zipWithIndex) yield {
       val ccAddr = ((ccId << 16) + mmioBase, ((ccId + np.cpuNum) << 16) + mmioBase)
       val hiAddr = (np.addressRange._1 + mmioBase, np.addressRange._2 + mmioBase)
@@ -67,6 +99,7 @@ object ZhujiangGlobal {
         ringSize = nodeParams.length,
         globalId = idx,
         splitFlit = np.splitFlit,
+        domainId = getDomainId(np.nodeType),
         bankId = if(np.nodeType == NodeType.S || np.nodeType == NodeType.HF || np.nodeType == NodeType.RF && csn) np.bankId else 0,
         bankBits = if(np.nodeType == NodeType.RF) {
           rnfBankBits

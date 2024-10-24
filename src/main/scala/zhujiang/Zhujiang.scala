@@ -84,8 +84,10 @@ class Zhujiang(implicit p: Parameters) extends ZJModule {
   private val ccnIcnSeq = localRing.icnCcs.get
   private val ccnDevSeq = ccnIcnSeq.map(icn => Module(new IcnSideAsyncModule(icn.node)))
   for(i <- ccnIcnSeq.indices) {
+    val domainId = ccnIcnSeq(i).node.domainId
     ccnDevSeq(i).io.icn <> ccnIcnSeq(i)
-    ccnDevSeq(i).reset := placeResetGen(s"cc_$i", ccnIcnSeq(i))
+    ccnDevSeq(i).reset := placeResetGen(s"cc_$domainId", ccnIcnSeq(i))
+    ccnDevSeq(i).suggestName(s"cluster_async_sink_$domainId")
   }
 
   require(localRing.icnHfs.get.nonEmpty)
@@ -93,10 +95,12 @@ class Zhujiang(implicit p: Parameters) extends ZJModule {
   private val pcuDef = Definition(new ProtocolCtrlUnit(pcuIcnSeq.head.node))
   private val pcuDevSeq = pcuIcnSeq.map(icn => Instance(pcuDef))
   for(i <- pcuIcnSeq.indices) {
+    val bankId = pcuIcnSeq(i).node.bankId
     pcuDevSeq(i).io.hnfID := pcuIcnSeq(i).node.nodeId.U
     pcuDevSeq(i).io.toLocal <> pcuIcnSeq(i)
-    pcuDevSeq(i).reset := placeResetGen(s"pcu_$i", pcuIcnSeq(i))
+    pcuDevSeq(i).reset := placeResetGen(s"pcu_$bankId", pcuIcnSeq(i))
     pcuDevSeq(i).clock := clock
+    pcuDevSeq(i).suggestName(s"pcu_$bankId")
   }
 
   require(!localRing.icnSns.get.forall(_.node.mainMemory))
@@ -104,9 +108,11 @@ class Zhujiang(implicit p: Parameters) extends ZJModule {
   private val dcuDef = Definition(new DataCtrlUnit(dcuIcnSeq.head._2.head.node, dcuIcnSeq.head._2.length))
   private val dcuDevSeq = dcuIcnSeq.map(is => Instance(dcuDef))
   for(i <- dcuIcnSeq.indices) {
+    val bankId = dcuIcnSeq(i)._1
     for(j <- dcuIcnSeq(i)._2.indices) dcuDevSeq(i).io.sn(j) <> dcuIcnSeq(i)._2(j)
-    dcuDevSeq(i).reset := placeResetGen(s"dcu_$i", dcuIcnSeq(i)._2.head)
+    dcuDevSeq(i).reset := placeResetGen(s"dcu_$bankId", dcuIcnSeq(i)._2.head)
     dcuDevSeq(i).clock := clock
+    dcuDevSeq(i).suggestName(s"dcu_$bankId")
   }
 
   val io = IO(new Bundle {
